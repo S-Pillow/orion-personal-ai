@@ -1,0 +1,17 @@
+# Secrets and credentials
+.env
+.env.*
+*.token
+*.secret
+secrets/
+credentials/
+
+# Private/runtime evidence
+runtime/
+evidence/raw-private/
+
+# Local/editor artifacts
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
