@@ -60,6 +60,38 @@ c265f485298d488bcd0a5f368138cef3b1db75bfddd831c794e5bbe06a411a7b
 
 Host-side owner-UID signaling remains historical fallback evidence only and is not the selected architecture because it requires Docker host/socket authority.
 
+## Phase 1 lifecycle evidence retention calibration
+
+The gateway-stop diagnostic evidence that established requested-down state, owner-UID SIGTERM behavior, and DEFAULT survival was console-only; no durable artifact was retained for that specific run.
+
+Observed facts from that diagnostic remain useful evidence:
+
+- s6 recorded the COMPANION gateway in requested-down state while the Hermes-owned child remained alive
+- owner-UID SIGTERM stopped the child
+- DEFAULT survived the diagnostic lifecycle
+
+This is not final lifecycle acceptance evidence. The retention gap is now explicit: future lifecycle closure units must emit a retained local evidence file before cleanup, including entry/exit gateway states, cycle results, supervisor/process evidence, socket state, persistence/key checks, command exit codes, and final classification.
+
+## Phase 0 model/tool-turn calibration
+
+The previous cross-model statement over-generalized browser behavior.
+
+Retained AU-06 evidence is located under:
+
+```text
+E:\Orion-Phase0\Orion-Phase0-Interface-Baseline-*Z\hermes-tool-baseline.json
+```
+
+The calibrated finding is:
+
+- DDGS exhausted the six-turn budget on both `qwen3.5-hermes:9b` and stock `qwen3.5:4b`
+- browser reached `max_iterations_reached (6/6)` on the 9B run
+- browser ended as `SENTINEL_NOT_OBSERVED` on the 4B run
+
+Therefore DDGS six-turn exhaustion is the reproduced cross-model workflow-design constraint. Browser behavior diverged across the two tested models and remains an open observation; cross-model browser exhaustion is not claimed.
+
+The Phase 3 design consequence remains unchanged: model-requested retrieval should execute through a deterministic one-shot or otherwise explicitly bounded workflow stage rather than an open-ended model-controlled retrieval loop.
+
 ## Hermes environment and subprocess credential boundary
 
 Read-only inspection of the pinned image established that Hermes loads the profile `.env` into the live process environment through `load_hermes_dotenv()`.
@@ -95,6 +127,25 @@ A separate upstream inconsistency was observed: `SLACK_SIGNING_SECRET` is presen
 Installed source for `_clear_known_keys_missing_from_dotenv()` explicitly states that cross-profile credential isolation is handled at read time by `agent.secret_scope.get_secret`, authoritative under multiplexing, rather than by deleting provider credentials from global `os.environ`.
 
 Therefore DEFAULT/COMPANION credential isolation must be verified against the read-time secret-scope mechanism. Environment snapshots alone are not an authoritative profile-isolation test.
+
+## iai setproctitle evidence calibration
+
+Three distinct evidence types apply and must not be conflated.
+
+Installed-source mechanism location:
+
+```text
+/opt/iai/venv/lib/python3.12/site-packages/iai_mcp/daemon/__init__.py
+SHA-256 54778ce7f6391efea107c35657677e02944f2a6395e5088aa5db7d2a61ede47b
+```
+
+The installed daemon source contains the `_set_process_title` mechanism and aliased `setproctitle` import used by iai.
+
+Local behavioral reproduction was separate from the daemon itself: in the same pinned feasibility image, a synthetic `setproctitle` probe showed a sentinel remaining available through in-process `os.environ` while disappearing from `/proc/self/environ`, at both 15-byte and 4106-byte process titles.
+
+Upstream package documentation for `setproctitle` explicitly documents environment-area clobbering, `os.environ` remaining correct in-process, `/proc/PID/environ` being overwritten, and `SPT_NOENV` as the mitigation at the cost of limiting available title space. Corroborating downstream reports include gunicorn #2321 and ray #15061.
+
+This evidence supports retiring post-exec `/proc/<iai-pid>/environ` as an authoritative iai environment verifier while retaining pre-exec boundary proof and process/service-state evidence.
 
 ## DEFAULT Discord credential issue
 
