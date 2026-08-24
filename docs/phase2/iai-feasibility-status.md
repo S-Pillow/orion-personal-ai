@@ -4,11 +4,9 @@
 
 Phase 2 is **ACTIVE**.
 
-The iai feasibility branch is substantially proven. The next authorization unit is:
+The iai feasibility branch and the final disposable lifecycle closure are now proven. **PH2-IAI-F6 is PASS / CLOSED.** The next work is Phase 2 memory-product acceptance.
 
-> **PH2-IAI-F6 — final disposable iai service lifecycle closure**
-
-This document records the accepted evidence and remaining closure work. It does not authorize production deployment or later memory-product phases by itself.
+This document records the accepted evidence and remaining Phase 2 work. It does not authorize canonical iai deployment or later phases by itself.
 
 ## Pinned baseline
 
@@ -32,6 +30,12 @@ The disposable iai work has established:
 - expected local socket creation and ownership were observed
 - no external network/model/auth calls were required for the feasibility checks
 - canonical launcher/profile state was guarded during disposable work
+- two complete start/stop lifecycle cycles now pass under the final F6 acceptance harness
+- `CAP_KILL` is present and the cross-UID stop path succeeds for the iai service
+- socket, daemon-state PID, process, and lock cleanup succeed after stop
+- the 32-byte crypto key remains byte-size valid and hash-stable across both cycles
+- the iai database remains present and non-empty across both cycles
+- offline embed identity remains pinned and healthy across both cycles
 
 ## Retired verifier branch
 
@@ -46,7 +50,7 @@ Reasons established during investigation:
 
 The accepted environment proof for iai remains the pre-exec boundary evidence plus service/run-script inspection, not post-exec procfs environment inspection.
 
-## Hermes supervision calibration relevant to F6
+## Hermes supervision calibration relevant to Phase 2
 
 Hermes' supervision architecture is validated:
 
@@ -57,7 +61,7 @@ Hermes' supervision architecture is validated:
 - `main-hermes` is intentionally `exec sleep infinity` under Architecture B
 - `CAP_KILL` is the proven narrow capability needed for root s6 supervision to signal the differently owned `hermes` child
 
-F6 may therefore use the established minimal-capability pattern including `CAP_KILL`; this is not a workaround for broken supervision but restoration of the signal capability required by the intended cross-UID design.
+F6 used this established minimal-capability pattern including `CAP_KILL`. The accepted run proved that the same cross-UID lifecycle mechanism works for the disposable iai service.
 
 ## Hermes credential-boundary findings relevant to future memory/tool integration
 
@@ -77,39 +81,63 @@ Controls carried forward:
 - review skill declarations before enablement
 - verify DEFAULT/COMPANION secret isolation against the read-time secret-scope mechanism
 
-## PH2-IAI-F6 acceptance scope
+## PH2-IAI-F6 closure
 
-F6 should remain disposable and bounded.
+**Status: PASS / CLOSED**
 
-Required conditions:
+Accepted run completed at `2026-08-24T04:56:25.1822932Z` against the pinned candidate image.
 
-- networking disabled
-- no external auth/model/API calls
+Required conditions proven:
+
+- networking disabled (`NETWORK=NONE`)
+- no external auth/model/API calls required
 - candidate image identity pinned before and after
 - canonical launcher/profile hashes pinned before and after
-- capture actual DEFAULT and COMPANION gateway states at entry and require the exact same states at exit
-- private s6 supervision tree
-- minimal capabilities, including proven `CAP_KILL`
-- iai service runs as `hermes`
+- DEFAULT entered and exited `UP` with the same PID (`158`)
+- COMPANION entered and exited `DOWN`
+- private s6 supervision tree used
+- minimal capability set included `CAP_KILL`
+- iai service ran as UID `10000` (`hermes`)
 
-Required lifecycle evidence:
+Lifecycle evidence proven twice:
 
-1. Start iai service.
-2. Confirm s6 desired/actual up state.
-3. Confirm daemon PID/UID and local socket readiness.
-4. Stop iai service cleanly.
-5. Confirm daemon/socket cleanup and service down state.
-6. Repeat for a second complete start/stop cycle.
-7. Confirm encryption-key hash is unchanged across cycles.
-8. Confirm persistent store/database survive the restart cycle.
-9. Confirm DEFAULT/COMPANION gateway states are unchanged from their captured entry states.
-10. Confirm canonical launcher/profile hashes and candidate image identity are unchanged.
+1. s6 start request succeeded and service reached `up`.
+2. s6 child PID equaled the iai daemon PID.
+3. daemon readiness reached `READY=YES`, `FSM_STATE=WAKE`.
+4. local socket existed while running and was owned by UID `10000`.
+5. stop request succeeded.
+6. daemon process, state PID, socket, and lock were absent after stop.
+7. the same sequence passed a second time.
+8. crypto key remained present, exactly 32 bytes, and SHA-256-stable across both cycles.
+9. `brain.sqlite3` remained present and non-empty (`139264` bytes at final check).
+10. offline embed identity was healthy and pinned in both cycles.
+11. canonical hashes, gateway states, DEFAULT PID, and candidate image identity remained unchanged.
+12. disposable cleanup succeeded and the wrapper ended with child exit code `0`.
 
-Do not reintroduce the retired post-exec `/proc/environ` verifier.
+The retired post-exec `/proc/<iai-pid>/environ` verifier was not reintroduced.
+
+Retained local evidence:
+
+```text
+E:\Orion-Phase2\PH2-IAI-F6-20260824-032307Z\
+```
+
+Acceptance artifacts include:
+
+- `15-f6-lifecycle-run.txt`
+- `20-f6-final-lifecycle.txt`
+- `21-f6-final-summary.txt`
+- `22-f6-runner-output.txt`
+
+See `docs/phase2/ph2-iai-f6-closure.md` for the detailed closure record and evidence-calibration lessons.
+
+## Scope boundary
+
+F6 proves the pinned iai candidate's disposable service lifecycle, supervision, persistence, and cleanup behavior. It does **not** mean iai is installed into the canonical Hermes runtime, and it does not by itself satisfy the Phase 2 memory-product acceptance criteria.
 
 ## After F6
 
-If F6 passes, proceed to the actual Phase 2 memory-product acceptance work:
+Proceed to the actual Phase 2 memory-product acceptance work:
 
 - controlled conversation capture
 - persistent recall across restart

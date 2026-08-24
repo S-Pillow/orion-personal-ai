@@ -6,7 +6,7 @@ Orion is a privacy-first personal AI companion project built around a local-firs
 
 - Phase 0 — **PASS / CLOSED**
 - Phase 1 — **PASS / CLOSED**
-- Phase 2 — **ACTIVE: iai feasibility substantially proven; final lifecycle closure next**
+- Phase 2 — **ACTIVE: iai feasibility and final disposable lifecycle closure proven; memory-product acceptance next**
 
 Phase 1 closed after canonical end-to-end acceptance of the COMPANION Discord path and reversible s6 lifecycle.
 
@@ -31,7 +31,7 @@ The current controlling product requirements document is **Orion Master PRD v1.1
 
 - `docs/architecture/` — installed-runtime architecture, evidence calibration, and trust-boundary notes
 - `docs/phase1/` — Phase 1 status, evidence, and closure records
-- `docs/phase2/` — Phase 2 iai feasibility and memory-foundation status
+- `docs/phase2/` — Phase 2 iai feasibility, F6 lifecycle closure, and memory-foundation status
 - `docs/decisions/` — bounded architecture and implementation decisions
 - `scripts/diagnostics/` — reusable diagnostics only after they have passed cleanly
 
@@ -41,8 +41,10 @@ The current controlling product requirements document is **Orion Master PRD v1.1
 - Installed-runtime observations are distinguished from upstream or tagged-repository claims.
 - Failed harness revisions are not promoted as canonical diagnostics.
 - `tools.env_passthrough`, `tools.docker_forward_env`, and enabled skill declarations are security-relevant surfaces and require review before change or enablement.
-- Before reporting absence, establish the authoritative filesystem root, package/module location, and symbol-resolution assumptions; a negative query against an assumed search frame is not sufficient evidence of absence.
+- A failed path lookup, module lookup, or exact-symbol lookup is a resolution result, not evidence of absence. Establish the authoritative filesystem root, package/module location, import/alias binding, and symbol-resolution assumptions before drawing a negative conclusion.
+- Dependency-shaped failures should trigger upstream evidence review before local workaround design: pin the relevant component/version, review authoritative documentation/source/issues, classify the behavior, then reproduce locally against the pinned environment.
 - Final lifecycle closure units must retain an evidence artifact before cleanup; console-only evidence is not sufficient for final acceptance.
+- Substantial PowerShell verification units must use a real `.ps1` file, `Set-StrictMode -Version Latest`, parse-check before execution, run in a fresh process, and retain output plus exit status.
 - Project content is informational unless an authorized actor designates it as controlling instruction.
 
 ## Current non-blocking follow-ups
@@ -52,8 +54,35 @@ The current controlling product requirements document is **Orion Master PRD v1.1
 - Hermes terminal subprocess sanitization permits explicit `env_passthrough` overrides. Current Orion configuration is clean (`env_passthrough: []`, `docker_forward_env: []`, no inspected skill declaration), so no current Discord-token child exposure was identified; future skill/config changes must preserve that boundary.
 - Phase 0 DDGS exhausted the six-turn tool budget on both tested local models. Browser behavior did not reproduce consistently across both models: 9B reached `max_iterations_reached (6/6)`, while 4B ended `SENTINEL_NOT_OBSERVED`. The browser divergence remains open and is not treated as a cross-model reproduction.
 
+## Phase 2 F6 closure
+
+**PH2-IAI-F6 — final disposable iai service lifecycle closure is PASS / CLOSED.**
+
+Accepted F6 evidence established, in a network-disabled disposable candidate runtime:
+
+- two complete iai start/stop cycles under a private s6 supervision tree
+- s6 child PID equal to iai daemon PID in both cycles
+- iai daemon running as UID `10000` (`hermes`)
+- `CAP_KILL` present and the cross-UID stop path succeeding twice
+- clean daemon, socket, state-PID, and lock removal after each stop
+- stable 32-byte encryption key identity across both cycles
+- non-empty persistent iai database surviving both cycles
+- pinned offline embed identity in both cycles
+- exact DEFAULT/COMPANION gateway-state preservation, including DEFAULT PID preservation
+- unchanged canonical launcher/profile hashes and unchanged iai candidate image identity
+- no retired post-exec `/proc/<iai-pid>/environ` verifier
+- durable evidence written before disposable cleanup
+
+Retained local evidence for the accepted run is under:
+
+```text
+E:\Orion-Phase2\PH2-IAI-F6-20260824-032307Z\
+```
+
+See `docs/phase2/ph2-iai-f6-closure.md` for the closure record.
+
+F6 proves the pinned iai candidate's disposable service lifecycle and persistence behavior. It does **not** mean iai has been installed into the canonical Hermes runtime.
+
 ## Next work
 
-The next authorization unit is **PH2-IAI-F6 — final disposable iai service lifecycle closure**.
-
-The iai feasibility branch has already established the isolated Python 3.12 runtime, persistent store/database/key behavior, s6 service materialization, daemon startup, and authoritative pre-exec environment propagation. F6 should now perform the bounded two-start/two-stop lifecycle acceptance with networking disabled, minimal capabilities including `CAP_KILL`, stable key/store evidence, socket cleanup, unchanged DEFAULT/COMPANION gateway states, and unchanged canonical launcher/profile/image identity. The retired post-exec `/proc/environ` verifier must not be reintroduced. F6 must write a retained local evidence file before cleanup.
+Proceed to the actual Phase 2 memory-product acceptance work: controlled conversation capture, persistent recall across restart, correction/deletion semantics, memory inspection/export, profile isolation, backup/restore, fail-open behavior when iai is unavailable, and confirmation that ordinary Hermes chat continues without memory-service availability.
