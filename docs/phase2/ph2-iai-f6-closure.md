@@ -13,7 +13,7 @@ This record closes the final disposable iai service lifecycle acceptance unit. I
 - iai candidate image: `orion-iai-feas:v3.0.0-f5e`
 - candidate image ID: `sha256:a537708bc22526990c0c5de98250603bc7ba398d123cf6ee4f090a3a7fe91a6b`
 - canonical Hermes container observed during acceptance: `057493d2fcbc`
-- accepted canonical launcher SHA-256: `c265f485298d488bcd0a5f368138cef3b1db75bfddd831c794e5bbbe06a411a7b`
+- accepted canonical launcher SHA-256: `c265f485298d488bcd0a5f368138cef3b1db75bfddd831c794e5bbe06a411a7b`
 - iai runtime: isolated Python 3.12
 - lifecycle store: `/opt/data/profiles/companion/.iai-mcp`
 - service: private disposable s6 service `iai-companion`
