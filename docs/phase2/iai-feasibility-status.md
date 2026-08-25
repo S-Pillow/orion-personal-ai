@@ -4,17 +4,22 @@
 
 Phase 2 is **ACTIVE**.
 
-The iai feasibility branch and the final disposable lifecycle closure are now proven. **PH2-IAI-F6 is PASS / CLOSED.** The next work is Phase 2 memory-product acceptance.
+The iai feasibility branch and the final disposable lifecycle closure are proven. **PH2-IAI-F6 is PASS / CLOSED.** M5 persistent-memory recall across container recreation is also **PASS / CORE ACCEPTANCE COMPLETE**. Remaining Phase 2 work is correction/deletion, memory inspection/export, profile isolation, backup/restore, and fail-open behavior.
 
-This document records the accepted evidence and remaining Phase 2 work. It does not authorize canonical iai deployment or later phases by itself.
+This document records the accepted evidence and remaining Phase 2 work. It does not authorize later phases by itself.
 
 ## Pinned baseline
 
 - Canonical Hermes image: `hermes-agent-local:v2026.8.18-ddgs`
 - Accepted canonical launcher SHA-256: `c265f485298d488bcd0a5f368138cef3b1db75bfddd831c794e5bbe06a411a7b`
-- iai candidate image: `orion-iai-feas:v3.0.0-f5e`
-- iai candidate image ID: `sha256:a537708bc22526990c0c5de98250603bc7ba398d123cf6ee4f090a3a7fe91a6b`
+- F6 iai candidate image: `orion-iai-feas:v3.0.0-f5e`
+- F6 iai candidate image ID: `sha256:a537708bc22526990c0c5de98250603bc7ba398d123cf6ee4f090a3a7fe91a6b`
+- M5 accepted container: `orion-iai-m5-c`
+- M5 accepted image ID: `sha256:0222e2199cbb135bf1989283b1dba7a36f936aab3f82c3fbae048659dd8b2500`
+- M5 persistent volume: `orion-iai-m5-data`
 - iai runtime Python: isolated Python 3.12 environment
+- M5 iai package: `iai-pme 3.0.8`
+- Hermes runtime for M5: `v0.20.4 (2026.8.18)`
 
 ## Proven feasibility evidence
 
@@ -30,12 +35,14 @@ The disposable iai work has established:
 - expected local socket creation and ownership were observed
 - no external network/model/auth calls were required for the feasibility checks
 - canonical launcher/profile state was guarded during disposable work
-- two complete start/stop lifecycle cycles now pass under the final F6 acceptance harness
+- two complete start/stop lifecycle cycles pass under the final F6 acceptance harness
 - `CAP_KILL` is present and the cross-UID stop path succeeds for the iai service
 - socket, daemon-state PID, process, and lock cleanup succeed after stop
 - the 32-byte crypto key remains byte-size valid and hash-stable across both cycles
 - the iai database remains present and non-empty across both cycles
 - offline embed identity remains pinned and healthy across both cycles
+- persistent semantic memory survives container destruction/recreation
+- automatic first-turn recall works through the real Discord DM gateway path after recreation
 
 ## Retired verifier branch
 
@@ -131,16 +138,40 @@ Acceptance artifacts include:
 
 See `docs/phase2/ph2-iai-f6-closure.md` for the detailed closure record and evidence-calibration lessons.
 
+## M5 persistent-memory recall closure
+
+**Status: PASS / CORE ACCEPTANCE COMPLETE**
+
+Accepted on August 25, 2026 in a real fresh Discord DM session.
+
+M5 proves:
+
+- the captured marker `topaz-6842` survived persistent-volume reuse across container destruction/recreation
+- iai semantic recall after recreation returned the marker
+- the corrected `session_start_payload` exposed the memory
+- Hermes' `pre_llm_call` context-injection path accepted the memory
+- the serializer/Hermes-wire compatibility fix survived image recreation
+- `/new` in the real Discord DM created the fresh-session boundary
+- the first vault-code question in that fresh Discord DM returned exactly `topaz-6842`
+
+The accepted end-to-end path is:
+
+**capture → persistent encrypted memory → container destruction/recreation → iai recall → automatic first-turn injection → real fresh-session Discord model recall**
+
+A real upstream iai defect was found during M5: `SessionStartPayload.recent_thread` was populated by assembly but omitted by `_payload_to_json()` in the dispatch serializer. Orion's one-field compatibility fix restored it. The defect was reported upstream as `CodeAbra/iai-personal-memory-engine#156`.
+
+See `docs/phase2/m5-memory-recall-closure.md` for the detailed M5 closure record.
+
+Two apparent failures during diagnosis were invalid acceptance attempts: one was entered directly into Hermes, and one was sent to the wrong Discord channel. A suspected `state.db` persistence defect raised during that investigation is not established and is not carried forward without independent reproduction.
+
 ## Scope boundary
 
-F6 proves the pinned iai candidate's disposable service lifecycle, supervision, persistence, and cleanup behavior. It does **not** mean iai is installed into the canonical Hermes runtime, and it does not by itself satisfy the Phase 2 memory-product acceptance criteria.
+F6 proves the pinned iai candidate's disposable service lifecycle, supervision, persistence, and cleanup behavior. M5 additionally proves persistent memory and automatic recall across container recreation through the intended Discord DM path. These results do **not** close the remaining Phase 2 product controls.
 
-## After F6
+## Remaining Phase 2 work
 
-Proceed to the actual Phase 2 memory-product acceptance work:
+Proceed with:
 
-- controlled conversation capture
-- persistent recall across restart
 - correction/deletion semantics
 - memory inspection/export
 - profile isolation
@@ -148,4 +179,4 @@ Proceed to the actual Phase 2 memory-product acceptance work:
 - fail-open behavior when iai is unavailable
 - confirmation that ordinary Hermes chat continues without memory-service availability
 
-Later phases remain gated until Phase 2 exit criteria are met.
+Later phases remain gated until the full Phase 2 exit criteria are met.
