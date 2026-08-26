@@ -4,7 +4,7 @@
 
 Phase 2 is **ACTIVE — IAI CORE MVP ACCEPTED**.
 
-The iai feasibility branch and final disposable lifecycle closure are proven. **PH2-IAI-F6 is PASS / CLOSED.** M5 persistent-memory recall across container recreation is **PASS / CORE ACCEPTANCE COMPLETE**. M6 now establishes **FINAL_IAI_MVP_ACCEPTANCE=PASS** for the pinned Orion setup: correct-UID doctor health, active Hermes hooks, native correction, native fade/rescue, fail-open wrapper behavior, and successful official iai backup/disposable restore.
+The iai feasibility branch and final disposable lifecycle closure are proven. **PH2-IAI-F6 is PASS / CLOSED.** M5 persistent-memory recall across container recreation is **PASS / CORE ACCEPTANCE COMPLETE**. M6 now establishes **FINAL_IAI_MVP_ACCEPTANCE=PASS** for the pinned Orion setup: correct-UID doctor health, active Hermes hooks, native correction, native fade/rescue, fail-open wrapper behavior, successful official iai backup/disposable restore, native Brain dashboard inspection, and native JSONL export.
 
 Remaining Phase 2 work is now limited to Orion product/integration controls around the accepted iai foundation, not further revalidation of iai internals.
 
@@ -52,6 +52,8 @@ The disposable iai work has established:
 - native iai forget/fade and rescue work in the Orion runtime
 - the installed Hermes recall wrapper fails open with exit 0 and empty stdout when recall is unavailable
 - official iai backup and disposable restore succeed and the restored store is readable
+- native `iai brain` dashboard is reachable from the Windows host through localhost-only transport glue
+- native iai JSONL export succeeds from a disposable restored snapshot
 
 ## Retired verifier branch
 
@@ -192,6 +194,8 @@ Accepted evidence includes:
 - official iai backup + disposable restore
 - restored store opened successfully with 10 records
 - retained backup SHA-256: `cf674ce7ce9ede3975fa96ce2cdbf4b0e1af9f8e82a345c37058c440a0dea39c`
+- native iai Brain dashboard inspection surface accepted for MVP
+- native JSONL export: 10 records, SHA-256 `16c21effa35884eeb6d444320107f36a24c33e0ef8fa518882a0a1235a7cbeb2`
 
 Detailed closure record: `docs/phase2/m6-iai-core-acceptance.md`.
 
@@ -205,7 +209,6 @@ These results mean iai is no longer treated as an experimental candidate. Orion 
 
 Keep the remaining work narrow and product-facing:
 
-- user-facing memory inspection/export presentation
 - confirm the supported whole-store administrative erasure path without inventing ad hoc deletion
 - profile-isolation acceptance still required by the PRD where not already covered
 - verify ordinary Hermes chat remains usable during a real iai outage when convenient; the installed wrapper fail-open contract is already proven
