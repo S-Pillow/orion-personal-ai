@@ -82,6 +82,38 @@ Retained host backup:
 
 Important: iai's native backup archive includes `.crypto.key` with the memory store. This retained test artifact is therefore sensitive and is not, by itself, the final Orion production backup-policy design; Orion's separate-key backup requirement remains a higher-level security control.
 
+### Native Brain dashboard / memory inspection
+
+The native `iai brain` dashboard is now running for Orion and reachable from the Windows host at:
+
+`http://127.0.0.1:4477/`
+
+The dashboard is the upstream iai Brain surface, not an Orion replacement. It exposes the live iai store for inspection and control, including memory search, graph view, time/conversation folders, contradiction visibility, pin/fade/rescue, lifecycle state, event feed, and token-economy information.
+
+The Docker-side bridge is transport-only so the upstream dashboard can remain loopback-bound inside its container while the Windows host reaches it through localhost. No second store or alternate memory semantics were introduced.
+
+Result: **native iai Brain inspection surface accepted for MVP**.
+
+### Native JSONL export
+
+The installed iai `export_jsonl` implementation was exercised against a disposable restored snapshot of the live store so export did not contend with the running daemon/store.
+
+Accepted results:
+
+- `EXPORT_RECORD_COUNT=10`
+- `M6_JSONL_EXPORT=PASS`
+- `FINAL_MEMORY_EXPORT=PASS`
+
+Retained host export:
+
+`E:\Orion-Phase2\iai-exports\memory-export-20260826T081024Z.jsonl`
+
+- bytes: `4427`
+- records: `10`
+- SHA-256: `16c21effa35884eeb6d444320107f36a24c33e0ef8fa518882a0a1235a7cbeb2`
+
+This closes the MVP inspection/export acceptance item using iai-native surfaces.
+
 ## Acceptance conclusion
 
 The Orion environment can run the pinned iai release successfully with:
@@ -93,6 +125,8 @@ The Orion environment can run the pinned iai release successfully with:
 - native forgetting/fading and rescue
 - fail-open host-hook behavior
 - successful backup and disposable restore
+- native Brain dashboard inspection
+- native JSONL export
 
 No parallel Orion memory store, custom ranking model, custom correction model, custom forgetting lifecycle, or substitute consolidation/decay system is required.
 
@@ -104,8 +138,8 @@ These remain Orion product/integration controls rather than reasons to continue 
 
 - natural-language convenience routing for memory-control commands
 - visible degraded-memory status in Orion UI/status surfaces
-- user-facing inspection/export presentation
 - supported whole-store administrative erasure workflow
+- any remaining profile-isolation acceptance required by the PRD
 - production backup policy that keeps encryption/recovery material separate from encrypted backup data
 
 The project should now stop treating iai as an experimental memory candidate and proceed with Orion MVP development around the accepted iai foundation.
