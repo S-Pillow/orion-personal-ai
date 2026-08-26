@@ -114,6 +114,43 @@ Retained host export:
 
 This closes the MVP inspection/export acceptance item using iai-native surfaces.
 
+### Whole-store administrative erasure path
+
+The installed iai 3.0.8 public CLI was inspected and exposes no dedicated whole-store `erase-all`, `wipe`, `purge-all`, `delete-all`, or `reset-store` command. The documented storage boundary is the profile-local `~/.iai-mcp/` root.
+
+A read-only-live/disposable-restore verifier then exercised the administrative whole-store path without touching the live COMPANION brain:
+
+- live COMPANION store remained present at `/opt/data/profiles/companion/.iai-mcp`
+- official iai backup + restore produced a disposable store containing 10 records
+- deleting the complete disposable `.iai-mcp` root removed the restored store, crypto key, and Hippo data together
+- the live store was not modified
+
+Accepted results:
+
+- `IAI_NATIVE_WHOLE_STORE_ERASE=NOT_EXPOSED`
+- `DISPOSABLE_ERASE_BEFORE_RECORDS=10`
+- `DISPOSABLE_STORE_GONE=true`
+- `DISPOSABLE_KEY_GONE=true`
+- `DISPOSABLE_HIPPO_GONE=true`
+- `ADMIN_ERASE_DISPOSABLE_PROOF=PASS`
+- `LIVE_STORE_UNCHANGED_BY_ERASE_PROOF=PASS`
+
+Administrative procedure for the pinned release: stop iai, remove the profile-local `.iai-mcp` store root as one unit, and initialize a new brain only if a fresh store is desired. This is separate from iai's native per-memory fade/rescue lifecycle.
+
+### Profile-store isolation
+
+The same verifier inspected all profile directories under `/opt/data/profiles` for accidental aliases into COMPANION's iai store.
+
+Observed profile-store state:
+
+- `companion`: store present
+- not a symlink
+- no other profile aliased the COMPANION store by real path or inode
+
+Accepted result: `PROFILE_STORE_ISOLATION=PASS`.
+
+This proves the iai memory-store filesystem boundary for the current Orion profile layout. Profile-scoped credential reads remain governed separately by Hermes' `agent.secret_scope.get_secret` mechanism and by the already-reviewed passthrough/forwarding controls.
+
 ## Acceptance conclusion
 
 The Orion environment can run the pinned iai release successfully with:
@@ -127,6 +164,8 @@ The Orion environment can run the pinned iai release successfully with:
 - successful backup and disposable restore
 - native Brain dashboard inspection
 - native JSONL export
+- confirmed whole-store administrative erasure procedure for the pinned deployment
+- profile-local iai store isolation
 
 No parallel Orion memory store, custom ranking model, custom correction model, custom forgetting lifecycle, or substitute consolidation/decay system is required.
 
@@ -134,12 +173,11 @@ No parallel Orion memory store, custom ranking model, custom correction model, c
 
 ## Carry-forward items outside core iai acceptance
 
-These remain Orion product/integration controls rather than reasons to continue re-testing iai internals:
+These are Orion product/integration controls rather than reasons to continue re-testing iai internals:
 
 - natural-language convenience routing for memory-control commands
-- visible degraded-memory status in Orion UI/status surfaces
-- supported whole-store administrative erasure workflow
-- any remaining profile-isolation acceptance required by the PRD
+- visible degraded-memory status in Orion's later status/HUD surface
 - production backup policy that keeps encryption/recovery material separate from encrypted backup data
+- optional end-to-end chat outage smoke when convenient; the exact installed wrapper fail-open contract is already proven
 
 The project should now stop treating iai as an experimental memory candidate and proceed with Orion MVP development around the accepted iai foundation.
