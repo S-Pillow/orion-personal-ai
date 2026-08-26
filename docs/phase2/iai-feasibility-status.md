@@ -2,13 +2,13 @@
 
 ## Status
 
-Phase 2 is **ACTIVE — IAI CORE MVP ACCEPTED**.
+Phase 2 is **CLOSED — MVP MEMORY FOUNDATION ACCEPTED** as of August 26, 2026.
 
-The iai feasibility branch and final disposable lifecycle closure are proven. **PH2-IAI-F6 is PASS / CLOSED.** M5 persistent-memory recall across container recreation is **PASS / CORE ACCEPTANCE COMPLETE**. M6 now establishes **FINAL_IAI_MVP_ACCEPTANCE=PASS** for the pinned Orion setup: correct-UID doctor health, active Hermes hooks, native correction, native fade/rescue, fail-open wrapper behavior, successful official iai backup/disposable restore, native Brain dashboard inspection, and native JSONL export.
+The iai feasibility branch and final disposable lifecycle closure are proven. **PH2-IAI-F6 is PASS / CLOSED.** M5 persistent-memory recall across container recreation is **PASS / CORE ACCEPTANCE COMPLETE**. M6 establishes **FINAL_IAI_MVP_ACCEPTANCE=PASS** for the pinned Orion setup: correct-UID doctor health, active Hermes hooks, native correction, native fade/rescue, fail-open wrapper behavior, successful official iai backup/disposable restore, native Brain dashboard inspection, native JSONL export, confirmed whole-store administrative erasure procedure, and profile-store isolation.
 
-Remaining Phase 2 work is now limited to Orion product/integration controls around the accepted iai foundation, not further revalidation of iai internals.
+Phase 2 is closed under the approved MVP execution direction: iai is the canonical memory subsystem and Orion does not re-prove or replace iai internals. Remaining convenience/status/backup-policy work is carried forward as product integration and hardening rather than blocking Phase 3.
 
-This document records the accepted evidence and remaining Phase 2 work. It does not authorize later phases by itself.
+See `docs/phase2/phase2-closure.md` for the closure decision and disposition of legacy acceptance items.
 
 ## Pinned baseline
 
@@ -23,9 +23,9 @@ This document records the accepted evidence and remaining Phase 2 work. It does 
 - iai package: `iai-pme 3.0.8`
 - Hermes runtime: `v0.20.4 (2026.8.18)`
 
-## Proven feasibility evidence
+## Proven feasibility and acceptance evidence
 
-The disposable iai work has established:
+The Phase 2 work established:
 
 - isolated iai Python runtime is viable without replacing Hermes' runtime
 - persistent iai store/database materialization works
@@ -54,6 +54,9 @@ The disposable iai work has established:
 - official iai backup and disposable restore succeed and the restored store is readable
 - native `iai brain` dashboard is reachable from the Windows host through localhost-only transport glue
 - native iai JSONL export succeeds from a disposable restored snapshot
+- the pinned iai CLI exposes no dedicated whole-store erase command; the supported deployment-level administrative erase boundary is the complete profile-local `.iai-mcp` store root
+- whole-store administrative erase was proven against a disposable official restore containing 10 records, with store, key, and Hippo data all removed together and the live store left unchanged
+- current profile-store inspection found no non-COMPANION alias, symlink, real-path collision, or inode collision into the COMPANION iai store
 
 ## Retired verifier branch
 
@@ -81,7 +84,7 @@ Hermes' supervision architecture is validated:
 
 F6 used this established minimal-capability pattern including `CAP_KILL`. The accepted run proved that the same cross-UID lifecycle mechanism works for the disposable iai service.
 
-## Hermes credential-boundary findings relevant to future memory/tool integration
+## Hermes credential-boundary findings
 
 Installed-source inspection established:
 
@@ -97,7 +100,7 @@ Controls carried forward:
 - review `tools.env_passthrough` before configuration changes
 - review `tools.docker_forward_env` before configuration changes
 - review skill declarations before enablement
-- verify DEFAULT/COMPANION secret isolation against the read-time secret-scope mechanism
+- keep profile-scoped credential reads governed by Hermes' read-time secret-scope mechanism
 
 ## PH2-IAI-F6 closure
 
@@ -107,47 +110,26 @@ Accepted run completed at `2026-08-24T04:56:25.1822932Z` against the pinned cand
 
 Required conditions proven:
 
-- networking disabled (`NETWORK=NONE`)
-- no external auth/model/API calls required
-- candidate image identity pinned before and after
-- canonical launcher/profile hashes pinned before and after
-- DEFAULT entered and exited `UP` with the same PID (`158`)
-- COMPANION entered and exited `DOWN`
-- private s6 supervision tree used
-- minimal capability set included `CAP_KILL`
-- iai service ran as UID `10000` (`hermes`)
-
-Lifecycle evidence proven twice:
-
-1. s6 start request succeeded and service reached `up`.
-2. s6 child PID equaled the iai daemon PID.
-3. daemon readiness reached `READY=YES`, `FSM_STATE=WAKE`.
-4. local socket existed while running and was owned by UID `10000`.
-5. stop request succeeded.
-6. daemon process, state PID, socket, and lock were absent after stop.
-7. the same sequence passed a second time.
-8. crypto key remained present, exactly 32 bytes, and SHA-256-stable across both cycles.
-9. `brain.sqlite3` remained present and non-empty (`139264` bytes at final check).
-10. offline embed identity was healthy and pinned in both cycles.
-11. canonical hashes, gateway states, DEFAULT PID, and candidate image identity remained unchanged.
-12. disposable cleanup succeeded and the wrapper ended with child exit code `0`.
-
-The retired post-exec `/proc/<iai-pid>/environ` verifier was not reintroduced.
+1. networking disabled (`NETWORK=NONE`)
+2. no external auth/model/API calls required
+3. candidate image identity pinned before and after
+4. canonical launcher/profile hashes pinned before and after
+5. DEFAULT entered and exited `UP` with the same PID (`158`)
+6. COMPANION entered and exited `DOWN`
+7. private s6 supervision tree used
+8. minimal capability set included `CAP_KILL`
+9. iai service ran as UID `10000` (`hermes`)
+10. two full service lifecycle cycles passed
+11. crypto key remained present, exactly 32 bytes, and hash-stable
+12. `brain.sqlite3` remained present and non-empty
+13. offline embed identity remained healthy and pinned
+14. disposable cleanup succeeded
 
 Retained local evidence:
 
-```text
-E:\Orion-Phase2\PH2-IAI-F6-20260824-032307Z\
-```
+`E:\Orion-Phase2\PH2-IAI-F6-20260824-032307Z\`
 
-Acceptance artifacts include:
-
-- `15-f6-lifecycle-run.txt`
-- `20-f6-final-lifecycle.txt`
-- `21-f6-final-summary.txt`
-- `22-f6-runner-output.txt`
-
-See `docs/phase2/ph2-iai-f6-closure.md` for the detailed closure record and evidence-calibration lessons.
+See `docs/phase2/ph2-iai-f6-closure.md` for the detailed closure record.
 
 ## M5 persistent-memory recall closure
 
@@ -155,33 +137,21 @@ See `docs/phase2/ph2-iai-f6-closure.md` for the detailed closure record and evid
 
 Accepted on August 25, 2026 in a real fresh Discord DM session.
 
-M5 proves:
-
-- the captured marker `topaz-6842` survived persistent-volume reuse across container destruction/recreation
-- iai semantic recall after recreation returned the marker
-- the corrected `session_start_payload` exposed the memory
-- Hermes' `pre_llm_call` context-injection path accepted the memory
-- the serializer/Hermes-wire compatibility fix survived image recreation
-- `/new` in the real Discord DM created the fresh-session boundary
-- the first vault-code question in that fresh Discord DM returned exactly `topaz-6842`
-
-The accepted end-to-end path is:
+M5 proves the end-to-end path:
 
 **capture → persistent encrypted memory → container destruction/recreation → iai recall → automatic first-turn injection → real fresh-session Discord model recall**
 
-A real upstream iai defect was found during M5: `SessionStartPayload.recent_thread` was populated by assembly but omitted by `_payload_to_json()` in the dispatch serializer. Orion's one-field compatibility fix restored it. The defect was reported upstream as `CodeAbra/iai-personal-memory-engine#156`.
+The marker `topaz-6842` survived recreation and was returned exactly in the fresh Discord session.
 
-See `docs/phase2/m5-memory-recall-closure.md` for the detailed M5 closure record.
+A real upstream iai serializer defect was found and corrected for Orion: `SessionStartPayload.recent_thread` was populated by assembly but omitted by `_payload_to_json()`. The defect was reported upstream as `CodeAbra/iai-personal-memory-engine#156`.
 
-Two apparent failures during diagnosis were invalid acceptance attempts: one was entered directly into Hermes, and one was sent to the wrong Discord channel. A suspected `state.db` persistence defect raised during that investigation is not established and is not carried forward without independent reproduction.
+See `docs/phase2/m5-memory-recall-closure.md` for detailed evidence.
 
 ## M6 iai core MVP acceptance
 
 **Status: PASS / IAI CORE MVP ACCEPTED**
 
 Accepted on August 26, 2026.
-
-M6 establishes that the pinned iai release is operating successfully in the Orion environment without a substitute Orion memory architecture.
 
 Accepted evidence includes:
 
@@ -196,25 +166,23 @@ Accepted evidence includes:
 - retained backup SHA-256: `cf674ce7ce9ede3975fa96ce2cdbf4b0e1af9f8e82a345c37058c440a0dea39c`
 - native iai Brain dashboard inspection surface accepted for MVP
 - native JSONL export: 10 records, SHA-256 `16c21effa35884eeb6d444320107f36a24c33e0ef8fa518882a0a1235a7cbeb2`
+- whole-store administrative erasure proof on a disposable official restore
+- `PROFILE_STORE_ISOLATION=PASS`
+- `PHASE2_CLOSEOUT_VERIFIER=PASS`
 
-Detailed closure record: `docs/phase2/m6-iai-core-acceptance.md`.
+Detailed evidence: `docs/phase2/m6-iai-core-acceptance.md`.
 
-## Scope boundary
+## Scope boundary and carry-forward
 
-F6 proves lifecycle/supervision feasibility. M5 proves persistent encrypted memory and automatic recall across recreation through the intended Discord path. M6 proves the pinned iai runtime is healthy and that the core iai behaviors Orion depends on work in this setup.
+Phase 2 proves the memory foundation and Orion-specific integration boundaries. iai is no longer an experimental candidate.
 
-These results mean iai is no longer treated as an experimental candidate. Orion should proceed by building the MVP around iai rather than continuing to re-prove iai's internal algorithms.
+The following remain valid work but do not block Phase 3 under the approved MVP execution direction:
 
-## Remaining Phase 2 work
+- natural-language convenience routing for `memory_contradict` / fade/rescue controls
+- visible degraded-memory state in the later Orion status/HUD surface
+- optional real chat outage smoke when convenient; the exact installed wrapper fail-open contract is already proven
+- production backup-policy hardening, including separate handling of encryption/recovery material and visible backup status
 
-Keep the remaining work narrow and product-facing:
+No additional iai algorithm testing is required unless a demonstrated integration defect appears.
 
-- confirm the supported whole-store administrative erasure path without inventing ad hoc deletion
-- profile-isolation acceptance still required by the PRD where not already covered
-- verify ordinary Hermes chat remains usable during a real iai outage when convenient; the installed wrapper fail-open contract is already proven
-- add visible degraded-memory status in Orion's eventual status/HUD surface
-- production backup policy must keep encryption/recovery material separate from encrypted backup data; the retained M6 test archive contains the key because iai's native backup format includes it
-
-Natural-language correction/forget convenience routing is deferred as Orion UX/integration work and is not a reason to reopen iai core acceptance.
-
-Later phases remain gated only by these remaining product controls, not by additional iai algorithm testing.
+**Phase 3 — Vault retrieval and draft inbox — is authorized to begin.**
