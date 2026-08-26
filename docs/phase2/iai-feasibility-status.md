@@ -2,9 +2,11 @@
 
 ## Status
 
-Phase 2 is **ACTIVE**.
+Phase 2 is **ACTIVE — IAI CORE MVP ACCEPTED**.
 
-The iai feasibility branch and the final disposable lifecycle closure are proven. **PH2-IAI-F6 is PASS / CLOSED.** M5 persistent-memory recall across container recreation is also **PASS / CORE ACCEPTANCE COMPLETE**. Remaining Phase 2 work is correction/deletion, memory inspection/export, profile isolation, backup/restore, and fail-open behavior.
+The iai feasibility branch and final disposable lifecycle closure are proven. **PH2-IAI-F6 is PASS / CLOSED.** M5 persistent-memory recall across container recreation is **PASS / CORE ACCEPTANCE COMPLETE**. M6 now establishes **FINAL_IAI_MVP_ACCEPTANCE=PASS** for the pinned Orion setup: correct-UID doctor health, active Hermes hooks, native correction, native fade/rescue, fail-open wrapper behavior, and successful official iai backup/disposable restore.
+
+Remaining Phase 2 work is now limited to Orion product/integration controls around the accepted iai foundation, not further revalidation of iai internals.
 
 This document records the accepted evidence and remaining Phase 2 work. It does not authorize later phases by itself.
 
@@ -14,12 +16,12 @@ This document records the accepted evidence and remaining Phase 2 work. It does 
 - Accepted canonical launcher SHA-256: `c265f485298d488bcd0a5f368138cef3b1db75bfddd831c794e5bbe06a411a7b`
 - F6 iai candidate image: `orion-iai-feas:v3.0.0-f5e`
 - F6 iai candidate image ID: `sha256:a537708bc22526990c0c5de98250603bc7ba398d123cf6ee4f090a3a7fe91a6b`
-- M5 accepted container: `orion-iai-m5-c`
+- M5/M6 accepted container: `orion-iai-m5-c`
 - M5 accepted image ID: `sha256:0222e2199cbb135bf1989283b1dba7a36f936aab3f82c3fbae048659dd8b2500`
 - M5 persistent volume: `orion-iai-m5-data`
 - iai runtime Python: isolated Python 3.12 environment
-- M5 iai package: `iai-pme 3.0.8`
-- Hermes runtime for M5: `v0.20.4 (2026.8.18)`
+- iai package: `iai-pme 3.0.8`
+- Hermes runtime: `v0.20.4 (2026.8.18)`
 
 ## Proven feasibility evidence
 
@@ -43,6 +45,13 @@ The disposable iai work has established:
 - offline embed identity remains pinned and healthy across both cycles
 - persistent semantic memory survives container destruction/recreation
 - automatic first-turn recall works through the real Discord DM gateway path after recreation
+- `iai-mcp doctor` passes when executed as the actual iai/Hermes UID 10000
+- the crypto key is valid at mode `0600`
+- Hermes-target iai capture/recall hooks are installed and report `ACTIVE`
+- native iai contradiction/correction works in the Orion runtime
+- native iai forget/fade and rescue work in the Orion runtime
+- the installed Hermes recall wrapper fails open with exit 0 and empty stdout when recall is unavailable
+- official iai backup and disposable restore succeed and the restored store is readable
 
 ## Retired verifier branch
 
@@ -164,19 +173,45 @@ See `docs/phase2/m5-memory-recall-closure.md` for the detailed M5 closure record
 
 Two apparent failures during diagnosis were invalid acceptance attempts: one was entered directly into Hermes, and one was sent to the wrong Discord channel. A suspected `state.db` persistence defect raised during that investigation is not established and is not carried forward without independent reproduction.
 
+## M6 iai core MVP acceptance
+
+**Status: PASS / IAI CORE MVP ACCEPTED**
+
+Accepted on August 26, 2026.
+
+M6 establishes that the pinned iai release is operating successfully in the Orion environment without a substitute Orion memory architecture.
+
+Accepted evidence includes:
+
+- correct-UID `iai-mcp doctor`: all checks passed / exit 0
+- valid `0600` crypto key
+- active Hermes-target capture/recall hooks
+- native iai contradiction/correction
+- native iai forget/fade and rescue
+- Hermes iai recall wrapper fail-open: exit 0, empty stdout
+- official iai backup + disposable restore
+- restored store opened successfully with 10 records
+- retained backup SHA-256: `cf674ce7ce9ede3975fa96ce2cdbf4b0e1af9f8e82a345c37058c440a0dea39c`
+
+Detailed closure record: `docs/phase2/m6-iai-core-acceptance.md`.
+
 ## Scope boundary
 
-F6 proves the pinned iai candidate's disposable service lifecycle, supervision, persistence, and cleanup behavior. M5 additionally proves persistent memory and automatic recall across container recreation through the intended Discord DM path. These results do **not** close the remaining Phase 2 product controls.
+F6 proves lifecycle/supervision feasibility. M5 proves persistent encrypted memory and automatic recall across recreation through the intended Discord path. M6 proves the pinned iai runtime is healthy and that the core iai behaviors Orion depends on work in this setup.
+
+These results mean iai is no longer treated as an experimental candidate. Orion should proceed by building the MVP around iai rather than continuing to re-prove iai's internal algorithms.
 
 ## Remaining Phase 2 work
 
-Proceed with:
+Keep the remaining work narrow and product-facing:
 
-- correction/deletion semantics
-- memory inspection/export
-- profile isolation
-- backup/restore
-- fail-open behavior when iai is unavailable
-- confirmation that ordinary Hermes chat continues without memory-service availability
+- user-facing memory inspection/export presentation
+- confirm the supported whole-store administrative erasure path without inventing ad hoc deletion
+- profile-isolation acceptance still required by the PRD where not already covered
+- verify ordinary Hermes chat remains usable during a real iai outage when convenient; the installed wrapper fail-open contract is already proven
+- add visible degraded-memory status in Orion's eventual status/HUD surface
+- production backup policy must keep encryption/recovery material separate from encrypted backup data; the retained M6 test archive contains the key because iai's native backup format includes it
 
-Later phases remain gated until the full Phase 2 exit criteria are met.
+Natural-language correction/forget convenience routing is deferred as Orion UX/integration work and is not a reason to reopen iai core acceptance.
+
+Later phases remain gated only by these remaining product controls, not by additional iai algorithm testing.
