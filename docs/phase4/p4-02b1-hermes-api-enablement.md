@@ -1,6 +1,6 @@
 # P4-02B1 — Hermes API Enablement
 
-**Status: IN PROGRESS — v4 live acceptance pending**
+**Status: LIVE PASS — exact accepted v4 source promotion pending**
 
 P4-02B1 enables the Hermes API needed by the Orion HUD while preserving the accepted Hermes/iai runtime and keeping Hermes off Windows host port `8642`.
 
@@ -11,7 +11,7 @@ P4-02B1 enables the Hermes API needed by the Orion HUD while preserving the acce
 - accepted iai volume: `orion-iai-m5-data`
 - native iai Brain remains on Windows localhost `4477`
 - Hermes API binds to container `0.0.0.0:8642`
-- Windows localhost `8642` must remain closed
+- Windows localhost `8642` remains closed
 - Orion server access is through dedicated Docker bridge `orion-control-net`
 - `API_SERVER_KEY` stays in local secret material and is never committed or printed
 
@@ -94,14 +94,28 @@ The bounded sequence is:
 
 On failure after profile mutation, v4 restores the original profile `.env`, restarts the supervised COMPANION gateway, removes only networking created by that run, and restores/removes the host-side Orion API secret according to its pre-run state.
 
-The delivered v4 artifact is `Orion-Phase4-P4-02B1-v4-Profile-Configured-Hermes-API.ps1`. It remains a candidate until the live run passes. The accepted canonical `scripts/phase4/p4-02b1-enable-hermes-api.ps1` will be replaced with the exact accepted v4 source only after live acceptance.
+## v4 live acceptance — PASS
 
-No iai memory behavior or Orion product semantics are changed.
+Live run on August 27, 2026 passed the full acceptance path.
 
-## Acceptance criteria
+Observed PASS evidence:
 
-P4-02B1 is accepted only when the live v4 run reaches the authenticated API and preservation markers, including:
-
+- `P4_02B1_V4_INNER_HASH=PASS`
+- `P4_02B1_V4_INNER_PARSE=PASS`
+- `P4_02B1_V4_ACCEPTED_RUNTIME_PRECHECK=PASS`
+- `P4_02B1_V4_EXISTING_COMPANION_GATEWAY=PASS`
+- `P4_02B1_V4_GATEWAY_STATUS_PRE=PASS`
+- `P4_02B1_V4_COMPANION_PROFILE_ENV=PASS`
+- `P4_02B1_V4_API_SECRET_READY=PASS`
+- `P4_02B1_V4_HOST_SECRET_FILE_READY=PASS`
+- `P4_02B1_V4_CONTAINER_HELPERS_READY=PASS`
+- `P4_02B1_V4_ROLLBACK_HELPER_RETAINED=PASS`
+- `P4_02B1_V4_PROFILE_ENV_APPLY=PASS`
+- `P4_02B1_V4_PROFILE_CONFIG_SOURCE=PASS`
+- `P4_02B1_V4_CONTROL_NETWORK_CREATED=PASS`
+- `P4_02B1_V4_ACCEPTED_CONTAINER_NETWORK_ATTACH=PASS`
+- `P4_02B1_V4_SUPERVISED_GATEWAY_RESTART=PASS`
+- `P4_02B1_V4_GATEWAY_STATUS_POST_RESTART=PASS`
 - `P4_02B_AUTH_MODELS_STATUS=200`
 - `P4_02B_AUTHENTICATED_API=PASS`
 - `P4_02B1_V4_CONTROL_NETWORK_API=PASS`
@@ -115,4 +129,16 @@ P4-02B1 is accepted only when the live v4 run reaches the authenticated API and 
 - `P4_02B1_V4_HERMES_API_ENABLEMENT=PASS`
 - `P4_02B1_V4_OUTER=PASS`
 
-After P4-02B1 passes, promote the exact v4 source to the canonical Phase 4 script, close P4-02B1 in README/docs, and place the Orion/Jarvis server on `orion-control-net` for the first typed Orion HUD -> Hermes -> iai acceptance flow before adding voice.
+Accepted container identity remained `ea9fb7afbe6b394373390310a94bcacb21470388d1310a9305c7ef9e6a97b2d7` with original start time `2026-08-26T08:49:00.989990394Z`; therefore the container itself was not restarted.
+
+The successful live artifact is `Orion-Phase4-P4-02B1-v4-Profile-Configured-Hermes-API.ps1` with SHA-256 `0c186434b41a10830a180415b493d4627d861396e7131d2cd8ed917f15d9525a` and embedded inner-script SHA-256 `90ae28fafc9e19daf0d40c7685371226f0588ae857d6b8a23859c5e4bc096c4e`.
+
+## Source-preservation status
+
+The live runtime behavior is accepted. Per Orion's source-preservation rule, P4-02B1 is not marked fully CLOSED until the exact successful v4 artifact above is promoted to `scripts/phase4/p4-02b1-enable-hermes-api.ps1` and its remote blob is verified.
+
+No iai memory behavior or Orion product semantics were changed.
+
+## Next step
+
+Promote the exact accepted v4 artifact to the canonical Phase 4 script, then begin P4-02B2: place the Orion/Jarvis server on `orion-control-net` and prove the first typed Orion HUD -> Hermes -> iai interaction before adding voice.
