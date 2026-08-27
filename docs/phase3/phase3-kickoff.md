@@ -69,7 +69,7 @@ Verification note: early Markdown counts of `1` were caused by shell quoting/wil
 
 **Status: NEXT**
 
-Implement a bounded local retrieval service with fixed query/result/fetch budgets, provenance-preserving structured output, and a guaranteed no-result return path. No model-driven iterative retrieval loop.
+Implement the next retrieval layer so it uses iai to its fullest without replacing iai's memory semantics. Native iai document-learning surfaces such as `teach` / `watch` should be evaluated first for vault learning, while the Phase 3 sidecar remains the exact-document/provenance and file-management boundary. Any local resolver/index added by Orion must remain a document-access aid rather than a competing memory engine.
 
 ### P3-03 — Retrieval acceptance set
 
@@ -83,8 +83,22 @@ Create a separately mounted writable inbox, preserving the main vault as read-on
 
 Add approval-gated exact edits/moves with previewed diffs, rollback/recovery, and denied-action no-op proof.
 
+## Future JARVIS / HUD integration
+
+Add a **Memory / Brain** control to the future JARVIS dashboard. Selecting it should open the upstream native iai Brain dashboard rather than recreate or fork iai's memory UI.
+
+Planned behavior:
+
+- JARVIS remains the top-level Orion control center.
+- A Memory / Brain tile or button opens the native iai Brain dashboard at the host-local iai dashboard URL (`http://127.0.0.1:4477/` in the accepted MVP setup).
+- Prefer opening the native dashboard in a new tab/window or equivalent host surface rather than embedding a replacement implementation.
+- JARVIS may later show lightweight summary status such as iai healthy/degraded, last memory activity, or memory counts, but native iai remains authoritative for detailed memory inspection and controls such as search, graph view, pin, fade, rescue, lifecycle, and engine state.
+- This integration must not duplicate iai memory semantics or create a second memory-management UI implementation.
+
+**Intent status: PRESERVED.** This provides a unified Orion front door while keeping the proven iai dashboard and memory engine intact.
+
 ## Intent preservation
 
 **Intent status: PRESERVED.**
 
-The sidecar implementation changes the container boundary, not the product intent. The user's existing Obsidian vault remains the authoritative local knowledge base, readable broadly but not silently mutable. Retrieval remains read-only, bounded, local, and isolated from the accepted iai memory store. Writes remain constrained to a dedicated inbox or explicit approval workflow.
+The sidecar implementation changes the container boundary, not the product intent. The user's existing Obsidian vault remains the authoritative local knowledge base, readable broadly but not silently mutable. Retrieval remains read-only, bounded, local, and isolated from the accepted iai memory store. Writes remain constrained to a dedicated inbox or explicit approval workflow. The planned JARVIS Memory / Brain control links to the upstream iai dashboard instead of replacing it.
