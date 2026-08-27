@@ -11,7 +11,7 @@ Orion is a privacy-first, local-first personal AI companion built around Hermes 
 - Phase 4 — **ACTIVE — Orion HUD / voice / orchestration integration**
   - P4-01 Revised — **PASS / CLOSED — forked upstream HUD baseline established**
   - P4-02A — **PASS / CLOSED — runtime-fit discovery complete**
-  - P4-02B — **NEXT — Hermes API enablement/runtime integration, after SP4 rebuild-source canonicalization**
+  - P4-02B — **NEXT — Hermes API enablement/runtime integration, after SP4B disposable rebuild validation**
 
 The current controlling product requirements document is **Orion Master PRD v1.1.3**.
 
@@ -60,6 +60,7 @@ Completed source-preservation work:
 
 - **SP2 PASS** — all 11 accepted Phase 2/3 operational scripts preserved in GitHub at commit `12d12f1e665110c494ecc758dfa52b4c51e0805f`.
 - **SP3 PASS** — accepted launcher, accepted Hermes ddgs Dockerfile, available M2/M5 historical build harnesses, and accepted image-lineage evidence preserved at commit `37d1b24121c68262585e0ab447e23d7c24a02ed3`.
+- **SP4A PASS** — canonical rebuild-source candidate created and committed at `98aa7b73d2b14619264bcaabbbf6acadfee204e3`; generated PowerShell parsed successfully on the Windows host and no Docker/runtime mutation occurred.
 
 Important paths:
 
@@ -68,9 +69,10 @@ Important paths:
 - `scripts/source-preservation-accepted-manifest.md`
 - `build/orion-runtime/historical/`
 - `build/orion-runtime/accepted-build-lineage.md`
+- `build/orion-runtime/rebuild/`
 - `docs/rebuild/reproducibility-inventory.md`
 
-The project is **not yet declared clean-machine reproducible**. The remaining source-recovery task is SP4: create one canonical fresh-machine rebuild implementation from the preserved evidence, reconstruct the missing M4 composition step, canonicalize the F5E model-bake path, then validate the whole rebuild in disposable targets without touching the accepted live runtime.
+The project is **not yet declared clean-machine reproducible**. SP4B must execute the committed rebuild candidate only against disposable `orion-rebuild-*` images/containers and verify the pinned model artifacts, iai 3.0.8, reconstructed M4 composition, and M5 `recent_thread` serializer contract while proving that the accepted live runtime remains untouched.
 
 GitHub must never contain credentials, `.env` secrets, the iai encryption key, decrypted memory exports, private vault contents, or runtime data volumes.
 
@@ -120,7 +122,7 @@ Therefore P4-02B must enable Hermes API service behavior before exposing the min
 
 ## Repository structure
 
-- `build/orion-runtime/` — accepted runtime build-source evidence and future canonical rebuild implementation
+- `build/orion-runtime/` — accepted runtime build-source evidence and canonical rebuild candidate
 - `docs/architecture/` — runtime architecture and trust-boundary notes
 - `docs/decisions/` — architectural/product decisions
 - `docs/rebuild/` — rebuild/source-preservation inventory and acceptance records
@@ -132,6 +134,7 @@ Therefore P4-02B must enable Hermes API service behavior before exposing the min
 
 ## Current next step
 
-1. Complete **SP4 — canonical clean-machine rebuild implementation and disposable validation**.
-2. Then begin **P4-02B — Hermes API enablement/runtime integration** using the accepted `not-listening` baseline.
-3. Prove typed Orion HUD interaction first; add voice only after the core Hermes/HUD path is stable.
+1. Run **SP4B — disposable rebuild validation** against the committed canonical rebuild source.
+2. If SP4B passes, finalize the clean-machine bootstrap/recovery procedure and close the source-preservation gate.
+3. Then begin **P4-02B — Hermes API enablement/runtime integration** using the accepted `not-listening` baseline.
+4. Prove typed Orion HUD interaction first; add voice only after the core Hermes/HUD path is stable.
