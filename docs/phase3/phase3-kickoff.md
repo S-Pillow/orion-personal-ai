@@ -12,6 +12,8 @@ Phase 2 is closed for MVP execution. Phase 3 begins under Orion Master PRD v1.1.
 
 **P3-02B — Exact vault resolver: PASS / CLOSED.**
 
+**P3-03 — Vault-memory acceptance set: PASS / CLOSED.**
+
 ## Governing boundaries
 
 - The complete Obsidian vault is local on Windows at `C:\Personal\Me`.
@@ -147,11 +149,43 @@ Result: Orion now has a deterministic exact-source bridge from native iai-taught
 
 ### P3-03 — Vault-memory acceptance set
 
-**Status: NEXT**
+**Status: PASS / CLOSED — August 27, 2026**
 
-Define representative questions with known supporting notes. Verify iai recalls the expected taught material, verify source-path resolution back to Obsidian, and verify changed/deleted file behavior using native iai semantics.
+Acceptance scope:
+
+- Verify representative native iai recall across multiple existing taught vault notes.
+- Verify each recalled target can be resolved back to the exact authoritative Obsidian source through the accepted P3-02B resolver.
+- Verify native `iai watch` lifecycle behavior for a new note, a changed note, superseded material, and deletion/fade handling.
+- Use one disposable Markdown note only; do not modify existing vault notes.
+
+Representative recall evidence:
+
+- Probe 1 passed with 8 hits and source `AIOS/history/2026-07-14 - AIOS cleanup handoff.md`.
+- Probe 2 passed with 7 hits and source `Projects/Hermes/Multi-Agent.md`.
+- Probe 3 passed with 8 hits and source `WTF/2026-07-14 - Palworld to AI vault pipeline.md`.
+- All three probes returned the expected taught target and resolved through the exact-source path: `P3_03_REPRESENTATIVE_RECALL_SET=PASS`.
+
+Native watcher lifecycle evidence:
+
+- Disposable note `_orion-p3-03-acceptance-14a29a9b0e.md` was created in the authoritative vault and learned by native `iai watch`.
+- New-note study passed with one matching taught record and zero superseded records: `P3_03_NEW_NOTE_STUDIED=PASS`.
+- The same note was changed with a distinct replacement marker; native watch restudied the changed version: `P3_03_CHANGED_NOTE_RESTUDIED=PASS`.
+- The old version received native `restudy-supersede` provenance: `P3_03_OLD_VERSION_SUPERSEDED=PASS`, with one matching record and one superseded record.
+- The disposable note was then deleted from the authoritative vault.
+- Native watch processed the deletion through the iai fade/supersede path: `P3_03_DELETED_NOTE_FADE_HINT=PASS`, again observing one matching record and one superseded record.
+- The disposable file was removed successfully: `P3_03_DISPOSABLE_NOTE_CLEANUP=PASS`.
+
+Final acceptance:
+
+- `P3_03_NATIVE_WATCH_LIFECYCLE=PASS`.
+- `P3_03_VAULT_MEMORY_ACCEPTANCE_SET=PASS`.
+- `P3_03_ACCEPTANCE=PASS`.
+
+Result: representative vault recall, exact source resolution, change restudy, supersede behavior, and deleted-note fade handling are all accepted in the live Orion setup using native iai semantics. No custom memory lifecycle logic or parallel retrieval engine was introduced.
 
 ### P3-04 — Dedicated Orion inbox
+
+**Status: NEXT**
 
 Create a separately mounted writable inbox, preserving the main vault as read-only. Implement structured draft creation only into that inbox.
 
