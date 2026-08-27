@@ -27,6 +27,16 @@ For Docker deployments, BrainView process lifecycle controls must not attempt `s
 7. Native iai Brain/read path remains healthy.
 8. Accepted Hermes/iai container and iai volume are not restarted/recreated by this compatibility deployment.
 
+## Live attempt history
+
+### v1 — harness failure before source/runtime mutation
+
+The parser gate passed, runtime preflight passed, and the script created the local iai fork clone if absent. Execution then stopped on a PowerShell harness-generation defect: a minified command was emitted as `Write-HostP4_02B1A_FORK_CLONED=PASS` instead of `Write-Host "P4_02B1A_FORK_CLONED=PASS"`.
+
+This failure occurred immediately after the clone branch and before the compatibility source patch, commit/push, dashboard backup/deploy, dashboard restart, or any Brain daemon control action. No accepted Hermes/iai container restart or memory-runtime mutation occurred.
+
+The next script revision must use a readable, non-minified inner script and must be parser-gated before execution.
+
 ## Repository routing
 
 - `S-Pillow/iai-personal-memory-engine`: upstream-compatible BrainView control-plane compatibility source.
