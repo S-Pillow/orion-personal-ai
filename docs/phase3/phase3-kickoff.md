@@ -10,6 +10,8 @@ Phase 2 is closed for MVP execution. Phase 3 begins under Orion Master PRD v1.1.
 
 **P3-02A — Native iai vault learning: PASS / CLOSED.**
 
+**P3-02B — Exact vault resolver: PASS / CLOSED.**
+
 ## Governing boundaries
 
 - The complete Obsidian vault is local on Windows at `C:\Personal\Me`.
@@ -102,11 +104,41 @@ Result: the Obsidian vault is now being learned through iai's native document-st
 
 ### P3-02B — Exact vault resolver
 
-**Status: NEXT**
+**Status: PASS / CLOSED — August 27, 2026**
 
-Retain the isolated `orion-vault-retrieval` sidecar for exact document operations only: resolve source paths/provenance, open the authoritative Markdown note, support destination recommendations, and later broker approved document edits/moves. It must not become a second semantic memory engine.
+Accepted implementation:
+
+- Reuses the existing isolated `orion-vault-retrieval` sidecar.
+- iai remains the semantic-memory authority. The resolver does not rank, embed, search semantically, or maintain a second memory/index store.
+- Resolution chain is `iai record_id -> stored study provenance -> relative source path -> authoritative Obsidian Markdown file`.
+- The resolver may also accept a known stored source path directly.
+- The vault remains mounted read-only from `C:\Personal\Me` to `/workspace`.
+- Exact relative paths are preferred. A unique case-insensitive basename fallback is permitted only when the stored provenance lacks a relative directory; ambiguous basename matches are rejected rather than guessed.
+- Absolute paths, traversal segments, symlink traversal, non-Markdown files, and paths resolving outside the vault are rejected.
+- Source reads are bounded; reusable resolver default is 12,000 characters with a hard maximum of 50,000 characters.
+- Structured JSON output is available for later Hermes/JARVIS integration.
+
+Acceptance evidence:
+
+- `P3_02B_REQUIRED_CONTAINERS=PASS`.
+- `P3_02B_AUTHORITATIVE_VAULT_BIND=PASS`.
+- `P3_02B_VAULT_READ_ONLY=PASS`.
+- A real iai `vault-study` record was selected: `312f7d8e-7ca6-44c0-aa85-cf02aa5b73f0`.
+- Stored source provenance resolved to `AIOS/history/2026-07-14 - AIOS cleanup handoff.md`.
+- `P3_02B_EXACT_RELATIVE_MATCH=PASS` proved the authoritative file path exactly matched iai's stored relative source path.
+- `P3_02B_AUTHORITATIVE_NOTE_READ=PASS` proved the authoritative note was readable through the isolated sidecar without printing its contents.
+- Resolved file size was 2,116 bytes.
+- Resolved SHA256 was `028eb5eca32313c2e9c8fc9355f99a08122a24eb8006d7fb7cf506bd32477c20`.
+- `NOTE_CONTENT_PRINTED=false`.
+- Final chain verification returned `P3_02B_RECORD_TO_NOTE_RESOLUTION=PASS` and `P3_02B_EXACT_VAULT_RESOLVER=PASS`.
+
+Verifier note: acceptance v1 reached the correct iai record and source path but then failed on a PowerShell `-replace "\\"` expression because a lone backslash is invalid regex syntax. Acceptance v2 replaced that comparison with the literal string operation `$sourcePath.Replace('\\', '/')` and passed. The resolver itself did not require a Docker, iai, vault, or ingestion change.
+
+Result: Orion now has a deterministic exact-source bridge from native iai-taught memory back to the authoritative Obsidian note, while preserving iai as the sole semantic-memory engine.
 
 ### P3-03 — Vault-memory acceptance set
+
+**Status: NEXT**
 
 Define representative questions with known supporting notes. Verify iai recalls the expected taught material, verify source-path resolution back to Obsidian, and verify changed/deleted file behavior using native iai semantics.
 
