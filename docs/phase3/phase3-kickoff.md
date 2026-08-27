@@ -12,8 +12,10 @@ Phase 2 is closed for MVP execution. Phase 3 begins under Orion Master PRD v1.1.
 
 - The complete Obsidian vault is local on Windows at `C:\Personal\Me`.
 - The accepted implementation exposes the vault read-only at `/workspace` inside a dedicated retrieval sidecar, `orion-vault-retrieval`, rather than modifying the accepted iai/Hermes memory container.
-- Retrieval must search first and open only relevant notes; the full vault is never injected into model context.
-- Retrieval is deterministic and workflow-bounded. A normal retrieval stage gets one bounded model-to-retrieval request; the model cannot obtain iterative search turns merely by asking for more depth.
+- Obsidian remains the authoritative human-facing document vault; iai remains the authoritative assistant memory engine.
+- iai may learn the vault through its native `teach` / `watch` document-study path. Orion must not replace that with a competing semantic-memory engine.
+- Exact file opening, source-path resolution, draft placement, and document edits remain Orion document-management responsibilities outside iai.
+- The full vault is never injected into model context.
 - The writable surface is a dedicated Orion inbox mounted separately from the read-only vault.
 - Orion may create structured drafts in the dedicated inbox without approval.
 - Existing-note edits and draft moves require approval and an exact diff/recovery path.
@@ -22,8 +24,8 @@ Phase 2 is closed for MVP execution. Phase 3 begins under Orion Master PRD v1.1.
 
 ## Phase 3 deliverables
 
-1. Complete local vault search/indexing.
-2. Targeted note retrieval with provenance.
+1. Native iai learning of the Obsidian vault through supported document-study behavior.
+2. Targeted memory recall plus exact note-path/provenance resolution when a source document is needed.
 3. Dedicated writable Orion inbox.
 4. Structured draft creation.
 5. Vault-structure destination recommendations.
@@ -31,9 +33,9 @@ Phase 2 is closed for MVP execution. Phase 3 begins under Orion Master PRD v1.1.
 
 ## Exit criteria
 
-- Orion answers the defined vault-question set with correct supporting note paths.
-- Retrieval-stage tests prove bounded termination and structured no-result behavior.
-- A model cannot extend retrieval by failing to produce a sentinel or repeatedly requesting more search depth.
+- iai recalls representative vault material after native document study.
+- Changed/new vault files are restudied and deleted/superseded material follows iai's native fading lifecycle.
+- Orion can resolve recalled document material back to the authoritative Obsidian path when the user asks for the source note.
 - Orion creates useful drafts without modifying existing notes.
 - Denied edit approvals produce no changes.
 - Approved edits are exact and recoverable.
@@ -61,19 +63,32 @@ Accepted implementation and evidence:
 - Final corpus verification from inside the sidecar returned `ALL_FILES=149`, `VAULT_MARKDOWN_FILES=147`, and `PH3_P3_01=PASS`.
 - The accepted iai/Hermes memory container remained healthy and was not replaced by the sidecar architecture.
 
-Implementation note: an initial attempt to recreate the accepted memory container with an added `/workspace` bind mount correctly rolled back when the iai daemon did not automatically come up in the fresh container. The final architecture therefore leaves the accepted memory container intact and isolates vault retrieval in its own sidecar. This preserves the memory foundation while satisfying the read-only vault boundary.
+Implementation note: an initial attempt to recreate the accepted memory container with an added `/workspace` bind mount correctly rolled back when the iai daemon did not automatically come up in the fresh container. The final architecture therefore leaves the accepted memory container intact and isolates exact vault access in its own sidecar.
 
 Verification note: early Markdown counts of `1` were caused by shell quoting/wildcard expansion in the diagnostic command, not by missing vault content. The corrected escaped-wildcard check returned the expected 147 Markdown files.
 
-### P3-02 — Deterministic retrieval service
+### P3-02A — Native iai vault learning
 
-**Status: NEXT**
+**Status: NEXT / IMPLEMENTATION STARTED**
 
-Implement the next retrieval layer so it uses iai to its fullest without replacing iai's memory semantics. Native iai document-learning surfaces such as `teach` / `watch` should be evaluated first for vault learning, while the Phase 3 sidecar remains the exact-document/provenance and file-management boundary. Any local resolver/index added by Orion must remain a document-access aid rather than a competing memory engine.
+Use iai's native `watch` path against the read-only Obsidian vault. The watcher should use the accepted COMPANION iai store and relay study work through the live daemon when available. This is the intended iai document-learning path: new/changed files are studied through the shared capture spine; deleted/superseded material follows iai's native fade behavior.
 
-### P3-03 — Retrieval acceptance set
+Implementation constraints:
 
-Define representative vault questions and expected supporting paths, then test correct-path retrieval, bounded termination, and no-result behavior.
+- exact accepted iai image and COMPANION data volume
+- vault mounted read-only
+- no network access for the watcher container
+- run as Hermes/iai UID 10000
+- no custom embeddings, ranking, contradiction model, forgetting model, or parallel vector store
+- use a dedicated study session namespace such as `vault-study`
+
+### P3-02B — Exact vault resolver
+
+After native iai vault learning is accepted, retain the isolated `orion-vault-retrieval` sidecar for exact document operations only: resolve source paths/provenance, open the authoritative Markdown note, support destination recommendations, and later broker approved document edits/moves. It must not become a second semantic memory engine.
+
+### P3-03 — Vault-memory acceptance set
+
+Define representative questions with known supporting notes. Verify iai recalls the expected taught material, verify source-path resolution back to Obsidian, and verify changed/deleted file behavior using native iai semantics.
 
 ### P3-04 — Dedicated Orion inbox
 
@@ -101,4 +116,4 @@ Planned behavior:
 
 **Intent status: PRESERVED.**
 
-The sidecar implementation changes the container boundary, not the product intent. The user's existing Obsidian vault remains the authoritative local knowledge base, readable broadly but not silently mutable. Retrieval remains read-only, bounded, local, and isolated from the accepted iai memory store. Writes remain constrained to a dedicated inbox or explicit approval workflow. The planned JARVIS Memory / Brain control links to the upstream iai dashboard instead of replacing it.
+The Phase 3 design now follows iai's documented native document-learning model instead of building a substitute semantic retrieval system. Obsidian remains the authoritative, portable human-facing vault; iai learns that material natively and recalls it alongside conversation memory. The exact-document sidecar remains a file/provenance boundary, not a second memory engine. Writes remain constrained to a dedicated inbox or explicit approval workflow.
