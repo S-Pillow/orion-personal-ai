@@ -1,56 +1,46 @@
 [CmdletBinding()]
 param(
-    [string]$WorkspaceRoot = "E:\Orion-Phase2",
-    [string]$ForkUrl = "https://github.com/S-Pillow/jarvis_ai.git"
+    [string]$Workspace = "E:\Orion-Phase2\Orion-HUD"
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+$ForkUrl = "https://github.com/S-Pillow/jarvis_ai.git"
 $UpstreamUrl = "https://github.com/eadmin2/jarvis_ai.git"
 $UpstreamCommit = "88998de8369e9d36f6d434b5e01feb93fcf1c33f"
-$Workspace = Join-Path -Path $WorkspaceRoot -ChildPath "Orion-HUD"
 $OrionBranch = "orion-mvp"
 
-function Invoke-Native {
+function Invoke-Git {
     param(
-        [Parameter(Mandatory = $true)][string]$FilePath,
-        [Parameter(Mandatory = $true)][string[]]$Arguments,
+        [Parameter(Mandatory = $true)]
+        [string[]]$Arguments,
         [switch]$AllowFailure
     )
 
-    $savedPreference = $ErrorActionPreference
+    $saved = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
     try {
-        $raw = & $FilePath @Arguments 2>&1
+        $raw = & git @Arguments 2>&1
         $code = $LASTEXITCODE
     }
     finally {
-        $ErrorActionPreference = $savedPreference
+        $ErrorActionPreference = $saved
     }
 
     $text = (($raw | ForEach-Object { [string]$_ }) -join "`n").Trim()
 
     if (($code -ne 0) -and (-not $AllowFailure)) {
-        throw ("Native command failed (exit {0}): {1} {2}`n{3}" -f $code, $FilePath, ($Arguments -join " "), $text)
+        throw ("Git failed with exit {0}: git {1}`n{2}" -f $code, ($Arguments -join " "), $text)
     }
 
-    return [pscustomobject]@{
+    [pscustomobject]@{
         ExitCode = $code
         Text = $text
     }
 }
 
-function Invoke-Git {
-    param(
-        [Parameter(Mandatory = $true)][string[]]$Arguments,
-        [switch]$AllowFailure
-    )
-
-    return Invoke-Native -FilePath "git" -Arguments $Arguments -AllowFailure:$AllowFailure
-}
-
-function Replace-LiteralOrVerify {
+function Replace-Or-Verify {
     param(
         [Parameter(Mandatory = $true)][string]$Text,
         [Parameter(Mandatory = $true)][string]$Old,
@@ -63,134 +53,142 @@ function Replace-LiteralOrVerify {
     }
 
     if (-not $Text.Contains($Old)) {
-        throw ("Expected upstream text not found for '{0}'. The pinned source may not match the expected HUD structure." -f $Label)
+        throw ("Could not find either the upstream or Orion form for {0}." -f $Label)
     }
 
     return $Text.Replace($Old, $New)
 }
 
-function Join-Lines {
-    param([Parameter(Mandatory = $true)][string[]]$Lines)
-    return ($Lines -join [Environment]::NewLine) + [Environment]::NewLine
-}
-
-Write-Host "P4-01 Revised v2 — fork-first Orion HUD adoption"
-Write-Host "Uses S-Pillow's fork as origin and eadmin2/jarvis_ai as upstream."
+Write-Host "P4-01 Revised v4 - repair and finish fork adoption"
+Write-Host "This resumes the current Orion-HUD workspace without resetting it."
 Write-Host ""
 
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     throw "Git is required but was not found in PATH."
 }
-Write-Host "P4_01R2_GIT_AVAILABLE=PASS"
+Write-Host "P4_01R4_GIT_AVAILABLE=PASS"
 
-if (-not (Test-Path -LiteralPath $WorkspaceRoot -PathType Container)) {
-    New-Item -ItemType Directory -Path $WorkspaceRoot -Force | Out-Null
+if (-not (Test-Path -LiteralPath $Workspace -PathType Container)) {
+    throw ("Workspace not found: {0}" -f $Workspace)
+}
+if (-not (Test-Path -LiteralPath (Join-Path -Path $Workspace -ChildPath ".git") -PathType Container)) {
+    throw ("Workspace is not a Git repository: {0}" -f $Workspace)
+}
+Write-Host "P4_01R4_WORKSPACE_PRESENT=PASS"
+
+$origin = (Invoke-Git -Arguments @("-C", $Workspace, "remote", "get-url", "origin")).Text
+if ($origin -ne $ForkUrl) {
+    throw ("Origin mismatch. Expected {0}; found {1}" -f $ForkUrl, $origin)
+}
+Write-Host "P4_01R4_ORIGIN_IS_FORK=PASS"
+
+$upstream = (Invoke-Git -Arguments @("-C", $Workspace, "remote", "get-url", "upstream")).Text
+if ($upstream -ne $UpstreamUrl) {
+    throw ("Upstream mismatch. Expected {0}; found {1}" -f $UpstreamUrl, $upstream)
+}
+Write-Host "P4_01R4_UPSTREAM_REMOTE=PASS"
+
+$branch = (Invoke-Git -Arguments @("-C", $Workspace, "branch", "--show-current")).Text
+if ($branch -ne $OrionBranch) {
+    throw ("Branch mismatch. Expected {0}; found {1}" -f $OrionBranch, $branch)
+}
+Write-Host "P4_01R4_BRANCH_READY=PASS"
+
+$pinned = (Invoke-Git -Arguments @("-C", $Workspace, "rev-parse", $UpstreamCommit)).Text
+if ($pinned -ne $UpstreamCommit) {
+    throw ("Pinned commit mismatch. Expected {0}; found {1}" -f $UpstreamCommit, $pinned)
+}
+Write-Host "P4_01R4_UPSTREAM_PIN=PASS"
+
+$allowedFiles = @(
+    "ORION-UPSTREAM.md"
+    "server/config/server.orion.example.yaml"
+    "server/hud/index.html"
+)
+
+$localChanges = @()
+foreach ($args in @(
+    @("-C", $Workspace, "diff", "--name-only"),
+    @("-C", $Workspace, "diff", "--cached", "--name-only"),
+    @("-C", $Workspace, "ls-files", "--others", "--exclude-standard")
+)) {
+    $result = (Invoke-Git -Arguments $args).Text
+    if (-not [string]::IsNullOrWhiteSpace($result)) {
+        $localChanges += @($result -split "`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    }
 }
 
-$forkCheck = Invoke-Git -AllowFailure -Arguments @("ls-remote", "--heads", $ForkUrl)
-if ($forkCheck.ExitCode -ne 0) {
-    throw ("Could not access the Orion fork at {0}. Fork eadmin2/jarvis_ai into the S-Pillow account first, then rerun." -f $ForkUrl)
+$localChanges = @($localChanges | Sort-Object -Unique)
+$unexpectedLocal = @($localChanges | Where-Object { $_ -notin $allowedFiles })
+if ($unexpectedLocal.Count -gt 0) {
+    throw ("Unexpected local changes are present: {0}" -f ($unexpectedLocal -join ", "))
 }
-Write-Host ("P4_01R2_FORK_URL={0}" -f $ForkUrl)
-Write-Host "P4_01R2_FORK_ACCESSIBLE=PASS"
-
-if (-not (Test-Path -LiteralPath $Workspace)) {
-    Write-Host "Cloning Orion fork..."
-    Invoke-Git -Arguments @("clone", $ForkUrl, $Workspace) | Out-Null
-}
-elseif (-not (Test-Path -LiteralPath (Join-Path -Path $Workspace -ChildPath ".git") -PathType Container)) {
-    throw ("Workspace exists but is not a Git repository: {0}" -f $Workspace)
-}
-
-$origin = Invoke-Git -AllowFailure -Arguments @("-C", $Workspace, "remote", "get-url", "origin")
-if ($origin.ExitCode -ne 0) {
-    Invoke-Git -Arguments @("-C", $Workspace, "remote", "add", "origin", $ForkUrl) | Out-Null
-}
-elseif ($origin.Text -ne $ForkUrl) {
-    throw ("Existing origin does not match the intended Orion fork. Found: {0}" -f $origin.Text)
-}
-Write-Host "P4_01R2_ORIGIN_IS_FORK=PASS"
-
-$upstream = Invoke-Git -AllowFailure -Arguments @("-C", $Workspace, "remote", "get-url", "upstream")
-if ($upstream.ExitCode -ne 0) {
-    Invoke-Git -Arguments @("-C", $Workspace, "remote", "add", "upstream", $UpstreamUrl) | Out-Null
-}
-elseif ($upstream.Text -ne $UpstreamUrl) {
-    throw ("Existing upstream remote is unexpected. Found: {0}" -f $upstream.Text)
-}
-Write-Host "P4_01R2_UPSTREAM_REMOTE=PASS"
-
-$havePinned = Invoke-Git -AllowFailure -Arguments @("-C", $Workspace, "cat-file", "-e", ("{0}^{{commit}}" -f $UpstreamCommit))
-if ($havePinned.ExitCode -ne 0) {
-    Invoke-Git -Arguments @("-C", $Workspace, "fetch", "upstream", $UpstreamCommit) | Out-Null
-}
-
-$resolvedPinned = (Invoke-Git -Arguments @("-C", $Workspace, "rev-parse", $UpstreamCommit)).Text
-if ($resolvedPinned -ne $UpstreamCommit) {
-    throw ("Pinned upstream commit mismatch. Expected {0}; got {1}" -f $UpstreamCommit, $resolvedPinned)
-}
-Write-Host ("P4_01R2_UPSTREAM_COMMIT={0}" -f $UpstreamCommit)
-Write-Host "P4_01R2_UPSTREAM_PIN=PASS"
-
-$branchExists = Invoke-Git -AllowFailure -Arguments @("-C", $Workspace, "show-ref", "--verify", "--quiet", ("refs/heads/{0}" -f $OrionBranch))
-if ($branchExists.ExitCode -eq 0) {
-    Invoke-Git -Arguments @("-C", $Workspace, "switch", $OrionBranch) | Out-Null
-}
-else {
-    Invoke-Git -Arguments @("-C", $Workspace, "switch", "--create", $OrionBranch, $UpstreamCommit) | Out-Null
-}
-Write-Host ("P4_01R2_BRANCH={0}" -f $OrionBranch)
-Write-Host "P4_01R2_BRANCH_READY=PASS"
+Write-Host ("P4_01R4_EXISTING_CHANGE_SET={0}" -f ($(if ($localChanges.Count -eq 0) { "<clean>" } else { $localChanges -join "," })))
+Write-Host "P4_01R4_EXISTING_CHANGES_BOUNDED=PASS"
 
 $licensePath = Join-Path -Path $Workspace -ChildPath "LICENSE"
+$hudPath = Join-Path -Path $Workspace -ChildPath "server\hud\index.html"
+$upstreamConfigPath = Join-Path -Path $Workspace -ChildPath "server\config\server.example.yaml"
+$orionConfigPath = Join-Path -Path $Workspace -ChildPath "server\config\server.orion.example.yaml"
+$manifestPath = Join-Path -Path $Workspace -ChildPath "ORION-UPSTREAM.md"
+
 if (-not (Test-Path -LiteralPath $licensePath -PathType Leaf)) {
-    throw "Upstream LICENSE file is missing."
+    throw "LICENSE is missing."
 }
 $licenseText = [System.IO.File]::ReadAllText($licensePath)
 if ((-not $licenseText.Contains("MIT License")) -or
     (-not $licenseText.Contains("Copyright (c) 2026 Chris Lassiter"))) {
-    throw "Upstream MIT attribution does not match the approved baseline."
+    throw "MIT license attribution verification failed."
 }
-Write-Host "P4_01R2_LICENSE_PRESERVED=PASS"
+Write-Host "P4_01R4_LICENSE_PRESERVED=PASS"
 
-$hudPath = Join-Path -Path $Workspace -ChildPath "server\hud\index.html"
 if (-not (Test-Path -LiteralPath $hudPath -PathType Leaf)) {
-    throw "Pinned upstream HUD not found at server\hud\index.html."
+    throw "HUD file is missing."
 }
 
 $hud = [System.IO.File]::ReadAllText($hudPath)
-$replacements = @(
-    @("<title>JARVIS</title>", "<title>ORION</title>", "page title")
-    @('<meta name="apple-mobile-web-app-title" content="JARVIS">', '<meta name="apple-mobile-web-app-title" content="ORION">', "mobile app title")
-    @('<div id="bootLogo">J.A.R.V.I.S</div>', '<div id="bootLogo">ORION</div>', "boot logo")
-    @('<div id="bootSub">HERMES NEURAL INTERFACE</div>', '<div id="bootSub">HERMES + iai PERSONAL COMPANION</div>', "boot subtitle")
-    @('<h1>J.A.R.V.I.S</h1>', '<h1>ORION</h1>', "HUD header")
-    @('<div class="sub">HERMES AGENT INTERFACE &nbsp;//&nbsp; <span id="connState">LINK DOWN</span></div>', '<div class="sub">PERSONAL AI COMPANION &nbsp;//&nbsp; HERMES + iai &nbsp;//&nbsp; <span id="connState">LINK DOWN</span></div>', "HUD subtitle")
-    @('<div class="kv"><span>Conversation</span><b>jarvis-main</b></div>', '<div class="kv"><span>Conversation</span><b>orion-main</b></div>', "conversation label")
-    @('<div class="kv"><span>Memory scope</span><b>jarvis:user:main</b></div>', '<div class="kv"><span>Memory scope</span><b>orion:user:main</b></div>', "memory scope label")
-    @('const CONV = "jarvis-main";', 'const CONV = "orion-main";', "HUD conversation constant")
-)
+$hud = Replace-Or-Verify -Text $hud -Old "<title>JARVIS</title>" -New "<title>ORION</title>" -Label "page title"
+$hud = Replace-Or-Verify -Text $hud -Old '<meta name="apple-mobile-web-app-title" content="JARVIS">' -New '<meta name="apple-mobile-web-app-title" content="ORION">' -Label "mobile app title"
+$hud = Replace-Or-Verify -Text $hud -Old '<div id="bootLogo">J.A.R.V.I.S</div>' -New '<div id="bootLogo">ORION</div>' -Label "boot logo"
+$hud = Replace-Or-Verify -Text $hud -Old '<div id="bootSub">HERMES NEURAL INTERFACE</div>' -New '<div id="bootSub">HERMES + iai PERSONAL COMPANION</div>' -Label "boot subtitle"
+$hud = Replace-Or-Verify -Text $hud -Old '<h1>J.A.R.V.I.S</h1>' -New '<h1>ORION</h1>' -Label "HUD header"
+$hud = Replace-Or-Verify -Text $hud -Old '<div class="sub">HERMES AGENT INTERFACE &nbsp;//&nbsp; <span id="connState">LINK DOWN</span></div>' -New '<div class="sub">PERSONAL AI COMPANION &nbsp;//&nbsp; HERMES + iai &nbsp;//&nbsp; <span id="connState">LINK DOWN</span></div>' -Label "HUD subtitle"
+$hud = Replace-Or-Verify -Text $hud -Old '<div class="kv"><span>Conversation</span><b>jarvis-main</b></div>' -New '<div class="kv"><span>Conversation</span><b>orion-main</b></div>' -Label "conversation label"
+$hud = Replace-Or-Verify -Text $hud -Old '<div class="kv"><span>Memory scope</span><b>jarvis:user:main</b></div>' -New '<div class="kv"><span>Memory scope</span><b>orion:user:main</b></div>' -Label "memory scope label"
+$hud = Replace-Or-Verify -Text $hud -Old 'const CONV = "jarvis-main";' -New 'const CONV = "orion-main";' -Label "HUD conversation constant"
 
-foreach ($item in $replacements) {
-    $hud = Replace-LiteralOrVerify -Text $hud -Old $item[0] -New $item[1] -Label $item[2]
+[System.IO.File]::WriteAllText($hudPath, $hud, [System.Text.UTF8Encoding]::new($true))
+
+$verifyHud = [System.IO.File]::ReadAllText($hudPath)
+foreach ($fragment in @(
+    "<title>ORION</title>"
+    '<meta name="apple-mobile-web-app-title" content="ORION">'
+    '<div id="bootLogo">ORION</div>'
+    '<h1>ORION</h1>'
+    '<div class="kv"><span>Conversation</span><b>orion-main</b></div>'
+    '<div class="kv"><span>Memory scope</span><b>orion:user:main</b></div>'
+    'const CONV = "orion-main";'
+)) {
+    if (-not $verifyHud.Contains($fragment)) {
+        throw ("HUD branding verification failed for: {0}" -f $fragment)
+    }
 }
+Write-Host "P4_01R4_VISIBLE_ORION_BRANDING=PASS"
 
-[System.IO.File]::WriteAllText($hudPath, $hud, [System.Text.UTF8Encoding]::new($false))
-Write-Host "P4_01R2_VISIBLE_ORION_BRANDING=PASS"
-
-$upstreamConfigPath = Join-Path -Path $Workspace -ChildPath "server\config\server.example.yaml"
-$orionConfigPath = Join-Path -Path $Workspace -ChildPath "server\config\server.orion.example.yaml"
 if (-not (Test-Path -LiteralPath $upstreamConfigPath -PathType Leaf)) {
-    throw "Upstream server example config is missing."
+    throw "Upstream config example is missing."
 }
 
 $config = [System.IO.File]::ReadAllText($upstreamConfigPath)
 $config = $config.Replace("conversation: jarvis-main", "conversation: orion-main")
 $config = $config.Replace("session_key: jarvis:user:main", "session_key: orion:user:main")
 $config = $config.Replace('voice_name: "Your chosen voice"', 'voice_name: "Orion voice"')
-$config = $config.Replace("You are the spoken interface for the user's personal agent.", "You are the spoken interface for Orion, the user's personal AI companion.")
+$config = $config.Replace(
+    "You are the spoken interface for the user's personal agent.",
+    "You are the spoken interface for Orion, the user's personal AI companion."
+)
 
-$configHeader = Join-Lines -Lines @(
+$configLines = @(
     "# ORION MVP overlay derived from eadmin2/jarvis_ai."
     ("# Upstream commit: {0}" -f $UpstreamCommit)
     "#"
@@ -201,17 +199,20 @@ $configHeader = Join-Lines -Lines @(
     "# - JARVIS_HUD_TOKEN remains an upstream-compatible internal environment variable name for now."
     "# - User-facing product identity is Orion."
     "#"
+    $config
 )
+$finalConfig = ($configLines -join [Environment]::NewLine)
+[System.IO.File]::WriteAllText($orionConfigPath, $finalConfig, [System.Text.UTF8Encoding]::new($true))
 
-[System.IO.File]::WriteAllText(
-    $orionConfigPath,
-    ($configHeader + $config),
-    [System.Text.UTF8Encoding]::new($false)
-)
-Write-Host "P4_01R2_ORION_CONFIG_OVERLAY=PASS"
+$verifyConfig = [System.IO.File]::ReadAllText($orionConfigPath)
+if ((-not $verifyConfig.Contains("conversation: orion-main")) -or
+    (-not $verifyConfig.Contains("session_key: orion:user:main")) -or
+    (-not $verifyConfig.Contains("iai remains Orion's authoritative memory engine."))) {
+    throw "Orion config overlay verification failed."
+}
+Write-Host "P4_01R4_ORION_CONFIG_OVERLAY=PASS"
 
-$manifestPath = Join-Path -Path $Workspace -ChildPath "ORION-UPSTREAM.md"
-$manifest = Join-Lines -Lines @(
+$manifestLines = @(
     "# Orion HUD Upstream Baseline"
     ""
     "Orion uses eadmin2/jarvis_ai as the upstream HUD, voice, and orchestration application baseline."
@@ -241,61 +242,68 @@ $manifest = Join-Lines -Lines @(
     "Internal upstream compatibility names may remain where renaming them would create unnecessary divergence."
     "User-facing product identity is Orion."
 )
-
-[System.IO.File]::WriteAllText($manifestPath, $manifest, [System.Text.UTF8Encoding]::new($false))
-Write-Host "P4_01R2_UPSTREAM_MANIFEST=PASS"
+$manifest = ($manifestLines -join [Environment]::NewLine) + [Environment]::NewLine
+[System.IO.File]::WriteAllText($manifestPath, $manifest, [System.Text.UTF8Encoding]::new($true))
+Write-Host "P4_01R4_UPSTREAM_MANIFEST=PASS"
 
 Invoke-Git -Arguments @("-C", $Workspace, "add", "--", "server/hud/index.html", "server/config/server.orion.example.yaml", "ORION-UPSTREAM.md") | Out-Null
 
 $staged = Invoke-Git -AllowFailure -Arguments @("-C", $Workspace, "diff", "--cached", "--quiet")
 if ($staged.ExitCode -eq 1) {
-    Invoke-Git -Arguments @(
-        "-C", $Workspace,
-        "-c", "user.name=Orion Bootstrap",
-        "-c", "user.email=orion@local.invalid",
-        "commit", "-m", "orion: adopt pinned jarvis HUD baseline"
-    ) | Out-Null
+    $nameCheck = Invoke-Git -AllowFailure -Arguments @("-C", $Workspace, "config", "user.name")
+    $emailCheck = Invoke-Git -AllowFailure -Arguments @("-C", $Workspace, "config", "user.email")
+
+    if (($nameCheck.ExitCode -eq 0) -and ($emailCheck.ExitCode -eq 0) -and
+        (-not [string]::IsNullOrWhiteSpace($nameCheck.Text)) -and
+        (-not [string]::IsNullOrWhiteSpace($emailCheck.Text))) {
+        Invoke-Git -Arguments @("-C", $Workspace, "commit", "-m", "orion: adopt pinned jarvis HUD baseline") | Out-Null
+    }
+    else {
+        Invoke-Git -Arguments @(
+            "-C", $Workspace,
+            "-c", "user.name=Orion Bootstrap",
+            "-c", "user.email=orion@local.invalid",
+            "commit", "-m", "orion: adopt pinned jarvis HUD baseline"
+        ) | Out-Null
+    }
 }
 elseif ($staged.ExitCode -ne 0) {
     throw "Could not determine staged Git state."
 }
+Write-Host "P4_01R4_LOCAL_COMMIT_READY=PASS"
 
 $deltaText = (Invoke-Git -Arguments @("-C", $Workspace, "diff", "--name-only", ("{0}..HEAD" -f $UpstreamCommit))).Text
-$deltaFiles = @($deltaText -split "`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-$allowedDelta = @(
-    "ORION-UPSTREAM.md"
-    "server/config/server.orion.example.yaml"
-    "server/hud/index.html"
-)
-$unexpected = @($deltaFiles | Where-Object { $_ -notin $allowedDelta })
-if ($unexpected.Count -gt 0) {
-    throw ("Unexpected Orion baseline changes detected: {0}" -f ($unexpected -join ", "))
-}
-foreach ($expectedFile in $allowedDelta) {
+$deltaFiles = @($deltaText -split "`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+
+foreach ($expectedFile in $allowedFiles) {
     if ($deltaFiles -notcontains $expectedFile) {
-        throw ("Expected Orion adaptation file is missing from the branch delta: {0}" -f $expectedFile)
+        throw ("Expected adaptation file missing from branch delta: {0}" -f $expectedFile)
     }
 }
-Write-Host ("P4_01R2_DELTA_FILES={0}" -f ($deltaFiles -join ","))
-Write-Host "P4_01R2_UPSTREAM_DELTA_BOUNDED=PASS"
+$unexpectedDelta = @($deltaFiles | Where-Object { $_ -notin $allowedFiles })
+if ($unexpectedDelta.Count -gt 0) {
+    throw ("Unexpected files in branch delta: {0}" -f ($unexpectedDelta -join ", "))
+}
+Write-Host ("P4_01R4_DELTA_FILES={0}" -f ($deltaFiles -join ","))
+Write-Host "P4_01R4_UPSTREAM_DELTA_BOUNDED=PASS"
 
 $status = (Invoke-Git -Arguments @("-C", $Workspace, "status", "--porcelain")).Text
 if (-not [string]::IsNullOrWhiteSpace($status)) {
-    throw ("Workspace is not clean after the bounded commit:`n{0}" -f $status)
+    throw ("Workspace is not clean after commit:`n{0}" -f $status)
 }
+Write-Host "P4_01R4_WORKSPACE_CLEAN=PASS"
 
 Invoke-Git -Arguments @("-C", $Workspace, "push", "--set-upstream", "origin", $OrionBranch) | Out-Null
 
 $head = (Invoke-Git -Arguments @("-C", $Workspace, "rev-parse", "HEAD")).Text
-$remoteBranch = Invoke-Git -Arguments @("ls-remote", "--heads", $ForkUrl, ("refs/heads/{0}" -f $OrionBranch))
-if (-not $remoteBranch.Text.StartsWith($head, [System.StringComparison]::OrdinalIgnoreCase)) {
-    throw "Remote Orion branch does not match the local committed HEAD."
+$remote = (Invoke-Git -Arguments @("ls-remote", "--heads", $ForkUrl, ("refs/heads/{0}" -f $OrionBranch))).Text
+if (-not $remote.StartsWith($head, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "Remote fork branch does not match local HEAD."
 }
-Write-Host ("P4_01R2_LOCAL_HEAD={0}" -f $head)
-Write-Host "P4_01R2_CODE_PUSHED_TO_FORK=PASS"
+Write-Host ("P4_01R4_LOCAL_HEAD={0}" -f $head)
+Write-Host "P4_01R4_CODE_PUSHED_TO_FORK=PASS"
 
 Write-Host ""
-Write-Host ("P4_01R2_WORKSPACE={0}" -f $Workspace)
-Write-Host "P4_01R2_NO_SERVER_CORE_CHANGE=PASS"
-Write-Host "P4_01R2_IAI_MEMORY_INTENT_PRESERVED=PASS"
+Write-Host "P4_01R4_NO_SERVER_CORE_CHANGE=PASS"
+Write-Host "P4_01R4_IAI_MEMORY_INTENT_PRESERVED=PASS"
 Write-Host "P4_01_REVISED_FORK_ADOPTION=PASS"
