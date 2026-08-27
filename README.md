@@ -9,7 +9,7 @@ Orion is a privacy-first, local-first personal AI companion built around Hermes 
   - P4-01 Revised — **PASS / CLOSED — forked upstream HUD baseline established**
   - P4-02A — **PASS / CLOSED — runtime-fit discovery complete**
   - P4-02B — **IN PROGRESS — Hermes API enablement/runtime integration**
-    - P4-02B1 — authenticated Docker-network API enablement implementation committed; live acceptance pending
+    - P4-02B1 — v1 live diagnostic exposed StrictMode array handling in the harness before mutation; v2 fix committed; live acceptance pending
 The current controlling product requirements document is **Orion Master PRD v1.1.3**.
 ## Governing architecture
 - **Hermes Agent** is the local agent runtime.
@@ -77,6 +77,7 @@ Accepted boundaries:
 Phase 4 adapts the proven `jarvis_ai` HUD/voice application into Orion rather than building a parallel interface.
 P4-02A established that the accepted Hermes/iai container has no published ports, Hermes ports `8642` and `9119` are not listening inside the container, Windows ports `8642` and `9119` are closed, native iai Brain `4477` is open, and the resolved Hermes API route is `not-listening`.
 Hermes v2026.8.18 source confirms the API adapter supports `API_SERVER_HOST` and `API_SERVER_PORT`; its defaults are `127.0.0.1:8642`. P4-02B1 therefore binds authenticated Hermes API service to container `0.0.0.0:8642` but publishes no Windows host port. The Orion server reaches it through a dedicated Docker bridge network, keeping `API_SERVER_KEY` server-side.
+P4-02B1 v1 passed its hash/parser gates but stopped during the existing-gateway precheck because a zero/one-item function result was read through `.Count` under StrictMode. This occurs before secret creation, Docker-network mutation, or gateway launch. v2 wraps those function outputs in arrays and also hardens child-PowerShell stderr capture. Detailed evidence is in `docs/phase4/p4-02b1-hermes-api-enablement.md`.
 ## Security and evidence rules
 - No credentials, Discord tokens, API keys, `.env` files, decrypted memory exports, vault contents, or private runtime dumps belong in GitHub.
 - Installed-runtime observations are distinguished from upstream/source claims.
@@ -96,6 +97,6 @@ Hermes v2026.8.18 source confirms the API adapter supports `API_SERVER_HOST` and
 - `scripts/phase3/accepted/` — preserved accepted Phase 3 operational source
 - `scripts/phase4/` — Phase 4 integration/bootstrap scripts
 ## Current next step
-1. Run **P4-02B1 — authenticated Hermes API enablement** from the committed `scripts/phase4/p4-02b1-enable-hermes-api.ps1` implementation.
+1. Run **P4-02B1 v2 — authenticated Hermes API enablement** from the committed `scripts/phase4/p4-02b1-enable-hermes-api.ps1` implementation.
 2. If P4-02B1 passes, wire the Orion/Jarvis server to `http://orion-iai-m5-c:8642` over the dedicated control network and prove typed interaction.
 3. Add voice only after the typed Hermes/HUD path is stable.
