@@ -1,6 +1,6 @@
 # P4-02B1 — Hermes API Enablement
 
-**Status: IN PROGRESS — live acceptance pending**
+**Status: IN PROGRESS — v3 live acceptance pending**
 
 P4-02B1 enables the Hermes API needed by the Orion HUD while preserving the accepted Hermes/iai runtime and keeping Hermes off Windows host port `8642`.
 
@@ -15,44 +15,59 @@ P4-02B1 enables the Hermes API needed by the Orion HUD while preserving the acce
 - Orion server access is through dedicated Docker bridge `orion-control-net`
 - `API_SERVER_KEY` stays in local secret material and is never committed or printed
 
-## First live attempt — diagnostic failure
+## v1 live diagnostic
 
-The first P4-02B1 live run on August 27, 2026 passed both pre-execution safeguards:
+The first P4-02B1 live run passed its outer hash/parser gates and stopped before runtime mutation because `Get-GatewayProcessLines` could collapse to a scalar or `$null` under `Set-StrictMode -Version Latest`; reading `.Count` was therefore unsafe. The correction wrapped the function results in `@(...)` and hardened child-PowerShell stderr handling.
 
-- `P4_02B1_INNER_HASH=PASS`
-- `P4_02B1_INNER_PARSE=PASS`
+## v2 live diagnostic
 
-It then failed under `Set-StrictMode -Version Latest` because `Get-GatewayProcessLines` can emit zero or one PowerShell pipeline object. The caller assigned that function result directly and then read `.Count`; with zero/one output, PowerShell may produce `$null` or a scalar rather than an array, so `.Count` is not safe under StrictMode.
+The v2 run passed the hash/parser gates and accepted-runtime precheck, then observed the actual installed runtime state:
 
-The first unsafe `.Count` occurs during the existing-gateway precheck, before API secret creation, Docker-network creation/attachment, or Hermes gateway launch. Therefore this failed attempt did not mutate the accepted runtime.
+- exactly one Hermes gateway already exists;
+- command shape: `/opt/hermes/.venv/bin/hermes -p companion gateway run --replace`;
+- Windows host port `8642` remains closed;
+- the gateway is therefore active for the COMPANION profile but was started without the API-server environment needed for the Orion HUD.
 
-The outer launcher also used `ErrorActionPreference=Stop` while invoking a child `powershell.exe`, allowing child stderr to surface as `NativeCommandError` before the wrapper could replay the inner diagnostic output.
+v2 intentionally refused to launch a second gateway and stopped before API-secret creation, Docker-network creation/attachment, or any gateway replacement.
 
-## v2 correction
+This finding changes the implementation path: P4-02B1 must adapt the existing gateway rather than create a parallel gateway process.
 
-Canonical script: `scripts/phase4/p4-02b1-enable-hermes-api.ps1`
+## v3 implementation
 
-v2 changes only the harness behavior:
+v3 uses the existing supported Hermes `gateway run --replace` lifecycle for the same `companion` profile.
 
-- wraps both `Get-GatewayProcessLines` call sites in `@(...)` so `.Count` is deterministic for zero, one, or multiple results;
-- temporarily sets the outer wrapper to `ErrorActionPreference=Continue` only around the child PowerShell invocation, then restores the original preference, so a failed child run can be reported with its full output and exit code;
-- retains the hash gate, parser gate, secret redaction, no-host-publish policy, accepted-container identity checks, iai volume checks, Brain check, and authenticated disposable API probe.
+The bounded sequence is:
 
-No iai memory behavior or Orion product semantics changed.
+1. confirm exactly one existing COMPANION gateway and a running gateway status;
+2. create/reuse local `C:\HermesAgent\secrets\orion-api.env` without printing the key;
+3. create/reuse `orion-control-net` and attach the accepted container without restarting it;
+4. replace the existing COMPANION gateway in place with the same profile plus `API_SERVER_ENABLED=true`, `API_SERVER_HOST=0.0.0.0`, `API_SERVER_PORT=8642`, and the local bearer key;
+5. authenticate to `/v1/models` from a disposable container on `orion-control-net`;
+6. require Windows localhost `8642` to remain closed;
+7. require one COMPANION gateway process after replacement and preserve prior Discord-connected state when the gateway status reported it before replacement;
+8. verify accepted container ID/start time, image, iai volume, and Brain `4477` state remain unchanged.
+
+If the replacement path fails, v3 attempts a bounded rollback: restart the COMPANION gateway without the API env, restore any network attachment created by the run, remove a newly created control network when safe, and delete a newly created API env file.
+
+The v3 delivery artifact is `Orion-Phase4-P4-02B1-v3-Adapt-Existing-Gateway.ps1`; after live acceptance, the accepted revision will replace the canonical `scripts/phase4/p4-02b1-enable-hermes-api.ps1` source and the README/status records will be flipped in the same closure step.
+
+No iai memory behavior or Orion product semantics are changed.
 
 ## Acceptance criteria
 
-P4-02B1 is accepted only when the live run reaches the authenticated API and preservation markers, including:
+P4-02B1 is accepted only when the live v3 run reaches the authenticated API and preservation markers, including:
 
 - `P4_02B_AUTHENTICATED_API=PASS`
-- `P4_02B1_CONTROL_NETWORK_API=PASS`
-- `P4_02B1_HOST_8642_POST=CLOSED`
-- `P4_02B1_NO_HOST_HERMES_API_EXPOSURE=PASS`
-- `P4_02B1_GATEWAY_PROCESS=PASS`
-- `P4_02B1_NO_CONTAINER_RESTART=PASS`
-- `P4_02B1_IAI_BRAIN_PRESERVED=PASS`
-- `P4_02B1_ACCEPTED_VOLUME_PRESERVED=PASS`
-- `P4_02B1_HERMES_API_ENABLEMENT=PASS`
-- `P4_02B1_OUTER=PASS`
+- `P4_02B1_V3_CONTROL_NETWORK_API=PASS`
+- `P4_02B1_V3_GATEWAY_STATUS_POST=PASS`
+- `P4_02B1_V3_SINGLE_GATEWAY_PROCESS=PASS`
+- `P4_02B1_V3_EXISTING_GATEWAY_REPLACED=PASS`
+- `P4_02B1_V3_HOST_8642_POST=CLOSED`
+- `P4_02B1_V3_NO_HOST_HERMES_API_EXPOSURE=PASS`
+- `P4_02B1_V3_NO_CONTAINER_RESTART=PASS`
+- `P4_02B1_V3_IAI_BRAIN_PRESERVED=PASS`
+- `P4_02B1_V3_ACCEPTED_VOLUME_PRESERVED=PASS`
+- `P4_02B1_V3_HERMES_API_ENABLEMENT=PASS`
+- `P4_02B1_V3_OUTER=PASS`
 
 After P4-02B1 passes, the next step is to place the Orion/Jarvis server on `orion-control-net` and prove typed Orion HUD -> Hermes -> iai interaction before adding voice.
