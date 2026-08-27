@@ -8,6 +8,8 @@ Phase 2 is closed for MVP execution. Phase 3 begins under Orion Master PRD v1.1.
 
 **P3-01 — Vault mount and corpus discovery: PASS / CLOSED.**
 
+**P3-02A — Native iai vault learning: PASS / CLOSED.**
+
 ## Governing boundaries
 
 - The complete Obsidian vault is local on Windows at `C:\Personal\Me`.
@@ -49,7 +51,7 @@ Phase 2 is closed for MVP execution. Phase 3 begins under Orion Master PRD v1.1.
 Accepted implementation and evidence:
 
 - Host vault exists at `C:\Personal\Me`.
-- Host corpus contains 147 Markdown files and 2 `.gitkeep` files.
+- Host corpus contained 147 Markdown files and 2 `.gitkeep` files at the time of P3-01 verification; the vault is live and additional notes may increase this count later.
 - Dedicated sidecar: `orion-vault-retrieval`.
 - Vault bind mount source: `C:\Personal\Me`.
 - Vault bind mount destination: `/workspace`.
@@ -69,22 +71,40 @@ Verification note: early Markdown counts of `1` were caused by shell quoting/wil
 
 ### P3-02A — Native iai vault learning
 
-**Status: NEXT / IMPLEMENTATION STARTED**
+**Status: PASS / CLOSED — August 26, 2026**
 
-Use iai's native `watch` path against the read-only Obsidian vault. The watcher should use the accepted COMPANION iai store and relay study work through the live daemon when available. This is the intended iai document-learning path: new/changed files are studied through the shared capture spine; deleted/superseded material follows iai's native fade behavior.
+Accepted implementation:
 
-Implementation constraints:
+- Dedicated watcher container: `orion-iai-vault-watch`.
+- Exact accepted iai image: `sha256:0222e2199cbb135bf1989283b1dba7a36f936aab3f82c3fbae048659dd8b2500`.
+- Accepted COMPANION data volume: `orion-iai-m5-data`.
+- Vault mounted at `/workspace` read-only.
+- Watcher runs as UID/GID `10000:10000`.
+- Watcher network mode is `none`.
+- Root filesystem is read-only, Linux capabilities are dropped, and `no-new-privileges` is enabled.
+- Native command: `iai watch /workspace --interval 30 --session-id vault-study`.
+- Watcher reaches the accepted iai daemon through the shared store/socket and uses iai's native daemon-owned study path; no alternate writer or competing memory store was introduced.
 
-- exact accepted iai image and COMPANION data volume
-- vault mounted read-only
-- no network access for the watcher container
-- run as Hermes/iai UID 10000
-- no custom embeddings, ranking, contradiction model, forgetting model, or parallel vector store
-- use a dedicated study session namespace such as `vault-study`
+Acceptance evidence:
+
+- Preflight returned `MEMORY_RUNTIME_HEALTH=PASS`.
+- Vault visibility and daemon relay passed: `P3_02_VAULT_VISIBLE=PASS`, `P3_02_DAEMON_SOCKET_VISIBLE=PASS`, `P3_02_DAEMON_RELAY=PASS`, and `P3_02_NATIVE_WATCH_PREFLIGHT=PASS`.
+- Watcher topology passed: `IAI_VAULT_WATCH_RUNNING=PASS`, `IAI_VAULT_WATCH_VAULT_READ_ONLY=PASS`, `IAI_VAULT_WATCH_SHARED_STORE=PASS`, and `IAI_VAULT_WATCH_NETWORK_NONE=PASS`.
+- Initial native watch pass completed with `studied=148`, `faded=0`, `superseded=0`.
+- The live vault subsequently grew as additional notes were added. Final verification observed 150 source files represented by `vault-study` provenance and 840 taught memory records.
+- Provenance verification passed: `P3_02A_STUDY_PROVENANCE=PASS`.
+- Native iai recall verification used a taught `Home.md` record; recall returned 11 hits and included the exact target record: `RECALL_TARGET_FOUND=true` and `P3_02A_NATIVE_RECALL=PASS`.
+- Final verifier returned `P3_02A_NATIVE_IAI_VAULT_LEARNING=PASS` and `P3_02A_VERIFIER=PASS`.
+
+Verifier note: the first read-only verifier incorrectly expected `source=study` and `session_id=vault-study` to appear in the same provenance object. iai stores the capture provenance and `provenance_extra` as separate provenance entries on the same record. The corrected verifier checks both entries on the record and passed; no re-study was required.
+
+Result: the Obsidian vault is now being learned through iai's native document-study lifecycle. New/changed files will be restudied by `iai watch`; deleted/superseded content remains governed by iai's native fading behavior.
 
 ### P3-02B — Exact vault resolver
 
-After native iai vault learning is accepted, retain the isolated `orion-vault-retrieval` sidecar for exact document operations only: resolve source paths/provenance, open the authoritative Markdown note, support destination recommendations, and later broker approved document edits/moves. It must not become a second semantic memory engine.
+**Status: NEXT**
+
+Retain the isolated `orion-vault-retrieval` sidecar for exact document operations only: resolve source paths/provenance, open the authoritative Markdown note, support destination recommendations, and later broker approved document edits/moves. It must not become a second semantic memory engine.
 
 ### P3-03 — Vault-memory acceptance set
 
@@ -116,4 +136,4 @@ Planned behavior:
 
 **Intent status: PRESERVED.**
 
-The Phase 3 design now follows iai's documented native document-learning model instead of building a substitute semantic retrieval system. Obsidian remains the authoritative, portable human-facing vault; iai learns that material natively and recalls it alongside conversation memory. The exact-document sidecar remains a file/provenance boundary, not a second memory engine. Writes remain constrained to a dedicated inbox or explicit approval workflow.
+The Phase 3 design follows iai's documented native document-learning model instead of building a substitute semantic retrieval system. Obsidian remains the authoritative, portable human-facing vault; iai learns that material natively and recalls it alongside conversation memory. The exact-document sidecar remains a file/provenance boundary, not a second memory engine. Writes remain constrained to a dedicated inbox or explicit approval workflow.
