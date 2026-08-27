@@ -110,7 +110,7 @@ Accepted v2 evidence:
 - required Orion HUD source layout present;
 - no configuration write, no container change, and no secret output occurred.
 
-Conclusion: P4-02B must **enable Hermes API service behavior first**. Publishing or proxying port `8642` alone would not work because no service is currently listening on that port. After enablement, expose the API to the Orion HUD using the accepted local security model. Native iai Brain is already reachable independently on `4477` and should remain the memory-management destination.
+Conclusion: P4-02B had to enable Hermes API service behavior first. Publishing or proxying port `8642` alone would not work because no service was listening on that port. Native iai Brain remained independently reachable on `4477` and remains the memory-management destination.
 
 The first P4-02A revision failed only in the diagnostic probe because nested Windows PowerShell -> Docker -> Python argument handling stripped quotes from embedded Python. No runtime/configuration mutation occurred. v2 removed nested Python execution and read Linux socket tables directly.
 
@@ -118,11 +118,11 @@ Canonical accepted script: `scripts/phase4/p4-02a-runtime-fit-discovery-v2.ps1`.
 
 #### P4-02B — Hermes API enablement and Orion HUD runtime integration
 
-**Status: NEXT — blocked only by source-preservation pass**
+**Status: IN PROGRESS — P4-02B1 live pass; source promotion then P4-02B2 typed HUD integration**
 
-Before changing the accepted runtime, finish preserving the Phase 2/3 operational code and custom Hermes+iai image build recipe identified in `docs/rebuild/reproducibility-inventory.md`.
+Source preservation is complete for MVP and no longer blocks Phase 4.
 
-Then:
+P4-02B requirements:
 
 - enable only the Hermes API behavior required by the upstream Orion HUD;
 - keep API credentials local and out of GitHub;
@@ -133,6 +133,34 @@ Then:
 - prove typed HUD interaction and live Hermes status before installing optional voice/cloud components.
 
 P4-02 tests integration boundaries, not iai internals.
+
+##### P4-02B1 — authenticated Hermes API enablement
+
+**Status: LIVE PASS — exact accepted v4 source promotion pending formal closure**
+
+The successful v4 live run:
+
+- configured only the COMPANION profile's `API_SERVER_ENABLED`, `API_SERVER_HOST`, `API_SERVER_PORT`, and `API_SERVER_KEY` values through `/opt/data/profiles/companion/.env`;
+- used the s6-supervised `hermes -p companion gateway restart` lifecycle;
+- authenticated successfully to `/v1/models` with HTTP 200 over `orion-control-net`;
+- kept Windows localhost `8642` closed;
+- preserved exactly one COMPANION gateway process;
+- preserved the accepted Docker container ID and original start time, so no container restart occurred;
+- preserved native iai Brain on `4477`;
+- preserved the accepted iai volume;
+- finalized the profile `.env` rollback backup only after acceptance.
+
+Successful artifact SHA-256: `0c186434b41a10830a180415b493d4627d861396e7131d2cd8ed917f15d9525a`.
+
+Detailed evidence: `docs/phase4/p4-02b1-hermes-api-enablement.md`.
+
+Formal P4-02B1 closure requires exact promotion of that successful artifact to `scripts/phase4/p4-02b1-enable-hermes-api.ps1`.
+
+##### P4-02B2 — typed Orion HUD integration
+
+**Status: NEXT**
+
+Place the Orion/Jarvis server on `orion-control-net`, provide the Hermes bearer key to the server process only, point `hermes.base_url` at `http://orion-iai-m5-c:8642`, and prove a real typed Orion HUD -> Hermes -> iai turn before adding voice.
 
 ### P4-03 — Orion document actions in the HUD
 
