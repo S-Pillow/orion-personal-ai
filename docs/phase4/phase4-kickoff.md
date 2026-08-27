@@ -12,7 +12,16 @@ Phase 3 is closed for MVP. Phase 4 turns the accepted Orion subsystems into a co
 - Obsidian remains the authoritative human-facing document vault.
 - Orion exact-source, inbox, destination-recommendation, approval, and recovery components remain the accepted document orchestration primitives.
 - `eadmin2/jarvis_ai` is adopted as Orion's upstream HUD / voice / orchestration application baseline rather than rebuilding an equivalent interface from scratch.
+- Third-party applications that Orion materially modifies should live in maintained forks rather than being copied wholesale into `orion-personal-ai`.
 - The Orion layer may adapt and extend the upstream application, but must not reimplement iai memory semantics, create a second semantic index, or bypass accepted approval boundaries.
+
+## Repository strategy
+
+`S-Pillow/orion-personal-ai` remains the canonical Orion integration/control repository for project state, architecture decisions, acceptance evidence, integration scripts, and Orion-specific orchestration glue.
+
+The HUD application itself should live in a fork of `eadmin2/jarvis_ai` under the `S-Pillow` account. The fork is where Orion HUD source changes belong; the original repository remains the `upstream` remote so upstream history and future comparisons remain intact.
+
+Only dependencies Orion materially changes need forks. iai and Hermes remain upstream dependencies unless Orion begins carrying source-level changes that justify maintained forks.
 
 ## Upstream application baseline
 
@@ -41,23 +50,37 @@ Target user flow:
 
 ## Execution sequence
 
-### P4-01 Revised — Adopt upstream JARVIS application as Orion baseline
+### P4-01 Revised — Fork-first upstream JARVIS adoption
 
 **Status: IN PROGRESS**
 
-Purpose: establish a reproducible Orion working branch from the proven upstream application before runtime integration.
+Purpose: establish a reproducible Orion working branch from the proven upstream application and retain the actual product source on GitHub.
 
 Required implementation:
 
-- clone and pin `eadmin2/jarvis_ai` at commit `88998de8369e9d36f6d434b5e01feb93fcf1c33f`;
-- retain upstream MIT license and attribution;
-- preserve upstream Git history with an `upstream` remote and a local Orion adaptation branch;
-- rebrand user-facing HUD identity from JARVIS to Orion while avoiding unnecessary internal renames;
-- create an Orion configuration overlay rather than mutating the upstream example config;
-- leave `server/server.py`, Hermes protocol behavior, iai, vault services, and runtime secrets unchanged during this adoption step;
-- document the upstream provenance and Orion intent boundaries in the working tree.
+1. fork `eadmin2/jarvis_ai` under the `S-Pillow` account;
+2. clone that fork locally as the Orion HUD workspace;
+3. retain `eadmin2/jarvis_ai` as the `upstream` remote;
+4. pin the initial Orion baseline to upstream commit `88998de8369e9d36f6d434b5e01feb93fcf1c33f`;
+5. retain upstream MIT license and attribution;
+6. rebrand only the user-facing HUD identity from JARVIS to Orion at first;
+7. create an Orion configuration/provenance overlay rather than mutating the upstream example configuration;
+8. push the bounded `orion-mvp` adaptation branch to the fork so actual Orion HUD code is stored on GitHub;
+9. leave `server/server.py`, Hermes protocol behavior, iai, vault services, and runtime secrets unchanged during baseline adoption.
 
-Acceptance for P4-01 Revised is intentionally narrow: exact upstream pin, license preservation, bounded three-file adaptation delta, clean local branch, and no server-core or memory-system changes.
+The first bootstrap script revision failed at PowerShell parse time before execution because of a here-string parsing defect. Because parsing failed before execution, it did not clone repositories or change local runtime/GitHub state. The corrected v2 bootstrap removes PowerShell here-strings from the generated-content path and adopts the fork-first remote model.
+
+P4-01 Revised acceptance requires:
+
+- fork accessible under `S-Pillow`;
+- `origin` points to the fork;
+- `upstream` points to `eadmin2/jarvis_ai`;
+- exact upstream commit pin verified;
+- MIT license preserved;
+- bounded Orion branding/config/provenance delta;
+- actual Orion source branch pushed to the fork;
+- no `server/server.py` change;
+- iai memory intent preserved.
 
 This supersedes the earlier custom read-only dashboard-shell direction. That standalone mockup is not the Orion product baseline and should not receive further implementation effort.
 
