@@ -1,0 +1,8 @@
+ARG IAI_F2_IMAGE
+ARG HF_ARTIFACT_IMAGE
+FROM ${HF_ARTIFACT_IMAGE} AS hf_source
+FROM ${IAI_F2_IMAGE}
+COPY --from=hf_source /opt/iai/hf /opt/iai/hf
+COPY verify_f5e_model.py /tmp/verify_f5e_model.py
+RUN HF_HOME=/opt/iai/hf /opt/iai/venv/bin/python /tmp/verify_f5e_model.py
+RUN /bin/rm /tmp/verify_f5e_model.py

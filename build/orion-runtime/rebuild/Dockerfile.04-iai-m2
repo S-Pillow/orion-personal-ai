@@ -1,0 +1,5 @@
+ARG IAI_F5E_IMAGE
+FROM ${IAI_F5E_IMAGE}
+USER root
+RUN /opt/iai/venv/bin/python -m pip install --disable-pip-version-check --no-input --no-cache-dir --upgrade --only-binary=:all: iai-pme==3.0.8
+RUN /opt/iai/venv/bin/python -c "import importlib.metadata; assert importlib.metadata.version('iai-pme') == '3.0.8'"

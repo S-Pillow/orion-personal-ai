@@ -1,0 +1,5 @@
+ARG M4_IMAGE
+FROM ${M4_IMAGE}
+COPY apply_serializer_overlay.py /tmp/apply_serializer_overlay.py
+RUN /opt/iai/venv/bin/python /tmp/apply_serializer_overlay.py
+RUN /bin/rm /tmp/apply_serializer_overlay.py

@@ -1,0 +1,8 @@
+ARG HERMES_DDGS_IMAGE
+FROM ${HERMES_DDGS_IMAGE}
+USER root
+RUN UV_PYTHON_INSTALL_DIR=/opt/iai/python uv python install 3.12
+RUN UV_PYTHON_INSTALL_DIR=/opt/iai/python uv venv --python 3.12 --seed /opt/iai/venv
+RUN /opt/iai/venv/bin/python -m pip install --disable-pip-version-check --no-input --no-cache-dir --only-binary=:all: iai-pme==3.0.0
+RUN /opt/iai/venv/bin/python -c "import importlib.metadata,sys; assert sys.version_info[:2] == (3,12); assert importlib.metadata.version('iai-pme') == '3.0.0'"
+RUN rm -rf /root/.cache/uv

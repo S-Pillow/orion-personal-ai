@@ -1,0 +1,5 @@
+ARG IAI_M2_IMAGE
+ARG HERMES_DDGS_IMAGE
+FROM ${IAI_M2_IMAGE} AS iai_source
+FROM ${HERMES_DDGS_IMAGE}
+COPY --from=iai_source /opt/iai /opt/iai
