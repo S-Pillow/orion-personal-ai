@@ -56,6 +56,27 @@ The build lineage is recorded in `build/orion-runtime/accepted-build-lineage.md`
 
 The historical `PH2-IAI-M4-source-reviewed-final.ps1` file was not present locally and is not claimed preserved.
 
+### Canonical rebuild source candidate
+
+SP4A passed at commit `98aa7b73d2b14619264bcaabbbf6acadfee204e3`.
+
+`build/orion-runtime/rebuild/` now contains one canonical rebuild-source candidate covering:
+
+- the pinned Hermes v2026.8.18 base plus `ddgs==9.14.4`;
+- isolated CPython 3.12 and iai 3.0.0 F2 construction;
+- pinned BAAI/bge-small-en-v1.5 acquisition at revision `5c38ec7c405ec4b44b94cc5a9bb96e735b38267a`;
+- verification of the accepted model artifact hashes;
+- F5E model-bake assembly;
+- iai 3.0.8 upgrade;
+- reconstructed M4 `/opt/iai` composition into the Hermes/ddgs image;
+- bounded M5 `recent_thread` serializer compatibility overlay;
+- final-image verification;
+- a single `build-orion-runtime.ps1` orchestration entry point.
+
+SP4A generated the source, SHA-256 checked it, parsed the generated PowerShell with the actual Windows PowerShell parser, committed it, pushed it, and verified remote `main`. No Docker execution or runtime mutation occurred.
+
+Closure record: `docs/rebuild/sp4a-rebuild-source-candidate-closure.md`.
+
 ## Remaining source-reproducibility gaps
 
 The accepted custom runtime image is:
@@ -66,16 +87,18 @@ Accepted image ID:
 
 `sha256:0222e2199cbb135bf1989283b1dba7a36f936aab3f82c3fbae048659dd8b2500`
 
-The source situation is now substantially better, but Orion is **not yet declared clean-machine reproducible**. Remaining work:
+Orion is **not yet declared clean-machine reproducible**. The highest-priority remaining work is SP4B:
 
-- create one canonical fresh-machine build/provision implementation from the preserved evidence;
-- reconstruct the M4 composition step because its historical source script is missing;
-- convert the F5E embedding-model acquisition/assembly lineage into a clean canonical rebuild unit;
-- resolve stronger package/wheel provenance where needed for deterministic rebuild confidence;
-- validate the complete source rebuild in disposable images/containers without changing the accepted live runtime;
-- write the final clean-machine bootstrap/recovery procedure.
+- execute the committed rebuild candidate only against disposable `orion-rebuild-*` images/containers;
+- confirm the pinned F5E model revision and three accepted artifact hashes;
+- confirm the resulting iai runtime is 3.0.8 under isolated Python 3.12;
+- confirm the reconstructed M4 composition carries both Hermes and `/opt/iai` correctly;
+- confirm the M5 `recent_thread` serializer contract;
+- prove the accepted `orion-iai-m5-c` container, `orion-iai-m5-data` volume, accepted final image ID/tag, and native iai Brain remain unchanged;
+- capture the actual rebuilt image ID and package/artifact evidence;
+- after SP4B, write the final clean-machine bootstrap/recovery procedure.
 
-SP4 is the next rebuild unit: produce the canonical non-live rebuild implementation, then validate it against disposable targets before promoting it as Orion's recovery mechanism.
+SP4A records known package provenance but does not claim a byte-identical dependency closure. The exact iai 3.0.8 wheel artifact hash remains to be captured during disposable validation.
 
 ## External private recovery material
 
