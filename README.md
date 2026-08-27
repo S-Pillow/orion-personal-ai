@@ -9,6 +9,8 @@ Orion is a privacy-first, local-first personal AI companion built around Hermes 
 - Phase 2 — **PASS / CLOSED — MVP memory foundation accepted**
 - Phase 3 — **PASS / CLOSED — MVP vault workflow accepted**
 - Phase 4 — **ACTIVE — Orion HUD / voice / orchestration integration**
+  - P4-01 Revised — **PASS / CLOSED — forked upstream HUD baseline established**
+  - P4-02 — **NEXT — Windows/runtime fit and Hermes connection**
 
 The current controlling product requirements document is **Orion Master PRD v1.1.3**.
 
@@ -19,20 +21,40 @@ The current controlling product requirements document is **Orion Master PRD v1.1
 - **Native iai Brain** remains the authoritative detailed memory-management UI.
 - **Obsidian** remains the authoritative human-facing document vault at `C:\Personal\Me`.
 - Orion's accepted Phase 3 document path provides exact source resolution, a dedicated draft inbox, native-iai-backed destination recommendations, approval-gated vault edits/moves, and exact recovery/restore.
-- **eadmin2/jarvis_ai** is the selected upstream HUD / voice / orchestration application baseline for Phase 4. Orion will adapt that application rather than build a parallel HUD from scratch.
+- **eadmin2/jarvis_ai** is the upstream HUD / voice / orchestration application baseline for Phase 4.
+- **CodeAbra/iai-personal-memory-engine** remains the upstream authority for iai behavior.
 
 ## Repository strategy
 
-This repository, `S-Pillow/orion-personal-ai`, is the canonical Orion integration/control repository. It contains project state, architecture decisions, acceptance evidence, integration scripts, and Orion-specific orchestration glue.
+### `S-Pillow/orion-personal-ai`
 
-Third-party applications that Orion materially modifies should remain in their own forked repositories rather than being copied wholesale into this repository. For Phase 4:
+Canonical Orion integration/control repository for:
 
-- upstream HUD: `eadmin2/jarvis_ai`
-- Orion HUD fork: **to be created under `S-Pillow` before P4-01 Revised implementation continues**
-- upstream commit selected for the initial Orion baseline: `88998de8369e9d36f6d434b5e01feb93fcf1c33f`
-- upstream license: MIT; upstream copyright/license must be retained
+- project state and architecture decisions;
+- acceptance evidence and closure records;
+- integration/bootstrap scripts;
+- cross-component Orion glue.
 
-Only dependencies we materially modify need forks. iai and Hermes remain upstream dependencies unless Orion begins carrying source-level changes that justify a maintained fork.
+### `S-Pillow/jarvis_ai`
+
+Maintained Orion application fork of `eadmin2/jarvis_ai`.
+
+- `origin`: `S-Pillow/jarvis_ai`
+- `upstream`: `eadmin2/jarvis_ai`
+- pinned initial upstream baseline: `88998de8369e9d36f6d434b5e01feb93fcf1c33f`
+- Orion adaptation branch: `orion-mvp`
+- accepted P4-01 branch head: `aeb0643f8119a4d4f8b78a950194e9778eea4af2`
+- upstream MIT license and attribution retained
+
+This is where Orion HUD/voice source changes belong.
+
+### `S-Pillow/iai-personal-memory-engine`
+
+Maintained compatibility/tracking fork of `CodeAbra/iai-personal-memory-engine`.
+
+The fork exists so Orion can pin source, prepare upstream contributions, and carry a narrowly scoped compatibility patch only when necessary. It does **not** authorize Orion-specific memory semantics. For MVP, upstream iai behavior remains controlling: recall, contradiction, fading, rescue, consolidation, document study, and lifecycle semantics are not to be redesigned locally.
+
+Hermes remains an upstream dependency unless Orion begins carrying sustained source-level changes that justify a maintained fork.
 
 ## Accepted MVP memory baseline
 
@@ -44,7 +66,7 @@ The accepted iai/Hermes memory runtime uses:
 - COMPANION store: `/opt/data/profiles/companion/.iai-mcp`
 - native iai Brain dashboard: `http://127.0.0.1:4477/`
 
-The M5 serializer compatibility fix for `SessionStartPayload.recent_thread` is tracked upstream as `CodeAbra/iai-personal-memory-engine#156`.
+The M5 serializer compatibility issue for `SessionStartPayload.recent_thread` is tracked upstream as `CodeAbra/iai-personal-memory-engine#156`. If upstream resolves the issue, Orion should prefer the upstream fix and retire any temporary local compatibility patch.
 
 ## Accepted Phase 3 document workflow
 
@@ -52,7 +74,7 @@ Phase 3 established the complete MVP document path:
 
 `Obsidian vault -> native iai watch / memory -> recall + exact source resolution -> Orion inbox draft -> iai-backed destination recommendation -> explicit approval -> controlled move/edit -> recovery / restore`
 
-The accepted operational boundaries are:
+Accepted boundaries:
 
 - normal exact retrieval uses a read-only vault sidecar;
 - Orion drafts are created only in `C:\Personal\Orion-Inbox`;
@@ -63,16 +85,17 @@ The accepted operational boundaries are:
 
 ## Phase 4 direction
 
-Phase 4 adopts the proven `jarvis_ai` HUD/voice application and turns it into the Orion interaction layer. The intended adaptation keeps upstream strengths such as typed chat, voice streaming, live tool activity, STOP/barge-in, approval cards, media panels, mobile support, and Hermes integration while preserving Orion's existing architecture.
+Phase 4 adapts the proven `jarvis_ai` HUD/voice application into Orion rather than building a parallel interface.
 
-The first revised Phase 4 unit is **P4-01 Revised — fork-first upstream adoption**:
+P4-01 Revised is accepted. The live source baseline now exists in `S-Pillow/jarvis_ai` on branch `orion-mvp`, with only the bounded initial delta:
 
-1. fork `eadmin2/jarvis_ai` under the `S-Pillow` GitHub account;
-2. preserve the upstream repository as the `upstream` remote;
-3. pin the accepted upstream baseline commit;
-4. apply only bounded Orion branding/config changes first;
-5. put the actual Orion HUD code on GitHub in the fork;
-6. wire accepted Orion capabilities into that fork in later Phase 4 tickets.
+- `ORION-UPSTREAM.md`
+- `server/config/server.orion.example.yaml`
+- `server/hud/index.html`
+
+No `server/server.py` change was made during baseline adoption.
+
+P4-02 will fit the upstream application to Orion's Windows + Docker runtime and connect it to the existing Hermes COMPANION environment while preserving iai as the memory authority. After that, later Phase 4 tickets will wire the accepted Orion document actions, approval/recovery UX, and native iai Brain into the HUD.
 
 ## Security and evidence rules
 
@@ -83,6 +106,7 @@ The first revised Phase 4 unit is **P4-01 Revised — fork-first upstream adopti
 - iai remains the memory authority; Orion must not create a competing semantic-memory store.
 - Existing vault edits/moves remain approval-gated and recoverable.
 - Substantial PowerShell units should be parser-checked where a PowerShell runtime is available; when unavailable, parser validation must be reported as skipped rather than passed.
+- Accepted operational scripts should be stored in GitHub, not left only as local artifacts.
 
 ## Repository structure
 
@@ -94,4 +118,6 @@ The first revised Phase 4 unit is **P4-01 Revised — fork-first upstream adopti
 
 ## Current next step
 
-Create the `S-Pillow` fork of `eadmin2/jarvis_ai`, then run the corrected P4-01 Revised fork-adoption bootstrap. After the forked Orion HUD baseline is pushed and verified, continue with Windows/runtime adaptation and live Hermes integration.
+**P4-02 — Orion runtime fit and Hermes connection.**
+
+Run the forked Orion HUD/server against the accepted Windows + Docker environment, resolve localhost/container networking and local configuration without exposing secrets, and prove the real upstream-based Orion interface can communicate with the existing Hermes COMPANION runtime without changing iai memory semantics.
