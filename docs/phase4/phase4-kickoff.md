@@ -19,13 +19,15 @@ Phase 3 is closed for MVP. Phase 4 turns the accepted Orion subsystems into a co
 
 ## Repository strategy
 
-`S-Pillow/orion-personal-ai` remains the canonical Orion integration/control repository for project state, architecture decisions, acceptance evidence, integration scripts, and cross-component glue.
+`S-Pillow/orion-personal-ai` remains the canonical Orion integration/control repository for project state, architecture decisions, acceptance evidence, integration scripts, deterministic rebuild instructions, and cross-component glue.
 
 The actual Orion HUD/voice application source lives in `S-Pillow/jarvis_ai`, with `eadmin2/jarvis_ai` retained as its upstream source.
 
 The iai fork exists for reproducibility, upstream contribution work, and narrowly scoped compatibility patches when necessary. Upstream iai behavior remains controlling for MVP. The presence of the fork does not change the decision to use iai as written.
 
 Hermes remains upstream-only unless sustained source-level divergence later justifies a fork.
+
+Accepted implementation code must be preserved in GitHub. Documentation-only closure is not sufficient when code/configuration created the accepted runtime state. The project-wide rebuild policy is recorded in `docs/decisions/source-reproducibility-and-rebuild.md`.
 
 ## Upstream application baseline
 
@@ -102,9 +104,19 @@ This closes the earlier custom standalone dashboard-shell direction. That mockup
 
 ### P4-02 — Orion runtime fit and Hermes connection
 
-**Status: NEXT**
+**Status: IN PROGRESS**
 
 Run the adapted upstream server/HUD in the accepted Windows + Docker environment and connect it to the existing Hermes COMPANION runtime without replacing or weakening iai.
+
+#### P4-02A — read-only runtime-fit discovery
+
+Purpose: determine whether Hermes API/dashboard ports are already available to the Windows host or are currently container-only before changing Docker or application configuration.
+
+The first P4-02A revision correctly verified the Orion HUD Git state, accepted Hermes/iai container, image identity, lack of published Docker ports, and bridge IP. It then failed only in the diagnostic probe because Windows PowerShell -> Docker -> Python `-c` argument handling stripped quotes from the embedded Python source (`"127.0.0.1"` became `127.0.0.1`). No runtime/configuration mutation occurred.
+
+The corrected v2 removes nested Python command execution entirely. It reads `/proc/net/tcp` and `/proc/net/tcp6` from the container and identifies Linux LISTEN state (`0A`) for ports 8642/9119, then checks Windows localhost reachability separately.
+
+Canonical current script: `scripts/phase4/p4-02a-runtime-fit-discovery-v2.ps1`.
 
 Initial scope:
 
