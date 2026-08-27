@@ -10,7 +10,8 @@ Orion is a privacy-first, local-first personal AI companion built around Hermes 
 - Phase 3 — **PASS / CLOSED — MVP vault workflow accepted**
 - Phase 4 — **ACTIVE — Orion HUD / voice / orchestration integration**
   - P4-01 Revised — **PASS / CLOSED — forked upstream HUD baseline established**
-  - P4-02A — **IN PROGRESS — Windows/runtime fit discovery**
+  - P4-02A — **PASS / CLOSED — runtime-fit discovery complete**
+  - P4-02B — **NEXT — Hermes API enablement/runtime integration, after source-preservation pass**
 
 The current controlling product requirements document is **Orion Master PRD v1.1.3**.
 
@@ -113,7 +114,18 @@ P4-01 Revised is accepted. The live source baseline exists in `S-Pillow/jarvis_a
 
 No `server/server.py` change was made during baseline adoption.
 
-P4-02A is a read-only runtime-fit discovery. Its first revision failed only in the diagnostic probe because nested Windows PowerShell -> Docker -> Python quoting stripped string quotes from the embedded Python. The corrected v2 removes nested Python command execution entirely and inspects Linux socket tables directly. It is stored in `scripts/phase4/p4-02a-runtime-fit-discovery-v2.ps1`.
+P4-02A is now accepted. Read-only discovery established:
+
+- the accepted Hermes/iai container is running from `orion-hermes-iai:v2026.8.18-iai3.0.8-m5-serializerfix`;
+- the container has **no published Docker ports**;
+- Hermes API port `8642` is **not listening inside the container**;
+- Hermes dashboard port `9119` is **not listening inside the container**;
+- Windows localhost ports `8642` and `9119` are closed;
+- native iai Brain port `4477` is open on Windows;
+- host Python is `3.11.3`;
+- therefore the next HUD runtime step is not merely port publishing: Hermes API service behavior must first be enabled/configured, then exposed to the Orion HUD using the accepted local security model.
+
+The first P4-02A revision failed only in its nested diagnostic command quoting. The corrected v2 removed nested Python execution and passed read-only discovery with no runtime/configuration mutation.
 
 ## Security and evidence rules
 
@@ -138,6 +150,6 @@ P4-02A is a read-only runtime-fit discovery. Its first revision failed only in t
 
 ## Current next step
 
-1. Complete the source-preservation pass for accepted Phase 2/3 operational code and the custom Hermes+iai image build recipe.
-2. Run corrected **P4-02A v2** to establish the real Hermes API route from the Windows host.
-3. Continue the Orion HUD runtime integration only after those facts are recorded in source.
+1. Complete the source-preservation pass for accepted Phase 2/3 operational code and reconstruct the custom Hermes+iai image build recipe.
+2. Then begin **P4-02B — Hermes API enablement/runtime integration** using the now-known `not-listening` baseline.
+3. Prove typed Orion HUD interaction first; add voice only after the core Hermes/HUD path is stable.
