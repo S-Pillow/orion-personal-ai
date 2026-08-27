@@ -76,6 +76,53 @@ Live package files were mode `755`, owner/group `0:0`, and runtime-readable. The
 
 Deployment status: **PASS / READY FOR MANUAL CONTROL SMOKE**.
 
+### v5 / v5r4 — manual Brain control smoke PASS
+
+After harness-only repairs for PowerShell scalar output indexing and the reserved `$HOME` variable collision, the bounded manual-control smoke completed successfully against the accepted production containers.
+
+Observed acceptance markers:
+
+- lifecycle pre-state: `WAKE`
+- **Let it rest**: accepted
+- **Wake**: accepted; authoritative lifecycle observed `WAKE`
+- **Sort memories now**: accepted
+- **Restart the subconscious**: `EXTERNALLY_MANAGED`
+- **Rest the subconscious**: `EXTERNALLY_MANAGED`
+- accepted core container ID/StartedAt unchanged
+- Brain dashboard container unchanged during the control smoke
+- iai memory runtime preserved
+- evidence: `E:\Orion-Phase2\P4-02B1A-evidence\p4-02b1a-v5-manual-control-smoke-20260827T220334Z.json`
+
+Manual controls status: **PASS / READY FOR AUTONOMOUS LIFECYCLE VERIFICATION**.
+
+### v6A / v6Ar1 — autonomous lifecycle read-only preflight PASS
+
+The first v6A probe stopped before executing Python because Windows PowerShell 5.1 stripped embedded double quotes from the multiline `python -c` argument. The corrected v6Ar1 transport feeds the Python probe over stdin via `docker exec -i ... python -`, avoiding native argv reconstruction. The corrected probe was read-only and completed successfully.
+
+Production starting boundary captured at `2026-08-27T22:43:48Z` container time:
+
+- lifecycle: `WAKE`
+- production drowsy threshold: `300s`
+- production sleep heartbeat-idle threshold: `1800s`
+- sleep-cycle cooldown: `14400s`
+- consolidation window source: default
+- consolidation window: `02:00-06:00` container-local (`UTC`)
+- current time was outside the window; `11772s` remained until window start
+- scheduler paused: `False`
+- no `last_clean_cycle_at`
+- `force_rem_request.pending=False`, no `honored_at`
+- `user_sleep_request.pending=False`, no `honored_at`
+- `force_wake_request.pending=False`, no `honored_at`
+- fresh wrapper count: `0`
+- heartbeat idle: `True`
+- OS-idle source unavailable in the container
+- sleep eligible: `True` via heartbeat-idle path
+- recent lifecycle transition log rows returned none in the bounded lookback
+- accepted core and dashboard container identities remained unchanged
+- evidence: `E:\Orion-Phase2\P4-02B1A-evidence\p4-02b1a-v6a-autonomous-preflight-20260827T224348Z.json`
+
+This is a clean production-threshold starting boundary for the autonomous observation. No manual control request remains pending or recently honored, so the next observer can evaluate native idle-driven transitions without carryover from the manual-control smoke.
+
 ## Repository routing
 
 - `S-Pillow/iai-personal-memory-engine`: upstream-compatible BrainView control-plane compatibility source.
@@ -83,4 +130,4 @@ Deployment status: **PASS / READY FOR MANUAL CONTROL SMOKE**.
 
 ## Next
 
-Run the bounded manual Brain control smoke for **Let it rest**, **Wake**, **Sort memories now**, **Restart the subconscious**, and **Rest the subconscious**. Verify that restart/stop report externally managed and do not stop the iai daemon. After manual controls pass, complete the autonomous-lifecycle verification above. Only then close P4-02B1A and resume **P4-02B2 — typed Orion HUD → Hermes → iai**.
+Run a bounded, read-only production observer across the real lifecycle window. Verify `WAKE -> DROWSY` on the native 5-minute idle rule, then allow the accepted profile to remain idle through the real `02:00-06:00 UTC` consolidation window and verify `DROWSY -> SLEEP` on the native 30-minute/sleep-eligible path and `SLEEP -> HIBERNATION` after a clean sleep cycle while still idle. Use authoritative lifecycle state/event evidence and do not lower thresholds or inject sleep controls. After those automatic transitions are proven, perform a separate foreground-activity/wake verification and only then close P4-02B1A and resume **P4-02B2 — typed Orion HUD -> Hermes -> iai**.
