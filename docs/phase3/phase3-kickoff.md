@@ -109,6 +109,7 @@ Result: the Obsidian vault is now being learned through iai's native document-st
 Accepted implementation:
 
 - Reuses the existing isolated `orion-vault-retrieval` sidecar.
+- Reusable operational script: `Orion-Phase3-P3-02B-Exact-Vault-Resolver.ps1`.
 - iai remains the semantic-memory authority. The resolver does not rank, embed, search semantically, or maintain a second memory/index store.
 - Resolution chain is `iai record_id -> stored study provenance -> relative source path -> authoritative Obsidian Markdown file`.
 - The resolver may also accept a known stored source path directly.
@@ -132,7 +133,15 @@ Acceptance evidence:
 - `NOTE_CONTENT_PRINTED=false`.
 - Final chain verification returned `P3_02B_RECORD_TO_NOTE_RESOLUTION=PASS` and `P3_02B_EXACT_VAULT_RESOLVER=PASS`.
 
-Verifier note: acceptance v1 reached the correct iai record and source path but then failed on a PowerShell `-replace "\\"` expression because a lone backslash is invalid regex syntax. Acceptance v2 replaced that comparison with the literal string operation `$sourcePath.Replace('\\', '/')` and passed. The resolver itself did not require a Docker, iai, vault, or ingestion change.
+Operational smoke evidence:
+
+- The reusable resolver was invoked directly with record ID `312f7d8e-7ca6-44c0-aa85-cf02aa5b73f0` and returned `ORION_EXACT_VAULT_RESOLVER=PASS`.
+- It resolved `SOURCE_PATH=AIOS/history/2026-07-14 - AIOS cleanup handoff.md` using `MATCH_MODE=exact-relative`.
+- It returned host path `C:\Personal\Me\AIOS\history\2026-07-14 - AIOS cleanup handoff.md`, size 2,116 bytes, and SHA256 `028eb5eca32313c2e9c8fc9355f99a08122a24eb8006d7fb7cf506bd32477c20`, matching acceptance evidence.
+- The same resolver invocation with `-Read` returned all 2,116 characters with `TRUNCATED=False`, proving the operational read path works against the authoritative note.
+- This read was explicitly user-invoked; the default resolver invocation does not print note content.
+
+Verifier note: acceptance v1 reached the correct iai record and source path but then failed on a PowerShell `-replace "\\"` expression because a lone backslash is invalid regex syntax. Acceptance v2 replaced that comparison with a literal string `Replace` operation and passed. The resolver itself did not require a Docker, iai, vault, or ingestion change.
 
 Result: Orion now has a deterministic exact-source bridge from native iai-taught memory back to the authoritative Obsidian note, while preserving iai as the sole semantic-memory engine.
 
