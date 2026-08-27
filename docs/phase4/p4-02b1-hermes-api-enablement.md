@@ -1,6 +1,6 @@
 # P4-02B1 — Hermes API Enablement
 
-**Status: IN PROGRESS — v3 live acceptance pending**
+**Status: IN PROGRESS — v4 live acceptance pending**
 
 P4-02B1 enables the Hermes API needed by the Orion HUD while preserving the accepted Hermes/iai runtime and keeping Hermes off Windows host port `8642`.
 
@@ -25,49 +25,94 @@ The v2 run passed the hash/parser gates and accepted-runtime precheck, then obse
 
 - exactly one Hermes gateway already exists;
 - command shape: `/opt/hermes/.venv/bin/hermes -p companion gateway run --replace`;
-- Windows host port `8642` remains closed;
-- the gateway is therefore active for the COMPANION profile but was started without the API-server environment needed for the Orion HUD.
+- Windows host port `8642` remained closed;
+- the gateway was active for the COMPANION profile but the API server was not listening.
 
 v2 intentionally refused to launch a second gateway and stopped before API-secret creation, Docker-network creation/attachment, or any gateway replacement.
 
-This finding changes the implementation path: P4-02B1 must adapt the existing gateway rather than create a parallel gateway process.
+## v3 live diagnostic and rollback
 
-## v3 implementation
+v3 attempted to adapt the existing COMPANION gateway by launching the same profile command with `API_SERVER_*` supplied only to the transient `docker exec` process.
 
-v3 uses the existing supported Hermes `gateway run --replace` lifecycle for the same `companion` profile.
+The run established:
+
+- outer hash/parser gates: PASS;
+- accepted container identity/start-time/volume/Brain precheck: PASS;
+- exactly one existing COMPANION gateway: PASS;
+- Windows host `8642`: CLOSED;
+- dedicated local API secret creation: PASS;
+- `orion-control-net` creation: PASS;
+- accepted-container network attachment: PASS;
+- gateway replacement launch: PASS.
+
+The API probe then received `ConnectionRefusedError: [Errno 111] Connection refused` from container port `8642`.
+
+The gateway log provided the decisive installed-runtime clue: Hermes reported that the gateway was running under **s6 supervision** and recommended that supervised mode for the container image. Therefore the `gateway run --replace` CLI invocation delegated gateway ownership back to the s6 service. The transient environment passed to `docker exec` was not the configuration source of the supervised gateway process, so `API_SERVER_ENABLED=true` never reached the service that actually owned the gateway.
+
+v3 then completed its bounded rollback:
+
+- `P4_02B1_V3_GATEWAY_ROLLBACK=PASS`
+- `P4_02B1_V3_NETWORK_DETACH_ROLLBACK=PASS`
+- `P4_02B1_V3_NETWORK_REMOVE_ROLLBACK=PASS`
+- `P4_02B1_V3_API_ENV_ROLLBACK=PASS`
+
+No Docker container restart occurred. The accepted runtime was returned to its prior gateway/network/secret baseline.
+
+## Upstream-supported configuration conclusion
+
+Hermes v2026.8.18 documentation confirms the correct boundary:
+
+- the API server is enabled through `API_SERVER_ENABLED=true` plus `API_SERVER_KEY`, with `API_SERVER_HOST=0.0.0.0` required for non-loopback container access;
+- Hermes reads user-managed secrets from the active Hermes/profile `.env`;
+- each profile has its own `.env` and its own `HERMES_HOME`;
+- inside the official Docker/s6 layout, profile gateways are supervised services and `hermes -p <profile> gateway restart` dispatches through the supervisor.
+
+For Orion's COMPANION profile, the persistent Hermes configuration source is therefore:
+
+`/opt/data/profiles/companion/.env`
+
+This is an integration/configuration-boundary correction, not an iai or Hermes API defect.
+
+## v4 implementation
+
+v4 follows the Hermes profile/s6 model instead of trying to inject environment variables into a transient gateway CLI process.
 
 The bounded sequence is:
 
-1. confirm exactly one existing COMPANION gateway and a running gateway status;
-2. create/reuse local `C:\HermesAgent\secrets\orion-api.env` without printing the key;
-3. create/reuse `orion-control-net` and attach the accepted container without restarting it;
-4. replace the existing COMPANION gateway in place with the same profile plus `API_SERVER_ENABLED=true`, `API_SERVER_HOST=0.0.0.0`, `API_SERVER_PORT=8642`, and the local bearer key;
-5. authenticate to `/v1/models` from a disposable container on `orion-control-net`;
-6. require Windows localhost `8642` to remain closed;
-7. require one COMPANION gateway process after replacement and preserve prior Discord-connected state when the gateway status reported it before replacement;
-8. verify accepted container ID/start time, image, iai volume, and Brain `4477` state remain unchanged.
+1. require the accepted container/image/iai-volume/Brain baseline and Windows host `8642` closed;
+2. require exactly one running COMPANION gateway;
+3. require `/opt/data/profiles/companion/.env` to exist;
+4. create/reuse local `C:\HermesAgent\secrets\orion-api.env` without printing the bearer key;
+5. create a private rollback copy of the COMPANION profile `.env`;
+6. atomically add/replace only `API_SERVER_ENABLED`, `API_SERVER_HOST`, `API_SERVER_PORT`, and `API_SERVER_KEY` in the COMPANION profile `.env`;
+7. create/reuse `orion-control-net` and attach the accepted container without restarting the container;
+8. invoke the supported supervised lifecycle command `hermes -p companion gateway restart`;
+9. authenticate to `/v1/models` from a disposable container on `orion-control-net`;
+10. require Windows host `8642` to remain closed and exactly one COMPANION gateway process to remain;
+11. verify accepted container ID/start time, image, iai volume, and Brain `4477` remain unchanged;
+12. remove the profile `.env` rollback copy only after full acceptance.
 
-If the replacement path fails, v3 attempts a bounded rollback: restart the COMPANION gateway without the API env, restore any network attachment created by the run, remove a newly created control network when safe, and delete a newly created API env file.
+On failure after profile mutation, v4 restores the original profile `.env`, restarts the supervised COMPANION gateway, removes only networking created by that run, and restores/removes the host-side Orion API secret according to its pre-run state.
 
-The v3 delivery artifact is `Orion-Phase4-P4-02B1-v3-Adapt-Existing-Gateway.ps1`; after live acceptance, the accepted revision will replace the canonical `scripts/phase4/p4-02b1-enable-hermes-api.ps1` source and the README/status records will be flipped in the same closure step.
+The delivered v4 artifact is `Orion-Phase4-P4-02B1-v4-Profile-Configured-Hermes-API.ps1`. It remains a candidate until the live run passes. The accepted canonical `scripts/phase4/p4-02b1-enable-hermes-api.ps1` will be replaced with the exact accepted v4 source only after live acceptance.
 
 No iai memory behavior or Orion product semantics are changed.
 
 ## Acceptance criteria
 
-P4-02B1 is accepted only when the live v3 run reaches the authenticated API and preservation markers, including:
+P4-02B1 is accepted only when the live v4 run reaches the authenticated API and preservation markers, including:
 
+- `P4_02B_AUTH_MODELS_STATUS=200`
 - `P4_02B_AUTHENTICATED_API=PASS`
-- `P4_02B1_V3_CONTROL_NETWORK_API=PASS`
-- `P4_02B1_V3_GATEWAY_STATUS_POST=PASS`
-- `P4_02B1_V3_SINGLE_GATEWAY_PROCESS=PASS`
-- `P4_02B1_V3_EXISTING_GATEWAY_REPLACED=PASS`
-- `P4_02B1_V3_HOST_8642_POST=CLOSED`
-- `P4_02B1_V3_NO_HOST_HERMES_API_EXPOSURE=PASS`
-- `P4_02B1_V3_NO_CONTAINER_RESTART=PASS`
-- `P4_02B1_V3_IAI_BRAIN_PRESERVED=PASS`
-- `P4_02B1_V3_ACCEPTED_VOLUME_PRESERVED=PASS`
-- `P4_02B1_V3_HERMES_API_ENABLEMENT=PASS`
-- `P4_02B1_V3_OUTER=PASS`
+- `P4_02B1_V4_CONTROL_NETWORK_API=PASS`
+- `P4_02B1_V4_HOST_8642_POST=CLOSED`
+- `P4_02B1_V4_NO_HOST_HERMES_API_EXPOSURE=PASS`
+- `P4_02B1_V4_SINGLE_GATEWAY_PROCESS=PASS`
+- `P4_02B1_V4_NO_CONTAINER_RESTART=PASS`
+- `P4_02B1_V4_IAI_BRAIN_PRESERVED=PASS`
+- `P4_02B1_V4_ACCEPTED_VOLUME_PRESERVED=PASS`
+- `P4_02B1_V4_PROFILE_ENV_FINALIZE=PASS`
+- `P4_02B1_V4_HERMES_API_ENABLEMENT=PASS`
+- `P4_02B1_V4_OUTER=PASS`
 
-After P4-02B1 passes, the next step is to place the Orion/Jarvis server on `orion-control-net` and prove typed Orion HUD -> Hermes -> iai interaction before adding voice.
+After P4-02B1 passes, promote the exact v4 source to the canonical Phase 4 script, close P4-02B1 in README/docs, and place the Orion/Jarvis server on `orion-control-net` for the first typed Orion HUD -> Hermes -> iai acceptance flow before adding voice.
