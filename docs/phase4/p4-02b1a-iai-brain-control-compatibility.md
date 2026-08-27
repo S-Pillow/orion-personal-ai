@@ -26,6 +26,14 @@ For Docker deployments, BrainView process lifecycle controls must not attempt `s
 6. Dashboard presents safe human-readable feedback for externally managed lifecycle actions.
 7. Native iai Brain/read path remains healthy.
 8. Accepted Hermes/iai container and iai volume are not restarted/recreated by this compatibility deployment.
+9. **Autonomous lifecycle** — after the manual controls pass, verify that the daemon can manage its own state without operator clicks using iai's native lifecycle rules rather than Orion-specific timers.
+10. Observe/verify the native automatic path `WAKE -> DROWSY` after the configured idle event, `DROWSY -> SLEEP` when the native sleep-eligibility condition is satisfied, and `SLEEP -> HIBERNATION` after a completed sleep cycle while still idle.
+11. Verify foreground activity/wake signaling returns the lifecycle to `WAKE` as defined by upstream iai, and that normal activity refreshes the daemon rather than leaving it stuck in a sleep state.
+12. Autonomous-state verification must use native iai lifecycle/event evidence. Do not modify idle thresholds or memory semantics merely to make the test finish faster; if a bounded accelerated test is needed, it must be isolated from the accepted profile and followed by an observation of the real production configuration.
+
+## Autonomous lifecycle basis
+
+Pinned iai 3.0.8 source defines the native state machine as follows: `WAKE` becomes `DROWSY` on `IDLE_5MIN`; `DROWSY` returns to `WAKE` on heartbeat refresh and becomes `SLEEP` on `IDLE_30MIN` when `sleep_eligible` is true; `SLEEP` becomes `HIBERNATION` after `SLEEP_CYCLE_DONE` when still idle; request/wake events return toward `WAKE`. Orion should verify that this upstream behavior is actually active in the deployed COMPANION brain rather than implementing a second lifecycle policy.
 
 ## Live attempt history
 
@@ -44,4 +52,4 @@ The next script revision must use a readable, non-minified inner script and must
 
 ## Next after closure
 
-Resume **P4-02B2 — typed Orion HUD → Hermes → iai**. Full daemon stop/restart buttons can be implemented in Orion's system-control layer later without exposing the Docker socket to native BrainView.
+Complete the autonomous-lifecycle verification above, then resume **P4-02B2 — typed Orion HUD → Hermes → iai**. Full daemon stop/restart buttons can be implemented in Orion's system-control layer later without exposing the Docker socket to native BrainView.
