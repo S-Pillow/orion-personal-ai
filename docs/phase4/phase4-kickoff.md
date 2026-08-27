@@ -79,25 +79,6 @@ Accepted implementation:
 - no `server/server.py` change occurred;
 - iai, vault services, runtime secrets, and existing production containers were not modified.
 
-Final acceptance markers included:
-
-- `P4_01R4_VISIBLE_ORION_BRANDING=PASS`
-- `P4_01R4_ORION_CONFIG_OVERLAY=PASS`
-- `P4_01R4_UPSTREAM_MANIFEST=PASS`
-- `P4_01R4_UPSTREAM_DELTA_BOUNDED=PASS`
-- `P4_01R4_WORKSPACE_CLEAN=PASS`
-- `P4_01R4_CODE_PUSHED_TO_FORK=PASS`
-- `P4_01R4_NO_SERVER_CORE_CHANGE=PASS`
-- `P4_01R4_IAI_MEMORY_INTENT_PRESERVED=PASS`
-- `P4_01_REVISED_FORK_ADOPTION=PASS`
-
-Iteration notes:
-
-- v1 failed at PowerShell parse time before execution because of a malformed here-string.
-- v2 progressed through clone/fork setup and config generation, then failed on blank-string binding inside a helper used for generated Markdown.
-- v3 correctly resumed the partial workspace but assumed the HUD branding change from v2 had persisted; Git state showed only the config overlay had changed, so verification stopped before mutation.
-- v4 repaired the missing branding idempotently, regenerated the bounded overlay/provenance files, committed exactly the allowed delta, and pushed the accepted branch successfully.
-
 Canonical accepted bootstrap script is stored in `scripts/phase4/p4-01-adopt-jarvis-fork.ps1`.
 
 This closes the earlier custom standalone dashboard-shell direction. That mockup is not the Orion product baseline.
@@ -110,26 +91,48 @@ Run the adapted upstream server/HUD in the accepted Windows + Docker environment
 
 #### P4-02A — read-only runtime-fit discovery
 
-Purpose: determine whether Hermes API/dashboard ports are already available to the Windows host or are currently container-only before changing Docker or application configuration.
+**Status: PASS / CLOSED — August 27, 2026**
 
-The first P4-02A revision correctly verified the Orion HUD Git state, accepted Hermes/iai container, image identity, lack of published Docker ports, and bridge IP. It then failed only in the diagnostic probe because Windows PowerShell -> Docker -> Python `-c` argument handling stripped quotes from the embedded Python source (`"127.0.0.1"` became `127.0.0.1`). No runtime/configuration mutation occurred.
+Accepted v2 evidence:
 
-The corrected v2 removes nested Python command execution entirely. It reads `/proc/net/tcp` and `/proc/net/tcp6` from the container and identifies Linux LISTEN state (`0A`) for ports 8642/9119, then checks Windows localhost reachability separately.
+- HUD workspace branch `orion-mvp` at `aeb0643f8119a4d4f8b78a950194e9778eea4af2` and clean;
+- accepted Hermes/iai container `orion-iai-m5-c` running;
+- image `orion-hermes-iai:v2026.8.18-iai3.0.8-m5-serializerfix` confirmed;
+- Docker published ports: none;
+- container bridge address observed as `172.17.0.3` during the acceptance run;
+- container port `8642`: CLOSED;
+- container port `9119`: CLOSED;
+- Windows localhost port `8642`: CLOSED;
+- Windows localhost port `9119`: CLOSED;
+- Windows localhost native iai Brain port `4477`: OPEN;
+- host Python: `3.11.3`;
+- resolved Hermes API route: `not-listening`;
+- required Orion HUD source layout present;
+- no configuration write, no container change, and no secret output occurred.
 
-Canonical current script: `scripts/phase4/p4-02a-runtime-fit-discovery-v2.ps1`.
+Conclusion: P4-02B must **enable Hermes API service behavior first**. Publishing or proxying port `8642` alone would not work because no service is currently listening on that port. After enablement, expose the API to the Orion HUD using the accepted local security model. Native iai Brain is already reachable independently on `4477` and should remain the memory-management destination.
 
-Initial scope:
+The first P4-02A revision failed only in the diagnostic probe because nested Windows PowerShell -> Docker -> Python argument handling stripped quotes from embedded Python. No runtime/configuration mutation occurred. v2 removed nested Python execution and read Linux socket tables directly.
 
-- determine the correct host/container path to the existing Hermes API surface;
-- enable/configure only the API behavior required by the upstream application;
+Canonical accepted script: `scripts/phase4/p4-02a-runtime-fit-discovery-v2.ps1`.
+
+#### P4-02B — Hermes API enablement and Orion HUD runtime integration
+
+**Status: NEXT — blocked only by source-preservation pass**
+
+Before changing the accepted runtime, finish preserving the Phase 2/3 operational code and custom Hermes+iai image build recipe identified in `docs/rebuild/reproducibility-inventory.md`.
+
+Then:
+
+- enable only the Hermes API behavior required by the upstream Orion HUD;
 - keep API credentials local and out of GitHub;
+- expose the API through the smallest safe local/container boundary;
+- preserve current COMPANION identity and iai automatic memory integration;
 - adapt upstream macOS/launchd assumptions to Windows + Docker;
 - resolve browser/TLS access for the HUD;
-- preserve current COMPANION identity and iai automatic memory integration;
-- avoid installing optional voice/cloud pieces until they are needed for MVP bring-up;
-- prove typed HUD interaction and live Hermes status first, then layer voice on top.
+- prove typed HUD interaction and live Hermes status before installing optional voice/cloud components.
 
-P4-02 should test integration boundaries, not re-test iai internals.
+P4-02 tests integration boundaries, not iai internals.
 
 ### P4-03 — Orion document actions in the HUD
 
