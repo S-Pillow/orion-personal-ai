@@ -112,13 +112,11 @@ Accepted v2 evidence:
 
 Conclusion: P4-02B had to enable Hermes API service behavior first. Publishing or proxying port `8642` alone would not work because no service was listening on that port. Native iai Brain remained independently reachable on `4477` and remains the memory-management destination.
 
-The first P4-02A revision failed only in the diagnostic probe because nested Windows PowerShell -> Docker -> Python argument handling stripped quotes from embedded Python. No runtime/configuration mutation occurred. v2 removed nested Python execution and read Linux socket tables directly.
-
 Canonical accepted script: `scripts/phase4/p4-02a-runtime-fit-discovery-v2.ps1`.
 
 #### P4-02B — Hermes API enablement and Orion HUD runtime integration
 
-**Status: IN PROGRESS — P4-02B1 live pass; source promotion then P4-02B2 typed HUD integration**
+**Status: IN PROGRESS — P4-02B1 closed; P4-02B2 next**
 
 Source preservation is complete for MVP and no longer blocks Phase 4.
 
@@ -136,31 +134,37 @@ P4-02 tests integration boundaries, not iai internals.
 
 ##### P4-02B1 — authenticated Hermes API enablement
 
-**Status: LIVE PASS — exact accepted v4 source promotion pending formal closure**
+**Status: PASS / CLOSED — August 27, 2026**
 
-The successful v4 live run:
+Accepted v4 behavior:
 
-- configured only the COMPANION profile's `API_SERVER_ENABLED`, `API_SERVER_HOST`, `API_SERVER_PORT`, and `API_SERVER_KEY` values through `/opt/data/profiles/companion/.env`;
-- used the s6-supervised `hermes -p companion gateway restart` lifecycle;
-- authenticated successfully to `/v1/models` with HTTP 200 over `orion-control-net`;
-- kept Windows localhost `8642` closed;
-- preserved exactly one COMPANION gateway process;
-- preserved the accepted Docker container ID and original start time, so no container restart occurred;
-- preserved native iai Brain on `4477`;
-- preserved the accepted iai volume;
-- finalized the profile `.env` rollback backup only after acceptance.
+- only the COMPANION profile's `API_SERVER_ENABLED`, `API_SERVER_HOST`, `API_SERVER_PORT`, and `API_SERVER_KEY` values were added/replaced through `/opt/data/profiles/companion/.env`;
+- the s6-supervised `hermes -p companion gateway restart` lifecycle was used;
+- `/v1/models` authenticated successfully with HTTP 200 over `orion-control-net`;
+- Windows localhost `8642` remained closed;
+- exactly one COMPANION gateway process remained;
+- accepted Docker container ID and start time were preserved, so no container restart occurred;
+- native iai Brain on `4477` remained available;
+- the accepted iai volume remained mounted unchanged;
+- the profile `.env` rollback copy was finalized only after acceptance.
 
 Successful artifact SHA-256: `0c186434b41a10830a180415b493d4627d861396e7131d2cd8ed917f15d9525a`.
 
-Detailed evidence: `docs/phase4/p4-02b1-hermes-api-enablement.md`.
+Exact accepted source is stored at `scripts/phase4/p4-02b1-enable-hermes-api.ps1`.
 
-Formal P4-02B1 closure requires exact promotion of that successful artifact to `scripts/phase4/p4-02b1-enable-hermes-api.ps1`.
+Source-promotion commit: `ce2afe0223f088d53d714267f1723bc22b659622`.
+
+Accepted Git blob: `b5eb3c51f2f76cc7a0647a8a53acc6f04de1f928`.
+
+Detailed evidence: `docs/phase4/p4-02b1-hermes-api-enablement.md`.
 
 ##### P4-02B2 — typed Orion HUD integration
 
 **Status: NEXT**
 
 Place the Orion/Jarvis server on `orion-control-net`, provide the Hermes bearer key to the server process only, point `hermes.base_url` at `http://orion-iai-m5-c:8642`, and prove a real typed Orion HUD -> Hermes -> iai turn before adding voice.
+
+Accepted P4-02B2 work must be committed in the appropriate repository as it is implemented: application/runtime adaptation belongs in `S-Pillow/jarvis_ai`; cross-repo integration evidence and control scripts belong in `S-Pillow/orion-personal-ai`.
 
 ### P4-03 — Orion document actions in the HUD
 
