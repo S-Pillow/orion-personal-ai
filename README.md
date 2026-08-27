@@ -9,7 +9,7 @@ Orion is a privacy-first, local-first personal AI companion built around Hermes 
   - P4-01 Revised — **PASS / CLOSED — forked upstream HUD baseline established**
   - P4-02A — **PASS / CLOSED — runtime-fit discovery complete**
   - P4-02B — **IN PROGRESS — Hermes API enablement/runtime integration**
-    - P4-02B1 — v3 proved the s6 supervision boundary and rolled back cleanly; v4 profile-.env enablement pending live acceptance
+    - P4-02B1 — **LIVE PASS — authenticated Hermes API proven; exact accepted v4 source promotion pending before formal closure**
 The current controlling product requirements document is **Orion Master PRD v1.1.3**.
 ## Governing architecture
 - **Hermes Agent** is the local agent runtime.
@@ -76,8 +76,9 @@ Accepted boundaries:
 ## Phase 4 direction
 Phase 4 adapts the proven `jarvis_ai` HUD/voice application into Orion rather than building a parallel interface.
 P4-02A established that the accepted Hermes/iai container has no published ports, Hermes ports `8642` and `9119` are not listening inside the container, Windows ports `8642` and `9119` are closed, native iai Brain `4477` is open, and the resolved Hermes API route is `not-listening`.
-Hermes v2026.8.18 source confirms the API adapter supports `API_SERVER_HOST` and `API_SERVER_PORT`; its defaults are `127.0.0.1:8642`. P4-02B1 therefore keeps authenticated Hermes API service on container `0.0.0.0:8642` with no Windows host publication. The Orion server will reach it through a dedicated Docker bridge network, keeping `API_SERVER_KEY` server-side.
-P4-02B1 v1 exposed a StrictMode array-handling defect in the harness before mutation. v2 then discovered that the COMPANION gateway already exists as one supervised gateway process. v3 proved the remaining configuration boundary: `gateway run --replace` inside the s6-based image delegates back to the s6-supervised service, so API variables supplied only to a transient `docker exec` process do not reach the actual gateway. v3 rolled the gateway, network, and temporary secret changes back successfully. Hermes' supported profile model stores per-profile settings/secrets in the profile `.env`, so v4 applies only the four `API_SERVER_*` values to `/opt/data/profiles/companion/.env` and uses the supervised `hermes -p companion gateway restart` lifecycle. Detailed evidence is in `docs/phase4/p4-02b1-hermes-api-enablement.md`.
+Hermes v2026.8.18 source confirms the API adapter supports `API_SERVER_HOST` and `API_SERVER_PORT`; its defaults are `127.0.0.1:8642`. P4-02B1 keeps authenticated Hermes API service on container `0.0.0.0:8642` with no Windows host publication. The Orion server will reach it through a dedicated Docker bridge network, keeping `API_SERVER_KEY` server-side.
+P4-02B1 v1 exposed a StrictMode array-handling defect in the harness before mutation. v2 then discovered that the COMPANION gateway already exists as one supervised gateway process. v3 proved the remaining configuration boundary: `gateway run --replace` inside the s6-based image delegates back to the s6-supervised service, so API variables supplied only to a transient `docker exec` process do not reach the actual gateway. v3 rolled the gateway, network, and temporary secret changes back successfully. v4 applied the API settings to `/opt/data/profiles/companion/.env`, used the supervised `hermes -p companion gateway restart` lifecycle, authenticated successfully to `/v1/models` over `orion-control-net`, kept Windows host `8642` closed, preserved one COMPANION gateway, preserved native iai Brain, preserved the accepted iai volume, and did not restart the Docker container. Detailed evidence is in `docs/phase4/p4-02b1-hermes-api-enablement.md`.
+The successful P4-02B1 v4 artifact has SHA-256 `0c186434b41a10830a180415b493d4627d861396e7131d2cd8ed917f15d9525a` and embedded inner-script SHA-256 `90ae28fafc9e19daf0d40c7685371226f0588ae857d6b8a23859c5e4bc096c4e`. Per the source-preservation rule, formal P4-02B1 closure waits only for exact promotion of that artifact to `scripts/phase4/p4-02b1-enable-hermes-api.ps1`.
 ## Security and evidence rules
 - No credentials, Discord tokens, API keys, `.env` files, decrypted memory exports, vault contents, or private runtime dumps belong in GitHub.
 - Installed-runtime observations are distinguished from upstream/source claims.
@@ -97,6 +98,6 @@ P4-02B1 v1 exposed a StrictMode array-handling defect in the harness before muta
 - `scripts/phase3/accepted/` — preserved accepted Phase 3 operational source
 - `scripts/phase4/` — Phase 4 integration/bootstrap scripts
 ## Current next step
-1. Run **P4-02B1 v4 — profile-configured authenticated Hermes API enablement** using the delivered candidate artifact; do not promote it to the canonical accepted script until the live acceptance markers pass.
-2. If P4-02B1 passes, promote the exact v4 source to `scripts/phase4/p4-02b1-enable-hermes-api.ps1`, close P4-02B1 in README/docs, and wire the Orion/Jarvis server to `http://orion-iai-m5-c:8642` over the dedicated control network for typed interaction.
+1. Promote the exact successful P4-02B1 v4 artifact to `scripts/phase4/p4-02b1-enable-hermes-api.ps1` and verify the remote blob/source hash.
+2. Then begin **P4-02B2 — typed Orion HUD -> Hermes -> iai integration** by placing the Orion/Jarvis server on `orion-control-net`, keeping the Hermes bearer key server-side, and proving a real typed turn before adding voice.
 3. Add voice only after the typed Hermes/HUD path is stable.
