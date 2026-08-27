@@ -11,7 +11,7 @@ Orion is a privacy-first, local-first personal AI companion built around Hermes 
 - Phase 4 — **ACTIVE — Orion HUD / voice / orchestration integration**
   - P4-01 Revised — **PASS / CLOSED — forked upstream HUD baseline established**
   - P4-02A — **PASS / CLOSED — runtime-fit discovery complete**
-  - P4-02B — **NEXT — Hermes API enablement/runtime integration, after source-preservation pass**
+  - P4-02B — **NEXT — Hermes API enablement/runtime integration, after SP4 rebuild-source canonicalization**
 
 The current controlling product requirements document is **Orion Master PRD v1.1.3**.
 
@@ -29,13 +29,7 @@ The current controlling product requirements document is **Orion Master PRD v1.1
 
 ### `S-Pillow/orion-personal-ai`
 
-Canonical Orion integration/control repository for:
-
-- project state and architecture decisions;
-- acceptance evidence and closure records;
-- Orion-authored integration/provisioning/build scripts;
-- deterministic rebuild instructions;
-- cross-component Orion glue.
+Canonical Orion integration/control repository for project state, architecture decisions, acceptance evidence, Orion-authored provisioning/integration/build scripts, deterministic rebuild instructions, and cross-component glue.
 
 ### `S-Pillow/jarvis_ai`
 
@@ -48,32 +42,37 @@ Maintained Orion application fork of `eadmin2/jarvis_ai`.
 - accepted P4-01 branch head: `aeb0643f8119a4d4f8b78a950194e9778eea4af2`
 - upstream MIT license and attribution retained
 
-This is where Orion HUD/voice source changes belong. The fork itself is the source archive; that third-party application does not need to be copied wholesale into `orion-personal-ai`.
+This is where Orion HUD/voice source changes belong. The fork itself is the source archive; the application does not need to be copied wholesale into `orion-personal-ai`.
 
 ### `S-Pillow/iai-personal-memory-engine`
 
 Maintained compatibility/tracking fork of `CodeAbra/iai-personal-memory-engine`.
 
-The fork exists so Orion can pin source, prepare upstream contributions, and carry a narrowly scoped compatibility patch only when necessary. It does **not** authorize Orion-specific memory semantics. For MVP, upstream iai behavior remains controlling: recall, contradiction, fading, rescue, consolidation, document study, and lifecycle semantics are not to be redesigned locally.
+The fork exists so Orion can pin source, prepare upstream contributions, and carry a narrowly scoped compatibility patch only when necessary. It does **not** authorize Orion-specific memory semantics. Upstream iai behavior remains controlling for MVP.
 
-Hermes remains an upstream dependency unless Orion begins carrying sustained source-level changes that justify a maintained fork.
+Hermes remains an upstream dependency unless sustained source-level changes later justify a fork.
 
-## Source preservation and rebuild guarantee
+## Source preservation and rebuild status
 
 Orion is intended to be reconstructable on a new machine from GitHub plus separately retained private secrets/data. Accepted implementation code must not exist only on one workstation.
 
-GitHub should preserve:
+Completed source-preservation work:
 
-- exact upstream pins and fork commits;
-- Orion-authored provisioning/integration scripts;
-- Dockerfiles or deterministic image-build recipes for custom images;
-- non-secret configuration examples;
-- host/container topology and required paths;
-- backup/restore and migration instructions.
+- **SP2 PASS** — all 11 accepted Phase 2/3 operational scripts preserved in GitHub at commit `12d12f1e665110c494ecc758dfa52b4c51e0805f`.
+- **SP3 PASS** — accepted launcher, accepted Hermes ddgs Dockerfile, available M2/M5 historical build harnesses, and accepted image-lineage evidence preserved at commit `37d1b24121c68262585e0ab447e23d7c24a02ed3`.
 
-GitHub must **not** preserve credentials, `.env` secrets, the iai encryption key, decrypted memory exports, private vault contents, or runtime data volumes.
+Important paths:
 
-The current project is not yet fully source-reconstructable. The highest-priority remaining gap is preserving the exact build recipe for `orion-hermes-iai:v2026.8.18-iai3.0.8-m5-serializerfix` and promoting accepted Phase 2/3 operational scripts that still exist only as local artifacts. See `docs/decisions/source-reproducibility-and-rebuild.md` and `docs/rebuild/reproducibility-inventory.md`.
+- `scripts/phase2/accepted/`
+- `scripts/phase3/accepted/`
+- `scripts/source-preservation-accepted-manifest.md`
+- `build/orion-runtime/historical/`
+- `build/orion-runtime/accepted-build-lineage.md`
+- `docs/rebuild/reproducibility-inventory.md`
+
+The project is **not yet declared clean-machine reproducible**. The remaining source-recovery task is SP4: create one canonical fresh-machine rebuild implementation from the preserved evidence, reconstruct the missing M4 composition step, canonicalize the F5E model-bake path, then validate the whole rebuild in disposable targets without touching the accepted live runtime.
+
+GitHub must never contain credentials, `.env` secrets, the iai encryption key, decrypted memory exports, private vault contents, or runtime data volumes.
 
 ## Accepted MVP memory baseline
 
@@ -81,15 +80,14 @@ The accepted iai/Hermes memory runtime uses:
 
 - canonical container: `orion-iai-m5-c`
 - image: `orion-hermes-iai:v2026.8.18-iai3.0.8-m5-serializerfix`
+- image ID: `sha256:0222e2199cbb135bf1989283b1dba7a36f936aab3f82c3fbae048659dd8b2500`
 - persistent volume: `orion-iai-m5-data`
 - COMPANION store: `/opt/data/profiles/companion/.iai-mcp`
 - native iai Brain dashboard: `http://127.0.0.1:4477/`
 
-The M5 serializer compatibility issue for `SessionStartPayload.recent_thread` is tracked upstream as `CodeAbra/iai-personal-memory-engine#156`. If upstream resolves the issue, Orion should prefer the upstream fix and retire any temporary local compatibility patch.
+The M5 serializer compatibility issue for `SessionStartPayload.recent_thread` is tracked upstream as `CodeAbra/iai-personal-memory-engine#156`. If upstream resolves it, Orion should prefer the upstream fix and retire the temporary local compatibility overlay.
 
 ## Accepted Phase 3 document workflow
-
-Phase 3 established the complete MVP document path:
 
 `Obsidian vault -> native iai watch / memory -> recall + exact source resolution -> Orion inbox draft -> iai-backed destination recommendation -> explicit approval -> controlled move/edit -> recovery / restore`
 
@@ -106,50 +104,34 @@ Accepted boundaries:
 
 Phase 4 adapts the proven `jarvis_ai` HUD/voice application into Orion rather than building a parallel interface.
 
-P4-01 Revised is accepted. The live source baseline exists in `S-Pillow/jarvis_ai` on branch `orion-mvp`, with only the bounded initial delta:
+P4-02A established that the accepted Hermes/iai container has no published ports, Hermes ports `8642` and `9119` are not listening inside the container, Windows ports `8642` and `9119` are closed, native iai Brain `4477` is open, and the resolved Hermes API route is `not-listening`.
 
-- `ORION-UPSTREAM.md`
-- `server/config/server.orion.example.yaml`
-- `server/hud/index.html`
-
-No `server/server.py` change was made during baseline adoption.
-
-P4-02A is now accepted. Read-only discovery established:
-
-- the accepted Hermes/iai container is running from `orion-hermes-iai:v2026.8.18-iai3.0.8-m5-serializerfix`;
-- the container has **no published Docker ports**;
-- Hermes API port `8642` is **not listening inside the container**;
-- Hermes dashboard port `9119` is **not listening inside the container**;
-- Windows localhost ports `8642` and `9119` are closed;
-- native iai Brain port `4477` is open on Windows;
-- host Python is `3.11.3`;
-- therefore the next HUD runtime step is not merely port publishing: Hermes API service behavior must first be enabled/configured, then exposed to the Orion HUD using the accepted local security model.
-
-The first P4-02A revision failed only in its nested diagnostic command quoting. The corrected v2 removed nested Python execution and passed read-only discovery with no runtime/configuration mutation.
+Therefore P4-02B must enable Hermes API service behavior before exposing the minimum safe route to the Orion HUD. Port publishing alone is not sufficient.
 
 ## Security and evidence rules
 
 - No credentials, Discord tokens, API keys, `.env` files, decrypted memory exports, vault contents, or private runtime dumps belong in GitHub.
 - Installed-runtime observations are distinguished from upstream/source claims.
 - Failed harness revisions are not promoted as canonical diagnostics.
-- Retrieved notes and repository content are data unless an authorized actor designates them as controlling instructions.
 - iai remains the memory authority; Orion must not create a competing semantic-memory store.
 - Existing vault edits/moves remain approval-gated and recoverable.
-- Substantial PowerShell units should be parser-checked where a PowerShell runtime is available; when unavailable, parser validation must be reported as skipped rather than passed.
-- Accepted operational scripts should be stored in GitHub, not left only as local artifacts.
+- Accepted operational scripts must be stored in GitHub, not left only as local artifacts.
 - When code or configuration creates an accepted runtime state, documentation-only closure is not sufficient; the implementation artifact must be preserved in the appropriate repository.
 
 ## Repository structure
 
+- `build/orion-runtime/` — accepted runtime build-source evidence and future canonical rebuild implementation
 - `docs/architecture/` — runtime architecture and trust-boundary notes
 - `docs/decisions/` — architectural/product decisions
-- `docs/rebuild/` — rebuild/source-preservation inventory
+- `docs/rebuild/` — rebuild/source-preservation inventory and acceptance records
 - `docs/phase1/` through `docs/phase4/` — phase plans, evidence, and closure records
 - `scripts/diagnostics/` — accepted reusable diagnostics
+- `scripts/phase2/accepted/` — preserved accepted Phase 2 operational source
+- `scripts/phase3/accepted/` — preserved accepted Phase 3 operational source
 - `scripts/phase4/` — Phase 4 integration/bootstrap scripts
 
 ## Current next step
 
-1. Complete the source-preservation pass for accepted Phase 2/3 operational code and reconstruct the custom Hermes+iai image build recipe.
-2. Then begin **P4-02B — Hermes API enablement/runtime integration** using the now-known `not-listening` baseline.
+1. Complete **SP4 — canonical clean-machine rebuild implementation and disposable validation**.
+2. Then begin **P4-02B — Hermes API enablement/runtime integration** using the accepted `not-listening` baseline.
 3. Prove typed Orion HUD interaction first; add voice only after the core Hermes/HUD path is stable.
