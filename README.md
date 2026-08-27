@@ -61,6 +61,7 @@ Completed source-preservation work:
 - **SP2 PASS** — all 11 accepted Phase 2/3 operational scripts preserved in GitHub at commit `12d12f1e665110c494ecc758dfa52b4c51e0805f`.
 - **SP3 PASS** — accepted launcher, accepted Hermes ddgs Dockerfile, available M2/M5 historical build harnesses, and accepted image-lineage evidence preserved at commit `37d1b24121c68262585e0ab447e23d7c24a02ed3`.
 - **SP4A PASS** — canonical rebuild-source candidate created and committed at `98aa7b73d2b14619264bcaabbbf6acadfee204e3`; generated PowerShell parsed successfully on the Windows host and no Docker/runtime mutation occurred.
+- **SP4B v1 diagnostic** - rebuild reached Hermes/ddgs and iai F2, then exposed a missing acquisition-only huggingface_hub dependency; accepted Orion runtime remained unchanged. SP4B v2 carries the bounded source fix.
 
 Important paths:
 
@@ -134,7 +135,7 @@ Therefore P4-02B must enable Hermes API service behavior before exposing the min
 
 ## Current next step
 
-1. Run **SP4B — disposable rebuild validation** against the committed canonical rebuild source.
+1. Run **SP4B v2 - disposable rebuild validation** against the patched canonical rebuild source.
 2. If SP4B passes, finalize the clean-machine bootstrap/recovery procedure and close the source-preservation gate.
 3. Then begin **P4-02B — Hermes API enablement/runtime integration** using the accepted `not-listening` baseline.
 4. Prove typed Orion HUD interaction first; add voice only after the core Hermes/HUD path is stable.

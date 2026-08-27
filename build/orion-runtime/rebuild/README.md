@@ -1,10 +1,10 @@
 # Orion Runtime Rebuild Candidate
 
-Status: SOURCE CANDIDATE - NOT YET DISPOSABLE-VALIDATED
+Status: SOURCE CANDIDATE - SP4B VALIDATION IN PROGRESS
 
 This directory turns the accepted Orion runtime lineage into one clean rebuild path.
-It does not replace the accepted live runtime until a separate disposable validation
-proves the rebuilt image behavior.
+It does not replace the accepted live runtime until disposable validation proves the
+rebuilt image behavior.
 
 ## Image chain
 
@@ -20,14 +20,27 @@ The rebuild orchestration uses `orion-rebuild-*` tags and a disposable model-acq
 container. It does not use the accepted `orion-iai-m5-c` container, accepted iai data
 volume, or accepted production image tag.
 
+## F5E acquisition dependency
+
+SP4B v1 proved that the accepted F2 image does not contain `huggingface_hub`.
+That is an acquisition-helper dependency, not an accepted iai runtime dependency.
+
+The canonical acquisition helper now installs `huggingface-hub==0.34.1` only inside
+the disposable model-acquisition container, verifies that exact version, disables Xet
+for the acquisition, downloads the pinned snapshot, and verifies the three accepted
+model artifact hashes. The next F5E image copies only `/opt/iai/hf`; the transient
+acquisition dependency is not copied into the final Orion runtime.
+
+The PyPI pure-Python wheel SHA-256 for `huggingface_hub-0.34.1-py3-none-any.whl` is
+`60d843dcb7bc335145b20e7d2f1dfe93910f6787b2b38a936fb772ce2a83757c`.
+
 ## Run modes
 
 `build-orion-runtime.ps1` defaults to plan-only. It performs Docker work only when
 explicitly invoked with `-Execute`.
 
-SP4A preserves this source candidate in GitHub. SP4B is responsible for executing it
-against disposable images/containers and comparing the result with accepted behavioral
-contracts before this path is promoted as Orion's recovery mechanism.
+The acquisition container is removed in `finally`, including after a failed
+acquisition attempt.
 
 ## Known provenance
 

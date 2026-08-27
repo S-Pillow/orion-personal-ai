@@ -94,10 +94,9 @@ Write-Host "REBUILD_IAI_F2=PASS"
 
 $acquireScript = (Resolve-Path -LiteralPath (Join-Path $Root "acquire_f5e_model.py")).Path
 $acquireContainer = "orion-rebuild-f5e-" + ([Guid]::NewGuid().ToString("N").Substring(0, 12))
-$acquireCreated = $false
 
 try {
-    Invoke-Docker -Arguments @(
+    $acquireResult = Invoke-Docker -Arguments @(
         "run",
         "--name", $acquireContainer,
         "--network", "bridge",
@@ -108,18 +107,25 @@ try {
         "--entrypoint", "/opt/iai/venv/bin/python",
         $F2Tag,
         "/tmp/acquire_f5e_model.py"
-    ) | Out-Null
+    )
 
-    $acquireCreated = $true
+    Write-Host $acquireResult.Text
+
+    if ($acquireResult.Text -notmatch "(?m)^F5E_ACQUISITION_DEPENDENCY=PASS\r?$") {
+        throw "F5E acquisition dependency bootstrap marker was not observed."
+    }
+
+    if ($acquireResult.Text -notmatch "(?m)^F5E_MODEL_ARTIFACTS=PASS\r?$") {
+        throw "F5E model artifact verification marker was not observed."
+    }
+
     Write-Host "REBUILD_F5E_ACQUISITION=PASS"
 
     Invoke-Docker -Arguments @("commit", $acquireContainer, $ArtifactTag) | Out-Null
     Write-Host "REBUILD_F5E_ARTIFACT_STAGE=PASS"
 }
 finally {
-    if ($acquireCreated) {
-        Invoke-Docker -AllowFailure -Arguments @("rm", $acquireContainer) | Out-Null
-    }
+    Invoke-Docker -AllowFailure -Arguments @("rm", "-f", $acquireContainer) | Out-Null
 }
 
 Invoke-Docker -Arguments @(
