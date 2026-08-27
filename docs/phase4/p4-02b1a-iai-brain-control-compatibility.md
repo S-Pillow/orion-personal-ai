@@ -43,7 +43,15 @@ The parser gate passed, runtime preflight passed, and the script created the loc
 
 This failure occurred immediately after the clone branch and before the compatibility source patch, commit/push, dashboard backup/deploy, dashboard restart, or any Brain daemon control action. No accepted Hermes/iai container restart or memory-runtime mutation occurred.
 
-The next script revision must use a readable, non-minified inner script and must be parser-gated before execution.
+### v2 — false-positive host Python launcher
+
+The parser gate, runtime preflight, existing fork check, fork sync, source patch, and source assertions all passed. The local fork working tree now contains only the intended compatibility edits to `brainview.py` and the Brain dashboard `index.html`.
+
+Execution then stopped before commit/push because Windows exposed a `python.exe` App Execution Alias even though no usable host Python interpreter was installed. The script therefore tried to run `python -m py_compile` and received the Microsoft Store launcher message.
+
+No compatibility commit was created or pushed. No dashboard backup/deploy/restart occurred. No Brain control request was sent. The accepted Hermes/iai container and memory runtime were not changed.
+
+The next revision must treat the two expected local source edits as a bounded continuation state and compile the candidate `brainview.py` with the Python runtime already present inside the Brain dashboard container instead of trusting a Windows `python.exe` alias.
 
 ## Repository routing
 
