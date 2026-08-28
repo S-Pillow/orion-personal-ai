@@ -3,6 +3,7 @@ param(
     [string]$OutputPath = 'C:\HermesAgent\data\orion-runtime\host-idle.json',
     [ValidateRange(5, 300)]
     [int]$IntervalSeconds = 15,
+    [string]$ProducerInstanceId = '',
     [switch]$Once
 )
 
@@ -38,9 +39,6 @@ namespace OrionHostIdle
                 throw new Win32Exception(Marshal.GetLastWin32Error());
             }
 
-            // GetLastInputInfo.dwTime and Environment.TickCount are both
-            // 32-bit tick counters. Unsigned subtraction preserves the
-            // correct elapsed interval across the normal wrap boundary.
             uint now = unchecked((uint)Environment.TickCount);
             return unchecked(now - lii.dwTime);
         }
@@ -55,9 +53,24 @@ if ([string]::IsNullOrWhiteSpace($parent)) {
 }
 New-Item -ItemType Directory -Path $parent -Force | Out-Null
 
+if ([string]::IsNullOrWhiteSpace($ProducerInstanceId)) {
+    $instanceId = [Guid]::NewGuid().ToString('D')
+}
+else {
+    $parsedInstance = [Guid]::Empty
+    if (-not [Guid]::TryParse($ProducerInstanceId, [ref]$parsedInstance)) {
+        throw ('ProducerInstanceId is not a valid GUID: {0}' -f $ProducerInstanceId)
+    }
+    $instanceId = $parsedInstance.ToString('D')
+}
+
+$currentProcess = [System.Diagnostics.Process]::GetCurrentProcess()
+$producerStartedAt = [DateTimeOffset]$currentProcess.StartTime.ToUniversalTime()
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+$sequence = [int64]0
 
 function Write-IdleObservation {
+    $script:sequence++
     $idleMs = [OrionHostIdle.Native]::GetIdleMilliseconds()
     $idleSec = [math]::Floor(([double]$idleMs) / 1000.0)
 
@@ -66,15 +79,24 @@ function Write-IdleObservation {
         idle_sec = [int64]$idleSec
         observed_at = [DateTimeOffset]::UtcNow.ToString('o')
         source = 'windows-get-last-input-info'
+        producer_instance_id = $instanceId
+        producer_pid = [int]$PID
+        producer_started_at = $producerStartedAt.ToString('o')
+        sequence = [int64]$script:sequence
     }
 
     $json = $payload | ConvertTo-Json -Compress
-    $tmp = '{0}.tmp-{1}-{2}' -f $OutputPath, $PID, ([Guid]::NewGuid().ToString('N'))
+    $nonce = [Guid]::NewGuid().ToString('N')
+    $tmp = '{0}.tmp-{1}-{2}' -f $OutputPath, $PID, $nonce
+    $backup = '{0}.bak-{1}-{2}' -f $OutputPath, $PID, $nonce
 
     try {
         [System.IO.File]::WriteAllText($tmp, $json, $utf8NoBom)
         if (Test-Path -LiteralPath $OutputPath -PathType Leaf) {
-            [System.IO.File]::Replace($tmp, $OutputPath, $null)
+            # Use a real same-volume backup path. This avoids PowerShell 5.1
+            # overload/binding ambiguity around passing $null as the third
+            # File.Replace argument while preserving an atomic replacement.
+            [System.IO.File]::Replace($tmp, $OutputPath, $backup)
         }
         else {
             [System.IO.File]::Move($tmp, $OutputPath)
@@ -84,34 +106,47 @@ function Write-IdleObservation {
         if (Test-Path -LiteralPath $tmp -PathType Leaf) {
             Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
         }
+        if (Test-Path -LiteralPath $backup -PathType Leaf) {
+            Remove-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue
+        }
     }
 
-    return $payload
+    return [pscustomobject]$payload
 }
 
 Write-Host ('P4_02B1A_HOST_IDLE_BRIDGE_OUTPUT={0}' -f $OutputPath)
 Write-Host ('P4_02B1A_HOST_IDLE_BRIDGE_INTERVAL_SEC={0}' -f $IntervalSeconds)
+Write-Host ('P4_02B1A_HOST_IDLE_BRIDGE_INSTANCE={0}' -f $instanceId)
+Write-Host ('P4_02B1A_HOST_IDLE_BRIDGE_PID={0}' -f $PID)
+Write-Host ('P4_02B1A_HOST_IDLE_BRIDGE_STARTED_AT={0}' -f $producerStartedAt.ToString('o'))
 
-$writeCount = 0
+# Startup is fail-fast. If GetLastInputInfo or the first atomic write fails,
+# terminate nonzero so the parent can surface the real error immediately.
+$observation = Write-IdleObservation
+Write-Host ('P4_02B1A_HOST_IDLE_BRIDGE_STARTUP_SAMPLE={0}|seq={1}|idle_sec={2}' -f `
+    $observation.observed_at, $observation.sequence, $observation.idle_sec)
+
+if ($Once) {
+    Write-Host 'P4_02B1A_HOST_IDLE_BRIDGE=PASS'
+    exit 0
+}
+
+$writeCount = 1
 while ($true) {
+    Start-Sleep -Seconds $IntervalSeconds
     try {
         $observation = Write-IdleObservation
         $writeCount++
 
-        if ($writeCount -eq 1 -or ($writeCount % 20) -eq 0) {
-            Write-Host ('P4_02B1A_HOST_IDLE_BRIDGE_STATUS={0}|idle_sec={1}' -f $observation.observed_at, $observation.idle_sec)
+        if (($writeCount % 20) -eq 0) {
+            Write-Host ('P4_02B1A_HOST_IDLE_BRIDGE_STATUS={0}|seq={1}|idle_sec={2}' -f `
+                $observation.observed_at, $observation.sequence, $observation.idle_sec)
         }
     }
     catch {
-        # Do not manufacture an idle value on failure. The iai-side reader is
-        # designed to fail closed once the last valid observation becomes stale.
-        Write-Warning ('host idle observation failed: {0}' -f $_.Exception.Message)
+        # Do not manufacture an idle value on later transient failures.
+        # The iai reader will naturally fail closed when the last good sample
+        # exceeds its freshness bound.
+        Write-Warning ('host idle observation failed after startup: {0}' -f $_.Exception.Message)
     }
-
-    if ($Once) {
-        break
-    }
-    Start-Sleep -Seconds $IntervalSeconds
 }
-
-Write-Host 'P4_02B1A_HOST_IDLE_BRIDGE=PASS'
