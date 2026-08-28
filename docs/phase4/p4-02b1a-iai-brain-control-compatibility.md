@@ -4,7 +4,7 @@ Status: **IN PROGRESS**
 
 ## Purpose
 
-Verify that the native iai Brain dashboard controls behave correctly in Orion's Docker/s6 deployment without changing iai memory semantics.
+Verify that the native iai Brain dashboard controls behave correctly in Orion's Docker/s6 deployment without changing iai memory semantics, and verify that iai's native autonomous lifecycle has the host-idle evidence it requires in the containerized COMPANION topology.
 
 ## Confirmed defect
 
@@ -12,7 +12,9 @@ The BrainView `sleep` action sends `user_initiated_sleep` with `type` and `ts`, 
 
 ## Compatibility boundary
 
-This ticket may change only Brain dashboard/control-plane compatibility. It must not alter iai recall, ranking, fading, consolidation semantics, correction semantics, storage schema, or Orion's canonical-memory decision.
+The accepted BrainView fix may change only Brain dashboard/control-plane compatibility. The autonomous-lifecycle follow-up may add only the minimum integration seam required to supply iai with real host-idle evidence that its existing `IdleDetector` cannot see from a Windows-hosted Linux container.
+
+Neither part may alter iai recall, ranking, fading, consolidation semantics, correction semantics, storage schema, idle thresholds, transition rules, or Orion's canonical-memory decision.
 
 For Docker deployments, BrainView process lifecycle controls must not attempt `systemctl --user` from a sidecar. The safe MVP behavior is to report that daemon process lifecycle is externally/container managed. Full stop/restart orchestration belongs in Orion's later system-control surface rather than granting the Brain sidecar Docker-socket privileges.
 
@@ -25,15 +27,18 @@ For Docker deployments, BrainView process lifecycle controls must not attempt `s
 5. **Rest the subconscious** — same safe externally-managed behavior; no unintended daemon stop.
 6. Dashboard presents safe human-readable feedback for externally managed lifecycle actions.
 7. Native iai Brain/read path remains healthy.
-8. Accepted Hermes/iai container and iai volume are not restarted/recreated by this compatibility deployment.
+8. Accepted Hermes/iai container and iai volume are not restarted/recreated by the manual-control compatibility deployment.
 9. **Autonomous lifecycle** — after the manual controls pass, verify that the daemon can manage its own state without operator clicks using iai's native lifecycle rules rather than Orion-specific timers.
 10. Observe/verify the native automatic path `WAKE -> DROWSY` after the configured idle event, `DROWSY -> SLEEP` when the native sleep-eligibility condition is satisfied, and `SLEEP -> HIBERNATION` after a completed sleep cycle while still idle.
 11. Verify foreground activity/wake signaling returns the lifecycle to `WAKE` as defined by upstream iai, and that normal activity refreshes the daemon rather than leaving it stuck in a sleep state.
 12. Autonomous-state verification must use native iai lifecycle/event evidence. Do not modify idle thresholds or memory semantics merely to make the test finish faster; if a bounded accelerated test is needed, it must be isolated from the accepted profile and followed by an observation of the real production configuration.
+13. Any container-host idle compatibility seam must fail closed on missing/stale/malformed evidence and must feed the existing iai lifecycle policy rather than implement a second Orion sleep policy.
 
 ## Autonomous lifecycle basis
 
 Pinned iai 3.0.8 source defines the native state machine as follows: `WAKE` becomes `DROWSY` on `IDLE_5MIN`; `DROWSY` returns to `WAKE` on heartbeat refresh and becomes `SLEEP` on `IDLE_30MIN` when `sleep_eligible` is true; `SLEEP` becomes `HIBERNATION` after `SLEEP_CYCLE_DONE` when still idle; request/wake events return toward `WAKE`. Orion should verify that this upstream behavior is actually active in the deployed COMPANION brain rather than implementing a second lifecycle policy.
+
+Pinned 3.0.8 also intentionally refreshes each live MCP wrapper heartbeat every 30 seconds. The daemon has a nightly window-deep-idle path specifically so a live wrapper can remain fresh while real OS-level human-idle evidence still admits consolidation. On Linux that evidence comes from seat-attached `systemd-logind` sessions; a headless Windows-hosted Docker container has no such seat, so native `os_idle_sec` is unknown unless an integration seam supplies the host observation.
 
 ## Live attempt history
 
@@ -93,41 +98,86 @@ Observed acceptance markers:
 - iai memory runtime preserved
 - evidence: `E:\Orion-Phase2\P4-02B1A-evidence\p4-02b1a-v5-manual-control-smoke-20260827T220334Z.json`
 
-Manual controls status: **PASS / READY FOR AUTONOMOUS LIFECYCLE VERIFICATION**.
+Manual controls status: **PASS**.
 
-### v6A / v6Ar1 — autonomous lifecycle read-only preflight PASS
+### v6A / v6Ar1 — transport repaired, but store-specific evidence later invalidated
 
-The first v6A probe stopped before executing Python because Windows PowerShell 5.1 stripped embedded double quotes from the multiline `python -c` argument. The corrected v6Ar1 transport feeds the Python probe over stdin via `docker exec -i ... python -`, avoiding native argv reconstruction. The corrected probe was read-only and completed successfully.
+The first v6A probe stopped before executing Python because Windows PowerShell 5.1 stripped embedded double quotes from the multiline `python -c` argument. The corrected v6Ar1 transport fed Python over stdin via `docker exec -i ... python -` and completed read-only.
 
-Production starting boundary captured at `2026-08-27T22:43:48Z` container time:
+However, later production discovery proved that the v6A/v6Ar1 probe resolved store-specific state through `Path.home()` under a root `docker exec`, so it inspected `/root/.iai-mcp` rather than the live COMPANION store `/opt/data/profiles/companion/.iai-mcp`. `/root/.iai-mcp` does not exist in the accepted runtime.
 
-- lifecycle: `WAKE`
-- production drowsy threshold: `300s`
-- production sleep heartbeat-idle threshold: `1800s`
-- sleep-cycle cooldown: `14400s`
-- consolidation window source: default
-- consolidation window: `02:00-06:00` container-local (`UTC`)
-- current time was outside the window; `11772s` remained until window start
-- scheduler paused: `False`
-- no `last_clean_cycle_at`
-- `force_rem_request.pending=False`, no `honored_at`
-- `user_sleep_request.pending=False`, no `honored_at`
-- `force_wake_request.pending=False`, no `honored_at`
-- fresh wrapper count: `0`
-- heartbeat idle: `True`
-- OS-idle source unavailable in the container
-- sleep eligible: `True` via heartbeat-idle path
-- recent lifecycle transition log rows returned none in the bounded lookback
-- accepted core and dashboard container identities remained unchanged
-- evidence: `E:\Orion-Phase2\P4-02B1A-evidence\p4-02b1a-v6a-autonomous-preflight-20260827T224348Z.json`
+Therefore the following v6A/v6Ar1 store-specific observations are **withdrawn as production acceptance evidence**:
 
-This is a clean production-threshold starting boundary for the autonomous observation. No manual control request remains pending or recently honored, so the next observer can evaluate native idle-driven transitions without carryover from the manual-control smoke.
+- lifecycle value read from the fallback path
+- wrapper count / heartbeat-idle result
+- pending/honored request state
+- bounded lifecycle-event lookback
+- derived `sleep_eligible` result that depended on the wrong wrapper directory
+
+The code/config threshold reads (`300s`, `1800s`, `14400s`) were real defaults, and the platform `IdleDetector` result showing no OS-idle source remains diagnostically relevant because that detector is not store-path based. The accepted core/dashboard identities also remained unchanged.
+
+### v6B / v6Br1 — observer harness corrected, then stopped after wrong-store behavior exposed
+
+The first v6B observer had a PowerShell `${Name}:` interpolation/parser defect and executed nothing. The repaired v6Br1 ran read-only but repeatedly reported `WAKE`, `fresh=0`, and `eligible=True` from the same wrong root-store fallback. It was stopped rather than allowed to run through the night.
+
+Subsequent direct runtime inspection established the real production state:
+
+- live daemon process: `iai lilli (iai_mcp.daemon) store=/opt/data/profiles/companion/.iai-mcp`
+- correctly addressed daemon status: healthy, iai 3.0.8, `fsm_state=WAKE`, scheduler not paused, tick advancing
+- real socket: `/opt/data/profiles/companion/.iai-mcp/.daemon.sock`
+- live persistent wrapper: iai 3.0.8 Node wrapper with heartbeat refreshing every 30 seconds
+- real lifecycle log contained only the accepted manual transitions on 2026-08-27 and no autonomous idle transition
+
+The earlier unqualified `iai-mcp daemon status -> daemon not running` result was also a probe-addressing false negative caused by the root HOME/socket default; explicitly setting the COMPANION HOME/store/socket returned a healthy daemon status.
+
+## Autonomous lifecycle container-idle root cause
+
+The pinned iai repository and current upstream main were reviewed after the failed observer. The behavior is intentional on both sides of the mismatch:
+
+1. `mcp-wrapper/src/lifecycle.ts` refreshes a live wrapper heartbeat every 30 seconds.
+2. `heartbeat_scanner.py` treats a heartbeat <=90 seconds old with a live PID as fresh; one fresh wrapper makes the scanner active.
+3. `daemon/__init__.py` normally chooses `wake_refresh` for an active wrapper, but has a nightly window-deep-idle arm intended to see past an open/fresh wrapper when real OS human-idle evidence exists.
+4. `idle_detector.py` obtains Linux human-idle evidence only from seat-attached `systemd-logind` sessions and deliberately ignores headless/no-seat sessions.
+5. In Orion's Windows-hosted Docker container, no such Linux interactive seat exists, so `os_idle_sec` is unknown. With the persistent wrapper fresh, the native deep-idle arm cannot engage and `wake_refresh` wins.
+6. Current upstream `CodeAbra/iai-personal-memory-engine` main still has this same idle-source model; no built-in container/Windows-host idle-provider seam was found.
+
+Root cause status: **CONFIRMED HARD INTEGRATION MISMATCH**, not a dead daemon and not a defective wrapper heartbeat.
+
+Detailed discovery record:
+
+`docs/phase4/p4-02b1a-autonomous-lifecycle-container-idle-discovery.md`
+
+## Compatibility candidate
+
+The smallest intent-preserving candidate is an external host-idle observation at iai's existing `IdleDetector` boundary:
+
+- opt-in env: `IAI_MCP_EXTERNAL_IDLE_PATH`
+- schema-v1 JSON containing `idle_sec`, timezone-aware `observed_at`, and source metadata
+- fresh, finite, non-negative observations only
+- stale (>90s), future-invalid, malformed, missing, wrong-schema, or non-finite evidence is ignored/falls back to the native detector
+- when the option is absent, native platform behavior is unchanged
+- no lifecycle threshold or transition rule changes
+
+Orion's Windows-side producer uses native `GetLastInputInfo` and atomically writes through the already accepted `C:\HermesAgent\data` -> `/opt/data` mount. No Docker socket, network listener, new memory store, lifecycle-state edit, or privilege expansion is introduced.
+
+Staged candidate work:
+
+- iai fork branch: `compat/orion-external-idle-signal`
+- iai candidate head: `b6d356e67526ed30cc3e7a466597992fc440b800`
+- draft iai PR: `S-Pillow/iai-personal-memory-engine#1`
+- Orion host bridge branch: `feature/p4-02b1a-host-idle-bridge`
+- Orion host bridge head: `729ec2863a2029e3218c0a9cd4ba50efbb300ad2`
+- draft Orion PR: `S-Pillow/orion-personal-ai#2`
+
+No production deployment of this candidate has occurred.
 
 ## Repository routing
 
-- `S-Pillow/iai-personal-memory-engine`: upstream-compatible BrainView control-plane compatibility source.
-- `S-Pillow/orion-personal-ai`: deployment/acceptance evidence and Phase 4 status.
+- `S-Pillow/iai-personal-memory-engine`: upstream-compatible BrainView and host-idle compatibility source.
+- `S-Pillow/orion-personal-ai`: Windows host evidence producer, deployment/acceptance evidence, and Phase 4 status.
 
 ## Next
 
-Run a bounded, read-only production observer across the real lifecycle window. Verify `WAKE -> DROWSY` on the native 5-minute idle rule, then allow the accepted profile to remain idle through the real `02:00-06:00 UTC` consolidation window and verify `DROWSY -> SLEEP` on the native 30-minute/sleep-eligible path and `SLEEP -> HIBERNATION` after a clean sleep cycle while still idle. Use authoritative lifecycle state/event evidence and do not lower thresholds or inject sleep controls. After those automatic transitions are proven, perform a separate foreground-activity/wake verification and only then close P4-02B1A and resume **P4-02B2 — typed Orion HUD -> Hermes -> iai**.
+Run the candidate in a disposable/no-network validation boundary first. It must prove the exact fork source accepts a fresh Windows-produced host-idle observation, rejects stale/malformed evidence, preserves the native 1800-second eligibility threshold, and leaves `orion-iai-m5-c` unchanged.
+
+Only after that PASS should the project inspect and patch the canonical daemon pre-exec/service environment to set `IAI_MCP_EXTERNAL_IDLE_PATH`, build/deploy a bounded candidate runtime, and observe the real native production lifecycle. Final P4-02B1A closure still requires authoritative automatic `WAKE -> DROWSY -> SLEEP -> HIBERNATION` evidence plus a separate foreground-activity return to `WAKE`.
