@@ -5,6 +5,8 @@ param(
     [ValidateRange(5, 300)]
     [int]$IntervalSeconds = 15,
     [string]$ProducerInstanceId = '',
+    [ValidateRange(1, 20)]
+    [int]$MaxConsecutiveFailures = 3,
     [switch]$Once
 )
 
@@ -153,11 +155,13 @@ if ($Once) {
 }
 
 $writeCount = 1
+$consecutiveFailures = 0
 while ($true) {
     Start-Sleep -Seconds $IntervalSeconds
     try {
         $observation = Write-IdleObservation
         $writeCount++
+        $consecutiveFailures = 0
 
         if (($writeCount % 20) -eq 0) {
             Write-Host ('P4_02B1A_HOST_IDLE_BRIDGE_STATUS={0}|seq={1}|idle_sec={2}' -f `
@@ -166,7 +170,13 @@ while ($true) {
     }
     catch {
         # Do not manufacture activity/idle data. The iai reader fails closed
-        # when the last good sample ages past its freshness bound.
-        Write-Warning ('host idle observation failed after startup: {0}' -f $_.Exception.Message)
+        # when the last good sample ages past its freshness bound. Persistent
+        # producer failure exits nonzero so Task Scheduler can restart it.
+        $consecutiveFailures++
+        Write-Warning ('host idle observation failed after startup ({0}/{1}): {2}' -f `
+            $consecutiveFailures, $MaxConsecutiveFailures, $_.Exception.Message)
+        if ($consecutiveFailures -ge $MaxConsecutiveFailures) {
+            throw ('host idle producer exceeded consecutive failure limit ({0})' -f $MaxConsecutiveFailures)
+        }
     }
 }
