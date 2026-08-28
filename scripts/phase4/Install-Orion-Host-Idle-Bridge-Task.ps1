@@ -21,6 +21,43 @@ New-Item -ItemType Directory -Path (Split-Path -Parent $OutputPath) -Force | Out
 
 Copy-Item -LiteralPath $BridgeSourcePath -Destination $InstalledBridgePath -Force
 
+# Migrate any previous harness-owned bridge only when the PID record proves
+# the exact process identity and identifies an Orion host-idle bridge script.
+if (Test-Path -LiteralPath $PidPath -PathType Leaf) {
+    try {
+        $oldRec = (Get-Content -LiteralPath $PidPath -Raw) | ConvertFrom-Json
+        $oldPid = [int]$oldRec.pid
+        $oldStarted = [DateTimeOffset]::Parse([string]$oldRec.process_started_at)
+        $oldProc = Get-Process -Id $oldPid -ErrorAction SilentlyContinue
+        if ($null -ne $oldProc) {
+            $actualStarted = [DateTimeOffset]$oldProc.StartTime.ToUniversalTime()
+            $identityMatches = [math]::Abs(($actualStarted - $oldStarted).TotalSeconds) -le 1.0
+            $scriptLooksOwned = [string]$oldRec.script_path -match '(?i)Orion.*Host-Idle-Bridge\.ps1$'
+            if ($identityMatches -and $scriptLooksOwned) {
+                Stop-Process -Id $oldPid -Force -ErrorAction Stop
+                $null = $oldProc.WaitForExit(5000)
+            }
+            elseif ($identityMatches) {
+                throw ('Live PID record is not an Orion bridge; refusing to terminate PID {0}.' -f $oldPid)
+            }
+        }
+    }
+    catch {
+        if ($_.Exception.Message -like 'Live PID record is not an Orion bridge*') {
+            throw
+        }
+    }
+}
+
+$existingTask = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+if ($null -ne $existingTask) {
+    Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    Start-Sleep -Milliseconds 500
+}
+
+Remove-Item -LiteralPath $OutputPath -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $PidPath -Force -ErrorAction SilentlyContinue
+
 $powerShellExe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 if (-not (Test-Path -LiteralPath $powerShellExe -PathType Leaf)) {
     throw ('Windows PowerShell executable missing: {0}' -f $powerShellExe)
