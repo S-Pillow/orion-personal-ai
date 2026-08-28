@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$OutputPath = 'C:\HermesAgent\data\orion-runtime\host-idle.json',
+    [string]$PidPath = 'C:\HermesAgent\data\orion-runtime\host-idle-bridge.pid',
     [ValidateRange(5, 300)]
     [int]$IntervalSeconds = 15,
     [string]$ProducerInstanceId = '',
@@ -47,11 +48,48 @@ namespace OrionHostIdle
 '@
 }
 
-$parent = Split-Path -Parent $OutputPath
-if ([string]::IsNullOrWhiteSpace($parent)) {
-    throw 'OutputPath must include a parent directory.'
+function Ensure-ParentDirectory {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    $parent = Split-Path -Parent $Path
+    if ([string]::IsNullOrWhiteSpace($parent)) {
+        throw ('Path must include a parent directory: {0}' -f $Path)
+    }
+    New-Item -ItemType Directory -Path $parent -Force | Out-Null
 }
-New-Item -ItemType Directory -Path $parent -Force | Out-Null
+
+function Write-AtomicUtf8Json {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)]$Value
+    )
+
+    $json = $Value | ConvertTo-Json -Compress
+    $nonce = [Guid]::NewGuid().ToString('N')
+    $tmp = '{0}.tmp-{1}-{2}' -f $Path, $PID, $nonce
+    $backup = '{0}.bak-{1}-{2}' -f $Path, $PID, $nonce
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+
+    try {
+        [System.IO.File]::WriteAllText($tmp, $json, $utf8NoBom)
+        if (Test-Path -LiteralPath $Path -PathType Leaf) {
+            [System.IO.File]::Replace($tmp, $Path, $backup)
+        }
+        else {
+            [System.IO.File]::Move($tmp, $Path)
+        }
+    }
+    finally {
+        if (Test-Path -LiteralPath $tmp -PathType Leaf) {
+            Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+        }
+        if (Test-Path -LiteralPath $backup -PathType Leaf) {
+            Remove-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+Ensure-ParentDirectory -Path $OutputPath
+Ensure-ParentDirectory -Path $PidPath
 
 if ([string]::IsNullOrWhiteSpace($ProducerInstanceId)) {
     $instanceId = [Guid]::NewGuid().ToString('D')
@@ -66,8 +104,16 @@ else {
 
 $currentProcess = [System.Diagnostics.Process]::GetCurrentProcess()
 $producerStartedAt = [DateTimeOffset]$currentProcess.StartTime.ToUniversalTime()
-$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $sequence = [int64]0
+
+$pidPayload = [ordered]@{
+    schema_version = 1
+    pid = [int]$PID
+    producer_instance_id = $instanceId
+    process_started_at = $producerStartedAt.ToString('o')
+    script_path = $PSCommandPath
+}
+Write-AtomicUtf8Json -Path $PidPath -Value $pidPayload
 
 function Write-IdleObservation {
     $script:sequence++
@@ -85,43 +131,18 @@ function Write-IdleObservation {
         sequence = [int64]$script:sequence
     }
 
-    $json = $payload | ConvertTo-Json -Compress
-    $nonce = [Guid]::NewGuid().ToString('N')
-    $tmp = '{0}.tmp-{1}-{2}' -f $OutputPath, $PID, $nonce
-    $backup = '{0}.bak-{1}-{2}' -f $OutputPath, $PID, $nonce
-
-    try {
-        [System.IO.File]::WriteAllText($tmp, $json, $utf8NoBom)
-        if (Test-Path -LiteralPath $OutputPath -PathType Leaf) {
-            # Use a real same-volume backup path. This avoids PowerShell 5.1
-            # overload/binding ambiguity around passing $null as the third
-            # File.Replace argument while preserving an atomic replacement.
-            [System.IO.File]::Replace($tmp, $OutputPath, $backup)
-        }
-        else {
-            [System.IO.File]::Move($tmp, $OutputPath)
-        }
-    }
-    finally {
-        if (Test-Path -LiteralPath $tmp -PathType Leaf) {
-            Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
-        }
-        if (Test-Path -LiteralPath $backup -PathType Leaf) {
-            Remove-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue
-        }
-    }
-
+    Write-AtomicUtf8Json -Path $OutputPath -Value $payload
     return [pscustomobject]$payload
 }
 
 Write-Host ('P4_02B1A_HOST_IDLE_BRIDGE_OUTPUT={0}' -f $OutputPath)
+Write-Host ('P4_02B1A_HOST_IDLE_BRIDGE_PID_PATH={0}' -f $PidPath)
 Write-Host ('P4_02B1A_HOST_IDLE_BRIDGE_INTERVAL_SEC={0}' -f $IntervalSeconds)
 Write-Host ('P4_02B1A_HOST_IDLE_BRIDGE_INSTANCE={0}' -f $instanceId)
 Write-Host ('P4_02B1A_HOST_IDLE_BRIDGE_PID={0}' -f $PID)
 Write-Host ('P4_02B1A_HOST_IDLE_BRIDGE_STARTED_AT={0}' -f $producerStartedAt.ToString('o'))
 
-# Startup is fail-fast. If GetLastInputInfo or the first atomic write fails,
-# terminate nonzero so the parent can surface the real error immediately.
+# Startup is intentionally fail-fast. Task Scheduler owns process restart.
 $observation = Write-IdleObservation
 Write-Host ('P4_02B1A_HOST_IDLE_BRIDGE_STARTUP_SAMPLE={0}|seq={1}|idle_sec={2}' -f `
     $observation.observed_at, $observation.sequence, $observation.idle_sec)
@@ -144,9 +165,8 @@ while ($true) {
         }
     }
     catch {
-        # Do not manufacture an idle value on later transient failures.
-        # The iai reader will naturally fail closed when the last good sample
-        # exceeds its freshness bound.
+        # Do not manufacture activity/idle data. The iai reader fails closed
+        # when the last good sample ages past its freshness bound.
         Write-Warning ('host idle observation failed after startup: {0}' -f $_.Exception.Message)
     }
 }
