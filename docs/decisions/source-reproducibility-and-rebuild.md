@@ -1,69 +1,118 @@
 # Decision — Orion Source Preservation and Rebuild Policy
 
-**Status: ACCEPTED — August 27, 2026**
+**Status: ACCEPTED / CURRENT — updated 2026-08-29**
 
 ## Decision
 
 Orion must be reconstructable from GitHub plus explicitly documented external secrets/data. Accepted implementation code must not exist only on one workstation.
 
-The project therefore uses three complementary source locations:
+The controlling architecture is now **native Windows** under **ORION — Master PRD v2.6 (AI-Optimized Execution Edition)**. Historical Docker/Jarvis artifacts remain preserved, but they are not the current rebuild target.
 
-1. `S-Pillow/orion-personal-ai` for Orion-authored integration code, provisioning scripts, deployment/build recipes, architecture, evidence, and rebuild instructions.
-2. `S-Pillow/jarvis_ai` for the actual Orion HUD/voice application source derived from `eadmin2/jarvis_ai`.
-3. `S-Pillow/iai-personal-memory-engine` for a controlled compatibility/tracking fork of `CodeAbra/iai-personal-memory-engine` when Orion needs source-level compatibility work or upstream contributions.
+## Repository roles
 
-Third-party source should not be duplicated wholesale into `orion-personal-ai` when it already exists in a maintained fork. The fork is the code repository. Orion-authored glue and reproducibility instructions belong in `orion-personal-ai`.
+### `S-Pillow/orion-personal-ai`
 
-## Rebuild contract
+Current canonical integration/control repository. It owns:
 
-A fresh-machine rebuild should be possible without access to the original development workstation except for intentionally external private material.
-
-GitHub should preserve:
-
-- exact upstream repository and commit pins;
-- Orion fork branches and commits;
-- Dockerfiles or image-build scripts for any custom image Orion depends on;
-- Orion-authored PowerShell/Python scripts used to provision accepted runtime components;
-- non-secret example configuration;
-- host/container topology and required paths;
-- accepted migration/upgrade steps;
-- backup/restore procedures;
-- version and compatibility notes.
-
-GitHub must not preserve:
-
-- API keys, Discord tokens, passwords, `.env` files containing secrets;
-- the iai encryption key;
-- decrypted memory exports;
-- private vault content;
-- runtime data volumes or private backups.
-
-Those remain external recovery material and must be documented separately from source.
-
-## Fork rules
-
-### `S-Pillow/jarvis_ai`
-
-This is an application fork. Orion-specific HUD/voice source changes belong here. The original `eadmin2/jarvis_ai` remains `upstream`.
+- Orion PRD/project-state references
+- architecture and trust-boundary decisions
+- current phase plans and acceptance evidence
+- Orion-authored provisioning, verification, rollback, and recovery scripts
+- compatibility notes and cross-component glue
 
 ### `S-Pillow/iai-personal-memory-engine`
 
-This is a compatibility/tracking fork. Upstream iai semantics remain authoritative for Orion MVP. The fork may carry a narrowly scoped compatibility patch or upstream contribution when necessary, but must not become a separate Orion memory design.
+Compatibility/upstream-tracking fork of `CodeAbra/iai-personal-memory-engine`.
+
+It may carry:
+
+- exact source pinning for Orion's iai dependency
+- narrowly scoped compatibility fixes required by Orion
+- upstream issue/PR preparation
+- comparisons against upstream changes before upgrades
+
+It must not become an Orion-specific alternative memory engine. Upstream iai semantics remain controlling unless explicitly changed by a later architecture decision.
+
+### `S-Pillow/jarvis_ai`
+
+Historical/possible-future HUD application fork. It remains preserved for provenance and possible reuse, but it is not an active v2.6 implementation dependency while native Phase 1 is incomplete.
 
 ### Hermes
 
-Hermes remains upstream-only until Orion is carrying source-level changes that cannot be represented as configuration, build instructions, or integration glue. A custom image alone is not sufficient reason to fork Hermes; unrecoverable source divergence would be.
+Hermes remains an upstream dependency unless Orion begins carrying sustained source-level changes that justify a fork. Configuration and Orion-owned recovery/verification scripts belong in `orion-personal-ai`.
 
-## Current rebuild gap
+## Current native rebuild contract
 
-As of this decision, Orion has reproducible source for the forked HUD baseline and substantial architecture/evidence, but the repository is not yet a complete fresh-machine rebuild package.
+A fresh Windows machine should be recoverable from GitHub plus intentionally external private material.
 
-The highest-priority remaining source-preservation gap is the exact build recipe for the accepted custom Hermes + iai image `orion-hermes-iai:v2026.8.18-iai3.0.8-m5-serializerfix`, including the narrow `recent_thread` serializer compatibility change and all image-layer installation steps. Accepted Phase 2/3 operational scripts that still exist only as local artifacts must also be promoted into `orion-personal-ai`.
+GitHub should preserve:
 
-This gap must be closed before Orion is treated as independently reconstructable.
+- exact accepted Hermes tag/package/commit pins
+- named profile and required native paths
+- Orion-authored PowerShell used to configure, verify, and roll back accepted runtime state
+- non-secret configuration expectations
+- Windows persistence/task details
+- model/provider/runtime compatibility notes
+- accepted migration/upgrade steps
+- backup/restore procedures
+- Phase 1 compatibility patches if one is ultimately required
+
+The accepted native Phase 0 baseline is preserved at:
+
+`scripts/phase0/Orion-Phase0-Hermes-Native-AcceptedBaseline.ps1`
+
+Accepted Phase 0 snapshot:
+
+- Hermes `v2026.8.27`
+- package `0.20.6`
+- commit `5fc308a70719a83cccdbba4c0e39c23f5a8239d5`
+- profile `companion`
+- Windows persistence task `Hermes_Gateway_companion`
+- local model `qwen3.5-hermes:9b`
+- runtime context `65536`
+
+## Private recovery material
+
+GitHub must not preserve:
+
+- API keys
+- Discord tokens
+- passwords
+- `.env` files containing secrets
+- iai encryption keys
+- decrypted memory exports
+- private vault contents
+- runtime data stores or private backups
+
+Those remain separately retained recovery material.
+
+## Historical Docker preservation
+
+The prior Docker/s6 runtime, image lineage, rebuild scripts, Phase 2/3 operational scripts, and Jarvis Phase 4 work remain in GitHub as historical evidence.
+
+They are intentionally retained rather than deleted because they document prior engineering decisions and may help with regression archaeology or explicitly requested legacy recovery. They must be clearly labeled historical and must not be presented as current v2.6 acceptance.
+
+The following are historical-only unless separately revalidated:
+
+- `build/orion-runtime/`
+- `docs/phase2/`
+- `docs/phase3/`
+- `docs/phase4/`
+- `scripts/phase2/`
+- `scripts/phase3/`
+- `scripts/phase4/`
+- `scripts/rebuild/`
+
+## Current source-preservation gap
+
+Phase 0 native source preservation is closed.
+
+Phase 1 is not yet source-complete because stock `iai-pme==3.0.8` currently fails on Windows daemon startup due to an unguarded `signal.SIGHUP` reference. No Orion compatibility patch has yet been accepted or committed.
+
+If a patch is authorized, the accepted patch must be preserved in `S-Pillow/iai-personal-memory-engine`, and Orion-specific installation/verification/rollback source must be preserved in `S-Pillow/orion-personal-ai` before Phase 1 closure.
 
 ## Operational rule going forward
 
-When a ticket changes production/runtime behavior, its accepted implementation artifact must be committed to the appropriate GitHub repository before or at closure. Documentation-only closure is not sufficient when code or configuration was required to produce the accepted state.
+When a ticket or phase changes accepted runtime behavior, the implementation artifact that produced that state must be committed to the appropriate GitHub repository before or at closure. Documentation-only closure is not sufficient when code or configuration mutation was required.
 
-**Intent status: PRESERVED.** This policy preserves the upstream-first architecture while making Orion recoverable, forkable, and maintainable as a real software project.
+Historical artifacts may remain in place for stable links, but current documentation must clearly distinguish historical evidence from controlling architecture.
