@@ -1,103 +1,226 @@
 # Orion Personal AI
-Orion is a privacy-first, local-first personal AI companion built around Hermes Agent, iai persistent memory, an authoritative Obsidian vault, bounded document tooling, and an Orion-branded HUD/voice layer.
+
+Orion is a privacy-first, local-first personal AI companion. The controlling implementation direction is now **native Windows**, centered on a pinned Hermes Agent runtime, the named `companion` profile, a local Ollama model, Discord, a loopback Hermes API, and a native iai memory stack.
+
+## Controlling baseline
+
+The current controlling product requirements document is **ORION — Master PRD v2.6 (AI-Optimized Execution Edition)**, approved 2026-08-29.
+
+The previous Docker/s6/Jarvis-oriented implementation remains useful historical evidence, but it is **not the controlling MVP architecture**. New acceptance work must follow the v2.6 native-Windows sequence.
+
 ## Current status
-- Phase 0 — **PASS / CLOSED**
-- Phase 1 — **PASS / CLOSED**
-- Phase 2 — **PASS / CLOSED — MVP memory foundation accepted**
-- Phase 3 — **PASS / CLOSED — MVP vault workflow accepted**
-- Phase 4 — **ACTIVE — Orion HUD / voice / orchestration integration**
-  - P4-01 Revised — **PASS / CLOSED — forked upstream HUD baseline established**
-  - P4-02A — **PASS / CLOSED — runtime-fit discovery complete**
-  - P4-02B — **IN PROGRESS — Hermes API enablement/runtime integration**
-    - P4-02B1 — **PASS / CLOSED — authenticated Hermes API enabled and exact accepted v4 source preserved**
-    - P4-02B2 — **NEXT — typed Orion HUD -> Hermes -> iai integration**
-The current controlling product requirements document is **Orion Master PRD v1.1.3**.
+
+- **Phase 0 — PASS / CLOSED**
+  - native Hermes installation pinned and verified
+  - named `companion` profile created
+  - authenticated companion API enabled on loopback
+  - local Ollama model selected and verified
+  - Discord cut over to the native gateway
+  - Windows logon persistence installed
+  - real Windows restart acceptance passed
+  - post-restart API inference passed
+  - post-restart Discord round-trip passed
+  - reproducible Phase 0 PowerShell verification passed
+- **Phase 1 — IN PROGRESS / PAUSED AT DIAGNOSTIC CHECKPOINT**
+  - `iai-pme==3.0.8` installed in a dedicated native Python 3.11 virtual environment
+  - package dependency check passed
+  - iai crypto initialization passed
+  - native Rust embedder passed (`bge-small-en-v1.5`, 384 dimensions, AVX2 available)
+  - Windows Scheduled Task registration succeeded after one controlled elevated registration step
+  - task is current-user, interactive, least-privilege
+  - daemon startup is currently blocked by an upstream Windows bug in iai 3.0.8: startup references `signal.SIGHUP`, which does not exist on Windows
+  - `iai-mcp doctor` currently reports 2/33 FAIL, both caused by the daemon not reaching a running state
+  - capture hooks, recall acceptance, `idle_timeout_seconds`, independent HIBERNATION tests, and OR-LIFE-007 accept-vs-patch decision are **not yet complete**
+
+HUD, vault-actions, reminders, OpenAI-dependent features, and voice remain downstream work and must not begin until Phase 1 is accepted.
+
+## Accepted native Hermes baseline
+
+Accepted on 2026-08-29:
+
+- Hermes tag: `v2026.8.27`
+- Hermes package: `0.20.6`
+- Hermes commit: `5fc308a70719a83cccdbba4c0e39c23f5a8239d5`
+- Hermes home: `%LOCALAPPDATA%\hermes`
+- profile: `companion`
+- profile home: `%LOCALAPPDATA%\hermes\profiles\companion`
+- Windows persistence task: `Hermes_Gateway_companion`
+- task run level: Limited / least privilege
+- API listener: `127.0.0.1:8642`
+- model provider: `custom`
+- model: `qwen3.5-hermes:9b`
+- Ollama base URL: `http://localhost:11434/v1`
+- API mode: `chat_completions`
+- verified Ollama runtime context: `65536`
+
+The Hermes pin is frozen through Phase 0/1. Do **not** run `hermes update` unless a separate dependency-change decision explicitly authorizes it.
+
+## Phase 0 acceptance evidence
+
+The native Windows restart acceptance proved all of the following without a manual Hermes launch:
+
+- `Hermes_Gateway_companion` launched after Windows logon
+- gateway process returned
+- `127.0.0.1:8642` returned healthy
+- authenticated API inference returned `ORION_API_POST_RESTART_OK`
+- `qwen3.5-hermes:9b` loaded through Ollama at context `65536`
+- Discord initially encountered transient post-boot connection timeouts, then Hermes' reconnect watcher recovered automatically
+- a real post-restart Discord round-trip returned `ORION_POST_RESTART_OK`
+
+The observed Discord cold-boot recovery delay was approximately five minutes and is recorded as non-blocking because recovery was automatic.
+
+## Phase 0 reproducibility
+
+A durable PowerShell artifact was created and executed successfully on the Windows host:
+
+`%LOCALAPPDATA%\hermes\profiles\companion\orion\phase0\Orion-Phase0-Hermes-Native-AcceptedBaseline.ps1`
+
+The accepted verification run passed:
+
+- PowerShell parser gate
+- exact Hermes tag and commit
+- clean Hermes worktree
+- package version `0.20.6`
+- companion model configuration
+- API enablement and secret presence checks without printing secret values
+- Discord credential presence checks without printing secret values
+- Scheduled Task persistence
+- gateway process and loopback listener
+- authenticated API inference
+- Ollama model/context verification
+
+The script includes `Configure`, `Verify`, and bounded `Rollback` modes and never runs `hermes update`.
+
+## Phase 1 native iai checkpoint
+
+### Installation
+
+Native iai is intentionally isolated from both global Python and Hermes' runtime:
+
+- Python: `3.11.3`
+- venv: `%LOCALAPPDATA%\hermes\profiles\companion\iai\venv`
+- package: `iai-pme==3.0.8`
+- `pip check`: no broken requirements
+- commands present: `iai.exe`, `iai-mcp.exe`, `iai-mcp-core.exe`
+
+### Crypto and embedder
+
+- `iai-mcp crypto init`: passed
+- key file created under `%USERPROFILE%\.iai-mcp`
+- key contents must never be committed or printed
+- configured embedder passed using native Rust backend
+- dimensions: 384
+- model: `bge-small-en-v1.5`
+- AVX2: available
+
+### Windows daemon persistence
+
+The stock iai 3.0.8 Windows installer renders a per-user Scheduled Task with:
+
+- task name: `iai-mcp-daemon`
+- logon trigger
+- `InteractiveToken`
+- `LeastPrivilege`
+- restart-on-failure
+- generated wrapper: `%USERPROFILE%\.iai-mcp\daemon-start.cmd`
+- working directory: `%USERPROFILE%\.iai-mcp`
+
+Task creation initially returned `Access is denied` in a normal shell. A controlled one-time elevated install successfully registered the task. The registered task is confirmed as:
+
+- user: current Windows user
+- run level: Limited
+- logon type: Interactive
+
+### Current Phase 1 blocker
+
+The task launches the correct dedicated Python interpreter, but iai 3.0.8 exits immediately with:
+
+```text
+AttributeError: module 'signal' has no attribute 'SIGHUP'
+```
+
+The failing path is the daemon boot signal-trace setup, which iterates over `SIGTERM`, `SIGINT`, and `SIGHUP` without guarding for Windows. Because the daemon exits before boot completes:
+
+- no daemon PID state is created
+- no daemon port state is created
+- `iai-mcp daemon status` reports `daemon not running`
+- Scheduled Task `LastTaskResult` is `1`
+- `iai-mcp doctor` reports exactly two failures: daemon process absent and socket/port state absent
+
+This is an **upstream iai 3.0.8 Windows compatibility blocker**, not a Hermes failure, not a crypto failure, and not an embedding failure.
+
+The stock behavior has now been observed and documented. Do not run `doctor --apply` or make an unreviewed installed-package edit. On resume, decide on a narrow compatibility patch or an upstream-supported alternative, then re-run daemon/doctor acceptance.
+
+## Known non-blocking Phase 1 observations
+
+- Windows `HIDIdleTime` is unavailable on this machine; iai reports that L6 will fall back to heartbeat-idle only. This must be covered explicitly in later lifecycle/HIBERNATION tests.
+- Claude subscription credentials are absent; iai reports fallback to local Tier-0 consolidation. No Claude login is required for the current local-first shakeout.
+- `iai` is intentionally not placed on global `PATH`; Orion uses absolute paths into the dedicated venv.
+- missing store/HNSW files are expected on the fresh install before successful daemon/store activity.
+
 ## Governing architecture
-- **Hermes Agent** is the local agent runtime.
-- **iai-pme 3.0.8** is Orion's canonical memory and semantic-recall engine for MVP.
-- **Native iai Brain** remains the authoritative detailed memory-management UI.
-- **Obsidian** remains the authoritative human-facing document vault at `C:\Personal\Me`.
-- Orion's accepted Phase 3 document path provides exact source resolution, a dedicated draft inbox, native-iai-backed destination recommendations, approval-gated vault edits/moves, and exact recovery/restore.
-- **eadmin2/jarvis_ai** is the upstream HUD / voice / orchestration application baseline for Phase 4.
-- **CodeAbra/iai-personal-memory-engine** remains the upstream authority for iai behavior.
+
+- **Hermes Agent** is the native local agent runtime.
+- **Ollama** is the local model server for the current accepted baseline.
+- **qwen3.5-hermes:9b** is the currently accepted execution-time model choice, selected from local evidence rather than hard-coded by the PRD.
+- **Discord** is the accepted Phase 0 messaging surface.
+- **Hermes API** is enabled only for the named companion profile and bound to loopback for the current baseline.
+- **iai-pme 3.0.8** is the Phase 1 memory-engine candidate and remains pinned during the native shakeout.
+- **Obsidian** remains the intended authoritative human-facing vault in later phases.
+- General computer control is outside the MVP.
+
+## Legacy implementation status
+
+Historical Docker/container work is preserved for evidence and recovery context but is superseded as the controlling implementation path.
+
+Legacy artifacts include:
+
+- `orion-iai-m5-c`
+- s6/container supervision notes
+- old Docker image lineage and rebuild scripts
+- the earlier `S-Pillow/jarvis_ai` HUD adaptation work
+- previous Phase 2/3/4 acceptance records under the old architecture
+
+These records must not be silently presented as current v2.6 acceptance. They are historical unless revalidated under the native Windows sequence.
+
+The old Docker COMPANION container was deliberately stopped during the native Discord cutover and its restart policy was set to `no` to prevent credential contention. No legacy runtime data was intentionally deleted.
+
 ## Repository strategy
+
 ### `S-Pillow/orion-personal-ai`
-Canonical Orion integration/control repository for project state, architecture decisions, acceptance evidence, Orion-authored provisioning/integration/build scripts, deterministic rebuild instructions, and cross-component glue.
-### `S-Pillow/jarvis_ai`
-Maintained Orion application fork of `eadmin2/jarvis_ai`.
-- `origin`: `S-Pillow/jarvis_ai`
-- `upstream`: `eadmin2/jarvis_ai`
-- pinned initial upstream baseline: `88998de8369e9d36f6d434b5e01feb93fcf1c33f`
-- Orion adaptation branch: `orion-mvp`
-- accepted P4-01 branch head: `aeb0643f8119a4d4f8b78a950194e9778eea4af2`
-- upstream MIT license and attribution retained
-This is where Orion HUD/voice source changes belong. The fork itself is the source archive; the application does not need to be copied wholesale into `orion-personal-ai`.
+
+Canonical Orion integration/control repository for current architecture, execution status, acceptance evidence, reproducibility instructions, compatibility notes, and Orion-owned glue.
+
 ### `S-Pillow/iai-personal-memory-engine`
-Maintained compatibility/tracking fork of `CodeAbra/iai-personal-memory-engine`.
-The fork exists so Orion can pin source, prepare upstream contributions, and carry a narrowly scoped compatibility patch only when necessary. It does **not** authorize Orion-specific memory semantics. Upstream iai behavior remains controlling for MVP.
+
+Compatibility/tracking fork of `CodeAbra/iai-personal-memory-engine`. A narrow Windows compatibility patch may be carried here only if stock 3.0.8 behavior cannot satisfy the v2.6 Phase 1 acceptance gate and the patch is explicitly approved after stock behavior is documented.
+
+### `S-Pillow/jarvis_ai`
+
+Historical/possible-future HUD application fork. It is **not** the current active phase. HUD work resumes only after native iai Phase 1 acceptance.
+
 Hermes remains an upstream dependency unless sustained source-level changes later justify a fork.
-## Source preservation and rebuild status
-Orion is intended to be reconstructable on a new machine from GitHub plus separately retained private secrets/data. Accepted implementation code must not exist only on one workstation.
-Completed source-preservation work:
-- **SP2 PASS** — all 11 accepted Phase 2/3 operational scripts preserved in GitHub at commit `12d12f1e665110c494ecc758dfa52b4c51e0805f`.
-- **SP3 PASS** — accepted launcher, accepted Hermes ddgs Dockerfile, available M2/M5 historical build harnesses, and accepted image-lineage evidence preserved at commit `37d1b24121c68262585e0ab447e23d7c24a02ed3`.
-- **SP4A PASS** — canonical rebuild-source candidate created and committed at `98aa7b73d2b14619264bcaabbbf6acadfee204e3`; generated PowerShell parsed successfully on the Windows host and no Docker/runtime mutation occurred.
-- **SP4B v1 diagnostic** - rebuild reached Hermes/ddgs and iai F2, then exposed a missing acquisition-only huggingface_hub dependency; accepted Orion runtime remained unchanged. SP4B v2 carries the bounded source fix.
-- **SP4B v2 PASS** - committed source rebuilt a disposable functional Orion runtime; pinned F5E hashes, iai 3.0.8/Python 3.12, `recent_thread`, and ddgs 9.14.4 passed while the accepted runtime remained unchanged.
-Important paths:
-- `scripts/phase2/accepted/`
-- `scripts/phase3/accepted/`
-- `scripts/source-preservation-accepted-manifest.md`
-- `build/orion-runtime/historical/`
-- `build/orion-runtime/accepted-build-lineage.md`
-- `build/orion-runtime/rebuild/`
-- `docs/rebuild/reproducibility-inventory.md`
-- `scripts/rebuild/Prepare-Orion-Recovery-Workspace.ps1`
-- `docs/rebuild/clean-machine-bootstrap.md`
-The MVP source-preservation gate is **functionally closed**. SP4B v2 rebuilt the committed runtime source successfully under disposable tags, and the clean-machine recovery helper/procedure are preserved. This is functional source reproducibility, not a byte-identical Docker-image claim.
-GitHub must never contain credentials, `.env` secrets, the iai encryption key, decrypted memory exports, private vault contents, or runtime data volumes.
-## Accepted MVP memory baseline
-The accepted iai/Hermes memory runtime uses:
-- canonical container: `orion-iai-m5-c`
-- image: `orion-hermes-iai:v2026.8.18-iai3.0.8-m5-serializerfix`
-- image ID: `sha256:0222e2199cbb135bf1989283b1dba7a36f936aab3f82c3fbae048659dd8b2500`
-- persistent volume: `orion-iai-m5-data`
-- COMPANION store: `/opt/data/profiles/companion/.iai-mcp`
-- native iai Brain dashboard: `http://127.0.0.1:4477/`
-The M5 serializer compatibility issue for `SessionStartPayload.recent_thread` is tracked upstream as `CodeAbra/iai-personal-memory-engine#156`. If upstream resolves it, Orion should prefer the upstream fix and retire the temporary local compatibility overlay.
-## Accepted Phase 3 document workflow
-`Obsidian vault -> native iai watch / memory -> recall + exact source resolution -> Orion inbox draft -> iai-backed destination recommendation -> explicit approval -> controlled move/edit -> recovery / restore`
-Accepted boundaries:
-- normal exact retrieval uses a read-only vault sidecar;
-- Orion drafts are created only in `C:\Personal\Orion-Inbox`;
-- drafts remain outside the authoritative vault until explicitly promoted;
-- vault changes use preview + exact diff + approval token + stale-preview protection;
-- successful changes create recovery evidence in `C:\Personal\Orion-Recovery`;
-- iai remains separate from document write-control semantics.
-## Phase 4 direction
-Phase 4 adapts the proven `jarvis_ai` HUD/voice application into Orion rather than building a parallel interface.
-P4-02A established that the accepted Hermes/iai container has no published ports, Hermes ports `8642` and `9119` are not listening inside the container, Windows ports `8642` and `9119` are closed, native iai Brain `4477` is open, and the resolved Hermes API route is `not-listening`.
-P4-02B1 is now accepted and closed. v4 applied only the four `API_SERVER_*` settings to `/opt/data/profiles/companion/.env`, used the supervised `hermes -p companion gateway restart` lifecycle, authenticated successfully to `/v1/models` over `orion-control-net`, kept Windows host `8642` closed, preserved one COMPANION gateway, preserved native iai Brain, preserved the accepted iai volume, and did not restart the Docker container. The successful v4 artifact SHA-256 is `0c186434b41a10830a180415b493d4627d861396e7131d2cd8ed917f15d9525a`; exact accepted source was promoted at commit `ce2afe0223f088d53d714267f1723bc22b659622` with Git blob `b5eb3c51f2f76cc7a0647a8a53acc6f04de1f928`.
-Detailed evidence is in `docs/phase4/p4-02b1-hermes-api-enablement.md`.
+
 ## Security and evidence rules
-- No credentials, Discord tokens, API keys, `.env` files, decrypted memory exports, vault contents, or private runtime dumps belong in GitHub.
-- Installed-runtime observations are distinguished from upstream/source claims.
-- Failed harness revisions are not promoted as canonical diagnostics.
-- iai remains the memory authority; Orion must not create a competing semantic-memory store.
-- Existing vault edits/moves remain approval-gated and recoverable.
-- Accepted operational scripts must be stored in GitHub, not left only as local artifacts.
-- When code or configuration creates an accepted runtime state, documentation-only closure is not sufficient; the implementation artifact must be preserved in the appropriate repository.
-## Repository structure
-- `build/orion-runtime/` — accepted runtime build-source evidence and canonical rebuild candidate
-- `docs/architecture/` — runtime architecture and trust-boundary notes
-- `docs/decisions/` — architectural/product decisions
-- `docs/rebuild/` — rebuild/source-preservation inventory and acceptance records
-- `docs/phase1/` through `docs/phase4/` — phase plans, evidence, and closure records
-- `scripts/diagnostics/` — accepted reusable diagnostics
-- `scripts/phase2/accepted/` — preserved accepted Phase 2 operational source
-- `scripts/phase3/accepted/` — preserved accepted Phase 3 operational source
-- `scripts/phase4/` — Phase 4 integration/bootstrap scripts
-## Current next step
-1. Begin **P4-02B2 — typed Orion HUD -> Hermes -> iai integration** by placing the Orion/Jarvis server on `orion-control-net`, keeping the Hermes bearer key server-side, and proving a real typed turn.
-2. Preserve the exact accepted P4-02B2 application/runtime adaptation in `S-Pillow/jarvis_ai` and record cross-repo acceptance evidence in `S-Pillow/orion-personal-ai`.
-3. Add voice only after the typed Hermes/HUD path is stable.
+
+- Never commit Discord tokens, API keys, `.env` files, iai encryption keys, decrypted memory exports, private vault contents, or runtime data.
+- Never print secret values into acceptance evidence; presence/length checks are sufficient.
+- Installed-runtime observations must be distinguished from upstream source claims.
+- No accepted Windows feature should depend only on an interactive console paste; mutation/setup logic must have durable PowerShell source and rollback targets.
+- Do not run `hermes update` during the Phase 0/1 pin freeze.
+- Do not enable optional paid/cloud paths without explicit authorization.
+- Do not treat historical Docker acceptance as native-Windows acceptance.
+
+## Resume point
+
+The next implementation session should begin from this exact checkpoint:
+
+1. Preserve the stock iai 3.0.8 `signal.SIGHUP` Windows crash as baseline evidence.
+2. Decide whether to apply a narrowly scoped Windows compatibility patch or use an upstream-supported fix, without changing memory semantics.
+3. Start `iai-mcp-daemon` successfully and rerun `iai-mcp doctor`.
+4. Verify capture hooks.
+5. Verify recall.
+6. Configure and test `idle_timeout_seconds`.
+7. Run full independent lifecycle/HIBERNATION tests, including the heartbeat-idle fallback behavior on Windows.
+8. Make the OR-LIFE-007 accept-vs-patch decision from observed behavior.
+9. Only after Phase 1 acceptance, resume HUD work; vault-actions, reminders, OpenAI-dependent features, and voice remain later work.
