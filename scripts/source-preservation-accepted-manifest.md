@@ -1,10 +1,22 @@
-﻿# Accepted Source Preservation Manifest
+# Source Preservation Manifest
 
-Generated from SP1-verified local artifacts on August 27, 2026.
+Updated 2026-08-29 for **ORION — Master PRD v2.6 (AI-Optimized Execution Edition)**.
 
-Only accepted/current Phase 2 and Phase 3 artifacts are listed here. Superseded or failed harness revisions are intentionally excluded.
+This manifest now distinguishes the current native-Windows baseline from preserved historical Docker-era artifacts.
 
-| Repository path | SHA-256 |
+## Current native-Windows accepted source
+
+| Repository path | Status | SHA-256 |
+| --- | --- | --- |
+| `scripts/phase0/Orion-Phase0-Hermes-Native-AcceptedBaseline.ps1` | **CURRENT / ACCEPTED PHASE 0** | `e64cdfc471754547671259e8ae09d0167dc9e8dbcf359b1effb6a1da09086e85` |
+
+The Phase 0 script contains no API keys, Discord tokens, or iai encryption keys. It preserves Configure / Verify / Rollback logic for the accepted native Hermes baseline and never runs `hermes update`.
+
+## Historical Docker-era accepted source
+
+The following scripts were accepted under the previous container architecture. They remain preserved for provenance and legacy recovery, but are **not current v2.6 acceptance** unless separately revalidated.
+
+| Repository path | Historical SHA-256 |
 | --- | --- |
 | `scripts/phase2/accepted/Orion-Phase2-Erase-Isolation-Closeout.ps1` | `e6d8eebcd2cecfcdbf0fc725ca047aa2a54a46e6e1e3c4607a739f90c14da77c` |
 | `scripts/phase3/accepted/Orion-Phase3-Create-Vault-Retrieval-Sidecar-v2.ps1` | `b8ae39ce8c4fe9543c2e7c6f46e0cd3a9608d759d35bf9e585ceb36aa90768a1` |
@@ -18,4 +30,10 @@ Only accepted/current Phase 2 and Phase 3 artifacts are listed here. Superseded 
 | `scripts/phase3/accepted/Orion-Phase3-P3-06-Vault-Destination-Recommender.ps1` | `96fa3b6030100e1592a9f7ae60a08acaf2545ebc3e6fb138637a43a5cae0fdbb` |
 | `scripts/phase3/accepted/Orion-Phase3-P3-06-Vault-Destination-Recommender-Acceptance.ps1` | `e16bd6e3aaf4f0aed352521a161215316c656c03407fb55d347d1f5b7ad9cf2a` |
 
-This manifest preserves source identity only. Secrets, vault content, memory data, and private runtime state are not stored in the repository.
+## Phase 1 source status
+
+No Orion Phase 1 compatibility patch is accepted yet.
+
+Current stock `iai-pme==3.0.8` Windows daemon startup is blocked by an unguarded `signal.SIGHUP` reference. If Orion authorizes and accepts a compatibility patch, the patch must be preserved in `S-Pillow/iai-personal-memory-engine`, and any Orion-owned setup/verification/rollback script must be added here before Phase 1 closure.
+
+This manifest preserves source identity only. Secrets, vault content, memory data, `.env` contents, iai encryption keys, and private runtime state are not stored in the repository.
