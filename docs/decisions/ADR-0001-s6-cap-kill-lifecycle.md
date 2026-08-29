@@ -1,20 +1,23 @@
-# ADR-0001 — Use s6 + CAP_KILL for COMPANION gateway lifecycle
+# ADR-0001 — s6 + CAP_KILL for COMPANION gateway lifecycle
 
-Status: **Accepted**
+Status: **SUPERSEDED / HISTORICAL**
 
-Date: 2026-08-22
+Original decision date: 2026-08-22  
+Superseded: 2026-08-29 by **ORION — Master PRD v2.6 (AI-Optimized Execution Edition)** and the accepted native-Windows Phase 0 baseline.
 
-## Context
+> This ADR preserves valid evidence from the former Docker/s6 implementation. It is no longer a controlling Orion architecture decision. Current Hermes lifecycle acceptance uses the native Windows installation, named `companion` profile, and Windows Scheduled Task `Hermes_Gateway_companion`. Do not apply this ADR to the v2.6 runtime unless the project explicitly returns to the historical container architecture.
 
-Orion runs Hermes in a hardened Docker container with `--cap-drop ALL` and a narrowly restored capability set. Hermes dynamically creates per-profile s6 services under `/run/service` and runs gateway children as the unprivileged Hermes UID.
+## Historical context
 
-During Phase 1, `hermes -p companion gateway stop` could successfully register a down request with s6 while leaving the UID-10000 COMPANION gateway child alive. Host-side owner-UID signaling proved operationally able to terminate that child, but that approach requires Docker host/socket authority.
+Orion previously ran Hermes in a hardened Docker container with `--cap-drop ALL` and a narrowly restored capability set. Hermes dynamically created per-profile s6 services under `/run/service` and ran gateway children as the unprivileged Hermes UID.
 
-Installed-source alignment confirmed that the canonical image contains the exact `v2026.8.18` Hermes `service_manager.py` and `container_boot.py` implementations used by the documented s6 lifecycle path.
+During that implementation, `hermes -p companion gateway stop` could successfully register a down request with s6 while leaving the UID-10000 COMPANION gateway child alive. Host-side owner-UID signaling proved operationally able to terminate that child, but that approach required Docker host/socket authority.
 
-## Evidence
+Installed-source alignment confirmed that the historical image contained the exact `v2026.8.18` Hermes `service_manager.py` and `container_boot.py` implementations used by the documented s6 lifecycle path.
 
-A controlled disposable A/B test held all tested runtime conditions constant except `CAP_KILL`:
+## Historical evidence
+
+A controlled disposable A/B test held all tested runtime conditions constant except `CAP_KILL`.
 
 ### Variant A — without CAP_KILL
 
@@ -31,64 +34,55 @@ A controlled disposable A/B test held all tested runtime conditions constant exc
 - child terminated
 - service reached a clean down state
 
-Canonical acceptance after launcher remediation additionally proved:
+Historical canonical acceptance additionally proved:
 
 - PID 1 = `s6-svscan`
-- Hermes detects service manager = `s6`
+- Hermes service manager = `s6`
 - PID 1 effective `CAP_KILL` = present
 - DEFAULT remained up and retained the same gateway PID through COMPANION start/stop
 - COMPANION completed a two-turn Discord conversation with same-session context recall
 - COMPANION child was absent after stop
 - durable end state DEFAULT `running`, COMPANION `stopped`
 
-## Decision
+## Historical decision
 
-Use the Hermes s6 service-manager lifecycle as the canonical COMPANION gateway control path and grant `CAP_KILL` to the container in addition to the previously accepted narrow capability set.
+For that Docker/s6 runtime only, Orion selected the Hermes s6 service-manager lifecycle and granted `CAP_KILL` to the container in addition to the previously accepted narrow capability set.
 
-Accepted launcher SHA-256:
+Historical accepted launcher SHA-256:
 
 ```text
 c265f485298d488bcd0a5f368138cef3b1db75bfddd831c794e5bbe06a411a7b
 ```
 
-The launcher continues to use:
+The historical launcher used:
 
 - `--cap-drop ALL`
 - narrowly restored capabilities
 - `no-new-privileges`
 - bridge networking with no published host ports
 
-## Rejected / not selected alternatives
+## Historical alternatives considered
 
 ### Host-side owner-UID signal mediator
 
-Operationally proven but not selected because it requires Docker host/socket authority and is therefore a broader control boundary than the accepted in-container s6 path.
+Operationally proven but not selected because it required Docker host/socket authority and therefore created a broader control boundary than the in-container s6 path.
 
 ### Leave CAP_KILL absent
 
 Rejected because the controlled differential reproduced the failed cross-UID stop behavior without it.
 
-## Consequences
+## Current replacement
 
-Positive:
+The accepted v2.6 Phase 0 runtime is native Windows:
 
-- lifecycle follows Hermes' intended service-manager architecture
-- COMPANION stop is reversible and bounded
-- DEFAULT non-disruption is proven
-- no Docker socket authority is required for routine COMPANION lifecycle control
+- Hermes tag `v2026.8.27`
+- package `0.20.6`
+- commit `5fc308a70719a83cccdbba4c0e39c23f5a8239d5`
+- profile `companion`
+- persistence task `Hermes_Gateway_companion`
+- task run level Limited / least privilege
+- authenticated loopback API `127.0.0.1:8642`
+- local model `qwen3.5-hermes:9b`
+- real Windows restart acceptance passed
 
-Trade-off:
-
-- the container receives one additional Linux capability, `CAP_KILL`
-
-This capability is retained because its necessity was causally demonstrated for the accepted cross-UID s6 stop path.
-
-## Revisit conditions
-
-Revisit this decision only if one of the following occurs:
-
-- Hermes changes the ownership/supervision model so cross-UID signaling is no longer required
-- a future pinned Hermes release provides an equally reliable narrower lifecycle mechanism
-- the container architecture changes such that s6 no longer directly supervises the Hermes-owned gateway child
-
-A version upgrade alone is not sufficient reason to remove this decision without regression evidence.
+The old Docker/s6 findings remain useful only for provenance, regression archaeology, or an explicitly authorized restoration of the legacy architecture.
