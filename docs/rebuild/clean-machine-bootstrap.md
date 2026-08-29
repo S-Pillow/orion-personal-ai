@@ -1,63 +1,94 @@
 # Orion clean-machine source and recovery procedure
 
-This procedure prevents Orion from depending on one workstation.
+Status: **NATIVE-WINDOWS RECOVERY IN PROGRESS — updated 2026-08-29**
+
+This procedure prevents Orion from depending on one workstation. It has been realigned to **ORION — Master PRD v2.6 (AI-Optimized Execution Edition)**.
+
+## Current architecture
+
+The controlling runtime is native Windows, not the former Docker/s6 stack.
+
+Current accepted baseline:
+
+- Hermes tag `v2026.8.27`
+- package `0.20.6`
+- commit `5fc308a70719a83cccdbba4c0e39c23f5a8239d5`
+- profile `companion`
+- Windows persistence task `Hermes_Gateway_companion`
+- loopback API `127.0.0.1:8642`
+- local Ollama model `qwen3.5-hermes:9b`
+- verified context `65536`
 
 ## Source repositories
 
-Clone:
+Clone at minimum:
 
 - `S-Pillow/orion-personal-ai`
-- `S-Pillow/jarvis_ai`
 - `S-Pillow/iai-personal-memory-engine`
 
-The Orion HUD uses the `orion-mvp` branch of `jarvis_ai`.
-The iai fork tracks upstream compatibility; upstream iai semantics remain controlling.
+`S-Pillow/jarvis_ai` is historical/possible-future HUD source and is not required for the current Phase 0/1 recovery path.
 
-## Recovery helper
+## Native Phase 0 recovery
 
-From `orion-personal-ai`, plan only:
+The accepted Phase 0 reproducibility artifact is:
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\scripts\rebuild\Prepare-Orion-Recovery-Workspace.ps1"
-```
+`scripts/phase0/Orion-Phase0-Hermes-Native-AcceptedBaseline.ps1`
 
-Prepare the source workspace:
+Use its `Verify` mode first on a machine believed to contain the accepted baseline. Use `Configure` only when intentionally reconstructing the accepted Phase 0 state and after reviewing local secret inputs/rollback requirements.
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\scripts\rebuild\Prepare-Orion-Recovery-Workspace.ps1" -ExecuteSourceSetup
-```
-
-Prepare source and execute the canonical runtime rebuild:
+Example verification:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\scripts\rebuild\Prepare-Orion-Recovery-Workspace.ps1" -ExecuteSourceSetup -BuildRuntime
+powershell.exe `
+  -NoProfile `
+  -ExecutionPolicy Bypass `
+  -File ".\scripts\phase0\Orion-Phase0-Hermes-Native-AcceptedBaseline.ps1" `
+  -Action Verify
 ```
 
-The helper uses `orion-recovery-*` rebuild tags. It does not restore personal data or
-credentials automatically.
+The script never runs `hermes update` and does not print API or Discord secret values.
+
+## Native Phase 1 recovery status
+
+Native Phase 1 is not yet accepted.
+
+Current known state:
+
+- Python 3.11 dedicated venv
+- `iai-pme==3.0.8`
+- crypto initialization passed
+- Rust embedder passed
+- Scheduled Task registration succeeded
+- daemon startup is blocked by an upstream Windows `signal.SIGHUP` compatibility defect
+
+Do not treat iai capture/recall/HIBERNATION as recoverable accepted features yet. When an accepted compatibility solution exists, this procedure must be extended with exact Phase 1 install/configure/verify/rollback steps.
+
+## Historical Docker recovery
+
+The former Docker rebuild tooling remains in:
+
+- `scripts/rebuild/`
+- `build/orion-runtime/rebuild/`
+- historical SP4 documentation
+
+Those paths are frozen for legacy recovery and provenance. They are **not** the normal v2.6 recovery procedure. Do not execute the historical Docker build path unless legacy restoration is explicitly intended.
 
 ## Private recovery material
 
-Keep these outside public GitHub:
+Keep these outside GitHub:
 
-- provider/API credentials;
-- Discord credentials if used;
-- a valid native iai backup and/or the iai encryption key;
-- the Obsidian vault;
-- intentionally retained private exports/backups.
+- API/server credentials
+- Discord credentials
+- iai encryption key or accepted backup containing it
+- Obsidian vault contents when applicable
+- intentionally retained private exports/backups
 
-## SP4B v2 evidence
+## Current recovery claim
 
-Functional disposable rebuild passed on August 27, 2026.
+As of 2026-08-29:
 
-- source-fix commit: `e4ba3f91f0d1eb238f3e5f7e32a9349e87788a8a`
-- rebuilt final image ID: `sha256:d783e158062d865b1893306a0b835c576ee6e77a16e29ff41bb59354cade847e`
-- iai Python 3.12: PASS
-- iai-pme 3.0.8: PASS
-- pinned BGE artifact hashes: PASS
-- `recent_thread` serializer: PASS
-- ddgs 9.14.4: PASS
-- accepted live Orion runtime: unchanged
+- native Phase 0 recovery source: **preserved and accepted**
+- native Phase 1 recovery source: **incomplete**
+- full v2.6 clean-machine reconstruction: **not yet claimed**
 
-The rebuilt image is functionally equivalent for the validated contracts. This is not a
-byte-identical Docker-image claim.
+The historical SP4B Docker rebuild remains valid evidence for the former architecture only.
