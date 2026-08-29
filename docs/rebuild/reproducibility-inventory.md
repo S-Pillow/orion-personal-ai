@@ -1,82 +1,118 @@
 # Orion Reproducibility Inventory
-**Status: ACTIVE — August 27, 2026**
-This document tracks whether Orion can be rebuilt on a new machine from GitHub plus intentionally external private material.
+
+**Status: ACTIVE — updated 2026-08-29**
+
+This inventory tracks whether the **current native-Windows Orion architecture** can be reconstructed from GitHub plus intentionally external private material.
+
+## Controlling baseline
+
+Controlling requirements: **ORION — Master PRD v2.6 (AI-Optimized Execution Edition)**.
+
+Current implementation order:
+
+1. native Windows Hermes Phase 0
+2. native iai Phase 1
+3. HUD only after Phase 1 acceptance
+4. vault-actions and later capabilities afterward
+
+Historical Docker/s6/Jarvis material remains preserved but does not count as current v2.6 acceptance.
+
 ## Source repositories
-- `S-Pillow/orion-personal-ai` — Orion integration/control source, scripts, docs, rebuild instructions.
-- `S-Pillow/jarvis_ai` — Orion HUD/voice application fork.
-- `S-Pillow/iai-personal-memory-engine` — iai compatibility/tracking fork.
-## Preserved and reproducible source
-### Application / orchestration
-- Phase 4 HUD upstream baseline and exact pin.
-- Orion HUD `orion-mvp` branch at `aeb0643f8119a4d4f8b78a950194e9778eea4af2`.
-- P4-01 accepted fork-adoption implementation in `scripts/phase4/`.
-- P4-02A corrected runtime-discovery implementation in `scripts/phase4/p4-02a-runtime-fit-discovery-v2.ps1`.
-- Phase 1–4 architecture and acceptance records.
-- iai upstream source through the maintained fork.
-### Accepted Phase 2 / Phase 3 operational code
-SP2 preserved all 11 accepted local Phase 2/3 implementation artifacts in GitHub at commit `12d12f1e665110c494ecc758dfa52b4c51e0805f`.
-Canonical paths now include:
-- `scripts/phase2/accepted/Orion-Phase2-Erase-Isolation-Closeout.ps1`
-- `scripts/phase3/accepted/Orion-Phase3-Create-Vault-Retrieval-Sidecar-v2.ps1`
-- `scripts/phase3/accepted/Orion-Phase3-P3-02A-Native-Iai-Vault-Watch.ps1`
-- `scripts/phase3/accepted/Orion-Phase3-P3-02B-Exact-Vault-Resolver.ps1`
-- `scripts/phase3/accepted/Orion-Phase3-P3-03-Vault-Memory-Acceptance.ps1`
-- `scripts/phase3/accepted/Orion-Phase3-P3-04-Create-Inbox-Draft.ps1`
-- `scripts/phase3/accepted/Orion-Phase3-P3-04-Provision-Dedicated-Inbox-v3.ps1`
-- `scripts/phase3/accepted/Orion-Phase3-P3-05-Controlled-Vault-Broker-v2.ps1`
-- `scripts/phase3/accepted/Orion-Phase3-P3-05-Provision-And-Accept-Controlled-Broker-v3.ps1`
-- `scripts/phase3/accepted/Orion-Phase3-P3-06-Vault-Destination-Recommender.ps1`
-- `scripts/phase3/accepted/Orion-Phase3-P3-06-Vault-Destination-Recommender-Acceptance.ps1`
-Their accepted SHA-256 identities are recorded in `scripts/source-preservation-accepted-manifest.md`.
-### Accepted runtime build-source evidence
-SP3 preserved the available accepted runtime build-source evidence at commit `37d1b24121c68262585e0ab447e23d7c24a02ed3`.
-Preserved exact source:
-- `build/orion-runtime/historical/Start-Hermes.accepted.ps1`
-- `build/orion-runtime/historical/Dockerfile.hermes-ddgs.accepted`
-- `build/orion-runtime/historical/PH2-IAI-M2-v3.0.8-disposable-native-hermes-hook-wiring.ps1`
-- `build/orion-runtime/historical/PH2-IAI-M5-serializer-fix-build-v2.ps1`
-The build lineage is recorded in `build/orion-runtime/accepted-build-lineage.md`.
-The historical `PH2-IAI-M4-source-reviewed-final.ps1` file was not present locally and is not claimed preserved.
-### Canonical rebuild source candidate
-SP4A passed at commit `98aa7b73d2b14619264bcaabbbf6acadfee204e3`.
-`build/orion-runtime/rebuild/` now contains one canonical rebuild-source candidate covering:
-- the pinned Hermes v2026.8.18 base plus `ddgs==9.14.4`;
-- isolated CPython 3.12 and iai 3.0.0 F2 construction;
-- pinned BAAI/bge-small-en-v1.5 acquisition at revision `5c38ec7c405ec4b44b94cc5a9bb96e735b38267a`;
-- verification of the accepted model artifact hashes;
-- F5E model-bake assembly;
-- iai 3.0.8 upgrade;
-- reconstructed M4 `/opt/iai` composition into the Hermes/ddgs image;
-- bounded M5 `recent_thread` serializer compatibility overlay;
-- final-image verification;
-- a single `build-orion-runtime.ps1` orchestration entry point.
-SP4A generated the source, SHA-256 checked it, parsed the generated PowerShell with the actual Windows PowerShell parser, committed it, pushed it, and verified remote `main`. No Docker execution or runtime mutation occurred.
-Closure record: `docs/rebuild/sp4a-rebuild-source-candidate-closure.md`.
-## Functional source-reproducibility closure
-SP4B v2 passed. The committed source functionally rebuilt the Orion runtime under disposable tags while the accepted live runtime remained unchanged.
-Validated rebuilt final image ID:
-`sha256:d783e158062d865b1893306a0b835c576ee6e77a16e29ff41bb59354cade847e`
-Validated contracts:
-- pinned F5E model revision and accepted artifact hashes: PASS;
-- iai-pme 3.0.8 under isolated Python 3.12: PASS;
-- reconstructed combined runtime: PASS;
-- M5 `recent_thread` serializer compatibility: PASS;
-- ddgs 9.14.4: PASS;
-- accepted `orion-iai-m5-c` container and `orion-iai-m5-data` volume unchanged: PASS;
-- accepted container restart: none.
-The rebuilt Docker image is not claimed byte-identical to the historical accepted image. The accepted MVP claim is functional source reproducibility for the validated contracts.
-Recovery source:
-- `scripts/rebuild/Prepare-Orion-Recovery-Workspace.ps1`
-- `docs/rebuild/clean-machine-bootstrap.md`
-- `docs/rebuild/sp4b-v2-disposable-rebuild-closure.md`
+
+- `S-Pillow/orion-personal-ai` — current Orion integration/control source, scripts, docs, and evidence
+- `S-Pillow/iai-personal-memory-engine` — iai compatibility/upstream-tracking fork; candidate home for a narrowly scoped Windows compatibility patch if approved
+- `S-Pillow/jarvis_ai` — historical/possible-future HUD fork; inactive until native Phase 1 passes
+
+## Current preserved source
+
+### Native Phase 0 — source-preservation PASS
+
+Accepted source:
+
+- `scripts/phase0/Orion-Phase0-Hermes-Native-AcceptedBaseline.ps1`
+
+SHA-256:
+
+`e64cdfc471754547671259e8ae09d0167dc9e8dbcf359b1effb6a1da09086e85`
+
+This artifact preserves:
+
+- accepted Hermes tag/package/commit
+- named `companion` profile
+- local model/provider configuration
+- API enablement and secret-presence checks without exposing secret values
+- Windows Scheduled Task persistence
+- authenticated API verification
+- Ollama model/context verification
+- bounded rollback behavior
+- explicit prohibition on `hermes update`
+
+Accepted Phase 0 runtime snapshot:
+
+- Hermes tag `v2026.8.27`
+- package `0.20.6`
+- commit `5fc308a70719a83cccdbba4c0e39c23f5a8239d5`
+- profile `companion`
+- task `Hermes_Gateway_companion`
+- loopback API `127.0.0.1:8642`
+- model `qwen3.5-hermes:9b`
+- verified context `65536`
+
+Phase 0 source preservation is therefore closed.
+
+### Native Phase 1 — source-preservation OPEN
+
+Current stock state:
+
+- dedicated Python 3.11 venv established
+- `iai-pme==3.0.8` installed
+- crypto initialization passed
+- native Rust embedder passed
+- Windows Scheduled Task registration succeeded
+- stock daemon startup fails on Windows because startup references `signal.SIGHUP`, which Windows Python does not expose
+
+No Orion patch has yet been accepted. Therefore there is no Phase 1 compatibility code to preserve yet.
+
+Before Phase 1 can close, any accepted compatibility change and any Orion-owned setup/verification/rollback source must be committed to the appropriate repository.
+
+## Historical Docker-era source
+
+The following source remains intentionally preserved for provenance and legacy recovery:
+
+- `build/orion-runtime/`
+- `docs/phase2/`
+- `docs/phase3/`
+- `docs/phase4/`
+- `scripts/phase2/`
+- `scripts/phase3/`
+- `scripts/phase4/`
+- `scripts/rebuild/`
+
+Earlier SP2/SP3/SP4A/SP4B evidence demonstrated functional source reproducibility for the former Docker implementation. That evidence remains valid for that historical runtime only; it does not establish current native-Windows reproducibility beyond the pieces separately accepted under v2.6.
+
+The historical image/rebuild evidence is now explicitly labeled frozen/historical in:
+
+- `build/orion-runtime/accepted-build-lineage.md`
+- `build/orion-runtime/rebuild/README.md`
 
 ## External private recovery material
-A source rebuild intentionally does not include user data or secrets. Recovery separately requires securely retained copies of items such as:
-- API/provider credentials;
-- Discord credentials;
-- iai encryption key and/or a valid native iai backup containing it;
-- Obsidian vault data;
-- private runtime backups and memory exports as appropriate.
-These must never be committed to the public source repositories.
-## Completion condition
-For MVP, Orion's source-preservation gate is functionally closed: implementation source and rebuild logic are in GitHub, SP4B v2 completed a disposable functional rebuild, and the recovery helper/procedure are preserved. A future clean-hardware smoke may add confidence but is not required to resume Phase 4.
+
+A source rebuild intentionally excludes private material. Recovery separately requires securely retained copies of applicable items such as:
+
+- API/server credentials
+- Discord credentials
+- iai encryption key or accepted backup containing it
+- Obsidian vault data when later phases make it authoritative
+- intentionally retained private runtime backups/exports
+
+These must never be committed to GitHub.
+
+## Current completion condition
+
+At the 2026-08-29 checkpoint:
+
+- **Phase 0 native source reproducibility: PASS**
+- **Phase 1 native source reproducibility: INCOMPLETE / BLOCKED ON STOCK IAI WINDOWS COMPATIBILITY**
+- **full v2.6 clean-machine recovery: NOT YET CLAIMED**
+
+The next reproducibility milestone is to resolve the iai Windows daemon blocker, preserve the accepted Phase 1 implementation source, then extend clean-machine recovery around the accepted native architecture.
