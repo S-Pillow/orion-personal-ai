@@ -1,6 +1,6 @@
 # Orion Personal AI
 
-Orion is a privacy-first, local-first personal AI companion. The controlling implementation direction is now **native Windows**, centered on a pinned Hermes Agent runtime, the named `companion` profile, a local Ollama model, Discord, a loopback Hermes API, and a native iai memory stack.
+Orion is a privacy-first, local-first personal AI companion. The controlling implementation direction is **native Windows**, centered on a pinned Hermes Agent runtime, the named `companion` profile, a local Ollama model, Discord, a loopback Hermes API, and native iai memory.
 
 ## Controlling baseline
 
@@ -21,16 +21,17 @@ The previous Docker/s6/Jarvis-oriented implementation remains useful historical 
   - post-restart API inference passed
   - post-restart Discord round-trip passed
   - reproducible Phase 0 PowerShell verification passed
-- **Phase 1 — IN PROGRESS / PAUSED AT DIAGNOSTIC CHECKPOINT**
+- **Phase 1 — IN PROGRESS / MEMORY ACCEPTED / NEXT GATE OR-LIFE-008**
   - `iai-pme==3.0.8` installed in a dedicated native Python 3.11 virtual environment
-  - package dependency check passed
-  - iai crypto initialization passed
-  - native Rust embedder passed (`bge-small-en-v1.5`, 384 dimensions, AVX2 available)
-  - Windows Scheduled Task registration succeeded after one controlled elevated registration step
-  - task is current-user, interactive, least-privilege
-  - daemon startup is currently blocked by an upstream Windows bug in iai 3.0.8: startup references `signal.SIGHUP`, which does not exist on Windows
-  - `iai-mcp doctor` currently reports 2/33 FAIL, both caused by the daemon not reaching a running state
-  - capture hooks, recall acceptance, `idle_timeout_seconds`, independent HIBERNATION tests, and OR-LIFE-007 accept-vs-patch decision are **not yet complete**
+  - crypto and native Rust embedder accepted
+  - native Windows daemon compatibility characterized and brought to a usable state with narrowly scoped upstream-compatible fixes
+  - source-pinned native Windows Hermes recall/capture adapters installed through the supported iai Hermes hook path
+  - real Discord ambient capture accepted
+  - canonical iai persistence and explicit semantic recall accepted
+  - iai `wake_depth` changed from default `minimal` to supported `standard` so Hermes receives rendered session-start memory context
+  - real `/new` fresh-session Discord recall returned the exact captured marker without `session_search`
+  - Hermes built-in `MEMORY.md` and `USER.md` persistent memory targets disabled for COMPANION so iai remains the sole persistent memory authority
+  - next step: configure and verify OR-LIFE-008 `idle_timeout_seconds`, then run independent real-HIBERNATION lifecycle tests and the OR-LIFE-007 accept-vs-patch decision
 
 HUD, vault-actions, reminders, OpenAI-dependent features, and voice remain downstream work and must not begin until Phase 1 is accepted.
 
@@ -69,31 +70,9 @@ The native Windows restart acceptance proved all of the following without a manu
 
 The observed Discord cold-boot recovery delay was approximately five minutes and is recorded as non-blocking because recovery was automatic.
 
-## Phase 0 reproducibility
+## Phase 1 native iai acceptance checkpoint
 
-A durable PowerShell artifact was created and executed successfully on the Windows host:
-
-`%LOCALAPPDATA%\hermes\profiles\companion\orion\phase0\Orion-Phase0-Hermes-Native-AcceptedBaseline.ps1`
-
-The accepted verification run passed:
-
-- PowerShell parser gate
-- exact Hermes tag and commit
-- clean Hermes worktree
-- package version `0.20.6`
-- companion model configuration
-- API enablement and secret presence checks without printing secret values
-- Discord credential presence checks without printing secret values
-- Scheduled Task persistence
-- gateway process and loopback listener
-- authenticated API inference
-- Ollama model/context verification
-
-The script includes `Configure`, `Verify`, and bounded `Rollback` modes and never runs `hermes update`.
-
-## Phase 1 native iai checkpoint
-
-### Installation
+### Installation and crypto
 
 Native iai is intentionally isolated from both global Python and Hermes' runtime:
 
@@ -101,71 +80,97 @@ Native iai is intentionally isolated from both global Python and Hermes' runtime
 - venv: `%LOCALAPPDATA%\hermes\profiles\companion\iai\venv`
 - package: `iai-pme==3.0.8`
 - `pip check`: no broken requirements
-- commands present: `iai.exe`, `iai-mcp.exe`, `iai-mcp-core.exe`
-
-### Crypto and embedder
-
+- canonical store root: `%USERPROFILE%\.iai-mcp`
 - `iai-mcp crypto init`: passed
-- key file created under `%USERPROFILE%\.iai-mcp`
-- key contents must never be committed or printed
-- configured embedder passed using native Rust backend
-- dimensions: 384
-- model: `bge-small-en-v1.5`
-- AVX2: available
+- configured embedder: native Rust, `bge-small-en-v1.5`, 384 dimensions, AVX2 available
 
-### Windows daemon persistence
+### Native Windows daemon compatibility
 
-The stock iai 3.0.8 Windows installer renders a per-user Scheduled Task with:
+Stock iai 3.0.8 was characterized before modification. Initial native Windows boot failed on an unguarded `signal.SIGHUP` reference. That behavior remains preserved as baseline evidence.
 
-- task name: `iai-mcp-daemon`
-- logon trigger
-- `InteractiveToken`
-- `LeastPrivilege`
-- restart-on-failure
-- generated wrapper: `%USERPROFILE%\.iai-mcp\daemon-start.cmd`
-- working directory: `%USERPROFILE%\.iai-mcp`
+The Windows path was then corrected with narrowly scoped upstream-compatible compatibility changes rather than a replacement lifecycle system. iai remains responsible for its own daemon state, storage, retrieval, memory semantics, and lifecycle policy.
 
-Task creation initially returned `Access is denied` in a normal shell. A controlled one-time elevated install successfully registered the task. The registered task is confirmed as:
+### Hermes capture and recall integration
 
-- user: current Windows user
-- run level: Limited
-- logon type: Interactive
+Upstream iai 3.0.8 ships POSIX Hermes hook adapters. Orion uses source-pinned native Python equivalents for Windows, installed through the supported iai Hermes hook path.
 
-### Current Phase 1 blocker
+A stale Hermes gateway initially masked live capture because the gateway had started before the hook files and approvals existed. After the supported COMPANION gateway restart, the live process registered both `pre_llm_call` and `on_session_end` hooks.
 
-The task launches the correct dedicated Python interpreter, but iai 3.0.8 exits immediately with:
+A real Discord marker turn:
 
-```text
-AttributeError: module 'signal' has no attribute 'SIGHUP'
-```
+`ORION_CAPTURE_FRESH_GATEWAY_20260829`
 
-The failing path is the daemon boot signal-trace setup, which iterates over `SIGTERM`, `SIGINT`, and `SIGHUP` without guarding for Windows. Because the daemon exits before boot completes:
+was accepted through the full write path. The live session watermark advanced immediately after turn finalization; adapter source guarantees the deferred capture is flushed and atomically placed before watermark advancement.
 
-- no daemon PID state is created
-- no daemon port state is created
-- `iai-mcp daemon status` reports `daemon not running`
-- Scheduled Task `LastTaskResult` is `1`
-- `iai-mcp doctor` reports exactly two failures: daemon process absent and socket/port state absent
+A separate explicit iai recall probe returned the exact marker from the canonical store with `_source=daemon`, proving canonical persistence and semantic recall independently of Hermes.
 
-This is an **upstream iai 3.0.8 Windows compatibility blocker**, not a Hermes failure, not a crypto failure, and not an embedding failure.
+### Session-start recall mode
 
-The stock behavior has now been observed and documented. Do not run `doctor --apply` or make an unreviewed installed-package edit. On resume, decide on a narrow compatibility patch or an upstream-supported alternative, then re-run daemon/doctor acceptance.
+iai 3.0.8 defaults `wake_depth` to `minimal`. Under that mode, session-start builds compact pointer/handle metadata but renders no actual memory Markdown, so the Hermes pre-LLM hook receives an empty context even though the store and semantic recall are healthy.
 
-## Known non-blocking Phase 1 observations
+Orion now uses the supported iai setting:
 
-- Windows `HIDIdleTime` is unavailable on this machine; iai reports that L6 will fall back to heartbeat-idle only. This must be covered explicitly in later lifecycle/HIBERNATION tests.
-- Claude subscription credentials are absent; iai reports fallback to local Tier-0 consolidation. No Claude login is required for the current local-first shakeout.
-- `iai` is intentionally not placed on global `PATH`; Orion uses absolute paths into the dedicated venv.
-- missing store/HNSW files are expected on the fresh install before successful daemon/store activity.
+`wake_depth = standard`
+
+Verification:
+
+- profile returned `standard`
+- `iai-mcp session-start` returned exit `0`
+- non-empty stdout
+- exact captured marker present in the rendered payload
+
+This is a supported iai configuration change, not an Orion retrieval replacement.
+
+### Fresh-session ambient recall acceptance
+
+Hermes built-in persistent curated memory targets are disabled for COMPANION:
+
+- `memory.memory_enabled = false`
+- `memory.user_profile_enabled = false`
+
+This prevents Hermes `MEMORY.md` / `USER.md` from becoming a competing persistent memory authority.
+
+A real Discord `/new` started a fresh session. The first user question asked only for the ORION_CAPTURE marker and explicitly prohibited past-session search/tool use. Hermes returned exactly:
+
+`ORION_CAPTURE_FRESH_GATEWAY_20260829`
+
+No `Searching past sessions` indicator appeared. The same marker had already been independently proven present in iai's rendered `standard` session-start context.
+
+**Hermes <-> iai ambient capture/recall integration is accepted.**
+
+Intent-preservation status: **PRESERVED**.
+
+## Remaining Phase 1 lifecycle gates
+
+The next implementation work is lifecycle-only; the accepted capture path should not be reopened without contradictory evidence.
+
+1. Configure and test OR-LIFE-008 `idle_timeout_seconds` for the COMPANION iai MCP wrapper. Initial target: approximately `600` seconds, meaningfully below iai's 30-minute HIBERNATION threshold.
+2. Verify the intended sequence: wrapper recycled -> heartbeat stale -> persisted HIBERNATION -> daemon absent -> next interaction reconnects.
+3. Run OR-LIFE-003a direct-store fallback verification and require `_source: "direct-store"`.
+4. Run independent real-HIBERNATION Test A and Test B using separate HIBERNATION cycles.
+5. Measure OR-LIFE-003b wrapper-start to authenticated daemon-ready latency from a confirmed HIBERNATION + daemon-absent state.
+6. Make the OR-LIFE-007 Windows accept-vs-patch decision from observed wake behavior.
+7. Complete OR-LIFE-005 Windows restart/logoff/logon lifecycle acceptance.
+
+Do **not** substitute SLEEP for HIBERNATION. Test A and Test B must not reuse one HIBERNATION cycle because launching the wrapper for one test can wake the daemon and invalidate the other's precondition.
+
+## Separate maintenance observations
+
+These are real but do not invalidate memory acceptance:
+
+- Hermes Discord safe slash-command sync has hit its 600-second timeout on multiple starts; treat as a separate Hermes/Discord maintenance defect.
+- Hermes reports Python SQLite `3.40.1` and uses `journal_mode=DELETE` instead of WAL because of the WAL-reset corruption risk; handle separately from iai acceptance.
+- A Hermes tool-configuration walkthrough unintentionally refreshed `cua-driver` to `0.22.2`; verification showed autostart `not-registered` and telemetry `disabled`.
 
 ## Governing architecture
 
 - **Hermes Agent** is the native local agent runtime.
 - **Ollama** is the local model server for the current accepted baseline.
-- **qwen3.5-hermes:9b** is the currently accepted execution-time model choice, selected from local evidence rather than hard-coded by the PRD.
-- **Discord** is the accepted Phase 0 messaging surface.
+- **qwen3.5-hermes:9b** is the currently accepted execution-time model choice.
+- **Discord** is the accepted messaging surface.
 - **Hermes API** is enabled only for the named companion profile and bound to loopback for the current baseline.
-- **iai-pme 3.0.8** is the Phase 1 memory-engine candidate and remains pinned during the native shakeout.
+- **iai-pme 3.0.8** is the pinned Phase 1 memory engine.
+- **iai** is the sole persistent memory authority for Orion COMPANION; Hermes built-in curated persistent memory is disabled.
 - **Obsidian** remains the intended authoritative human-facing vault in later phases.
 - General computer control is outside the MVP.
 
@@ -183,8 +188,6 @@ Legacy artifacts include:
 
 These records must not be silently presented as current v2.6 acceptance. They are historical unless revalidated under the native Windows sequence.
 
-The old Docker COMPANION container was deliberately stopped during the native Discord cutover and its restart policy was set to `no` to prevent credential contention. No legacy runtime data was intentionally deleted.
-
 ## Repository strategy
 
 ### `S-Pillow/orion-personal-ai`
@@ -193,11 +196,11 @@ Canonical Orion integration/control repository for current architecture, executi
 
 ### `S-Pillow/iai-personal-memory-engine`
 
-Compatibility/tracking fork of `CodeAbra/iai-personal-memory-engine`. A narrow Windows compatibility patch may be carried here only if stock 3.0.8 behavior cannot satisfy the v2.6 Phase 1 acceptance gate and the patch is explicitly approved after stock behavior is documented.
+Compatibility/tracking fork of `CodeAbra/iai-personal-memory-engine`. Narrow Windows compatibility fixes may be carried here only when stock behavior cannot satisfy v2.6 and the changes preserve iai semantics rather than replacing them.
 
 ### `S-Pillow/jarvis_ai`
 
-Historical/possible-future HUD application fork. It is **not** the current active phase. HUD work resumes only after native iai Phase 1 acceptance.
+Historical/possible-future HUD application fork. It is **not** the current active phase. HUD work resumes only after native iai Phase 1 lifecycle acceptance.
 
 Hermes remains an upstream dependency unless sustained source-level changes later justify a fork.
 
@@ -213,14 +216,4 @@ Hermes remains an upstream dependency unless sustained source-level changes late
 
 ## Resume point
 
-The next implementation session should begin from this exact checkpoint:
-
-1. Preserve the stock iai 3.0.8 `signal.SIGHUP` Windows crash as baseline evidence.
-2. Decide whether to apply a narrowly scoped Windows compatibility patch or use an upstream-supported fix, without changing memory semantics.
-3. Start `iai-mcp-daemon` successfully and rerun `iai-mcp doctor`.
-4. Verify capture hooks.
-5. Verify recall.
-6. Configure and test `idle_timeout_seconds`.
-7. Run full independent lifecycle/HIBERNATION tests, including the heartbeat-idle fallback behavior on Windows.
-8. Make the OR-LIFE-007 accept-vs-patch decision from observed behavior.
-9. Only after Phase 1 acceptance, resume HUD work; vault-actions, reminders, OpenAI-dependent features, and voice remain later work.
+Proceed directly to **OR-LIFE-008**. Configure the COMPANION iai MCP wrapper `idle_timeout_seconds` to approximately `600` seconds, verify wrapper recycling behavior, then continue into the independent real-HIBERNATION lifecycle gates and the Windows accept-vs-patch decision.
