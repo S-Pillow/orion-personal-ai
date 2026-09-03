@@ -227,7 +227,7 @@ Discord model attempts to force an explicit `topology` tool call were inconclusi
 
 ### OR-LIFE-008 Hermes MCP idle recycling — PASS / ACCEPTED
 
-OR-LIFE-008 requires the Hermes-owned iai stdio wrapper to recycle meaningfully before iai's 30-minute HIBERNATION threshold so Hermes does not keep the wrapper alive indefinitely.
+OR-LIFE-008 requires the Hermes-owned iai stdio wrapper to recycle well before iai's 30-minute **SLEEP heartbeat-idle eligibility** threshold so Hermes does not keep the wrapper alive indefinitely.
 
 Configured:
 
@@ -309,9 +309,11 @@ Tests A and B must use separate confirmed HIBERNATION cycles because launching a
 
 Proceed to the **independent HIBERNATION lifecycle tests**.
 
-Before executing them, re-confirm the exact iai 3.0.8 Windows HIBERNATION preconditions and state transitions from pinned vendor source. The current expected sequence is:
+Before executing them, re-confirm the exact iai 3.0.8 Windows HIBERNATION preconditions and state transitions from pinned vendor source. Stock v3.0.8 clearly defines DROWSY after 5 minutes and SLEEP eligibility after 30 minutes of stale wrapper heartbeat; the deployed configuration also exposes `LIFECYCLE_HIBERNATE_AFTER_SEC=7200` (2 hours), while the actual HIBERNATION transition is tied to the SLEEP-cycle completion path. Treat the final wall-clock HIBERNATION timing as a source/runtime contract to verify, not as a presumed 30-minute transition.
 
-`Hermes wrapper recycled -> heartbeat becomes stale -> persisted HIBERNATION -> daemon absent -> next interaction starts a fresh wrapper -> iai ensureDaemonAlive() path runs`
+Current transition shape to verify on Windows:
+
+`Hermes wrapper recycled -> heartbeat becomes stale -> DROWSY/SLEEP eligibility -> sleep cycle -> persisted HIBERNATION -> daemon absent -> next interaction starts a fresh wrapper -> iai ensureDaemonAlive() path runs`
 
 Do not substitute SLEEP for HIBERNATION.
 
