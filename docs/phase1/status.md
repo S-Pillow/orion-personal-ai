@@ -1,6 +1,6 @@
 # Phase 1 Status
 
-Status: **IN PROGRESS — MEMORY INTEGRATION ACCEPTED / NEXT GATE OR-LIFE-008**
+Status: **IN PROGRESS — MEMORY INTEGRATION + OR-LIFE-008 ACCEPTED / NEXT GATE HIBERNATION LIFECYCLE**
 
 Controlling baseline: **ORION — Master PRD v2.6 (AI-Optimized Execution Edition)**, approved 2026-08-29.
 
@@ -33,7 +33,7 @@ The Hermes pin remains frozen through Phase 1. Do not run `hermes update` withou
 
 Prove whether pinned `iai-pme==3.0.8` can satisfy Orion's native-Windows memory and lifecycle requirements without replacing iai memory semantics or adding a parallel memory subsystem.
 
-Phase 1 is not complete until all lifecycle gates are accepted. Current remaining work begins with OR-LIFE-008 and then the independent HIBERNATION tests.
+Phase 1 is not complete until all lifecycle gates are accepted. Memory integration and OR-LIFE-008 are now accepted. Remaining work begins with the independent HIBERNATION lifecycle tests.
 
 ## Completed work
 
@@ -206,9 +206,56 @@ The accepted solution keeps:
 
 No second embedding/ranking/consolidation stack, capture service, gateway, or lifecycle supervisor was added.
 
+### Hermes-managed iai MCP registration — PASS
+
+The ambient Hermes hook installer and the MCP-over-stdio integration are separate vendor-supported surfaces. COMPANION originally had the ambient hook path active but no Hermes `mcp_servers` entry.
+
+The iai MCP server is now registered through Hermes using the bundled iai wrapper and absolute native-Windows paths:
+
+- server name `iai-mcp`
+- command `%LOCALAPPDATA%\hermes\node\node.exe`
+- wrapper `%LOCALAPPDATA%\hermes\profiles\companion\iai\venv\Lib\site-packages\iai_mcp\_wrapper\index.js`
+- `IAI_MCP_PYTHON` points to the isolated iai Python
+- `IAI_MCP_STORE` points to `%USERPROFILE%\.iai-mcp`
+- `TRANSFORMERS_VERBOSITY=error`
+- `TOKENIZERS_PARALLELISM=false`
+- server enabled
+
+Hermes discovery found all 14 iai MCP tools. A later direct `hermes -p companion mcp test iai-mcp` connected successfully in 1188 ms and discovered the same 14 tools.
+
+Discord model attempts to force an explicit `topology` tool call were inconclusive because the model returned `TOOL_NOT_CALLED`; this was not used as MCP health or lifecycle acceptance evidence.
+
+### OR-LIFE-008 Hermes MCP idle recycling — PASS / ACCEPTED
+
+OR-LIFE-008 requires the Hermes-owned iai stdio wrapper to recycle meaningfully before iai's 30-minute HIBERNATION threshold so Hermes does not keep the wrapper alive indefinitely.
+
+Configured:
+
+`mcp_servers.iai-mcp.idle_timeout_seconds = 600`
+
+Verification:
+
+- COMPANION config returned exactly `600`
+- `iai-mcp` listed enabled in Hermes MCP configuration
+- after supported COMPANION gateway restart, exactly one gateway-owned iai Node wrapper was observed
+- observed wrapper PID `26668`
+- wrapper creation time `2026-09-03 05:00:34` local
+- after `660` seconds with no Hermes/Discord activity, no iai wrapper process remained
+- acceptance script reported `PASS: gateway-owned iai MCP wrapper recycled after idle timeout.`
+
+Accepted runtime chain:
+
+`gateway starts -> Hermes starts iai MCP wrapper -> 600 s inactivity -> Hermes recycles wrapper`
+
+**OR-LIFE-008: ACCEPTED.**
+
+Intent-preservation status: **PRESERVED**.
+
+Hermes remains the MCP child-process owner; iai remains the daemon/store/lifecycle owner. No Orion supervisor or alternate lifecycle system was introduced.
+
 ## Separate issues discovered during memory acceptance
 
-These are real but do not invalidate the memory acceptance:
+These are real but do not invalidate the memory or OR-LIFE-008 acceptance:
 
 ### Discord slash-command synchronization
 
@@ -243,30 +290,32 @@ Accepted:
 7. iai `standard` session-start context
 8. real fresh-session Discord ambient recall
 9. competing Hermes built-in curated memory disabled
+10. Hermes-managed `iai-mcp` stdio registration
+11. OR-LIFE-008 `idle_timeout_seconds=600`
+12. real gateway-owned wrapper recycle after idle timeout
 
 Still open:
 
-1. OR-LIFE-008 — configure Hermes MCP `idle_timeout_seconds` meaningfully below iai's 30-minute HIBERNATION threshold; initial target `600` seconds
-2. independent real-HIBERNATION lifecycle Test A
-3. independent real-HIBERNATION lifecycle Test B
-4. OR-LIFE-003a direct-store fallback verification as required by the lifecycle gate
-5. OR-LIFE-003b measured wrapper-start to authenticated daemon-ready latency from confirmed HIBERNATION + daemon-absent state
-6. OR-LIFE-007 Windows accept-vs-patch decision from observed wake behavior
-7. OR-LIFE-005 Windows restart/logoff/logon lifecycle acceptance
+1. independent real-HIBERNATION lifecycle Test A
+2. independent real-HIBERNATION lifecycle Test B
+3. OR-LIFE-003a direct-store fallback verification as required by the lifecycle gate
+4. OR-LIFE-003b measured wrapper-start to authenticated daemon-ready latency from confirmed HIBERNATION + daemon-absent state
+5. OR-LIFE-007 Windows accept-vs-patch decision from observed wake behavior
+6. OR-LIFE-005 Windows restart/logoff/logon lifecycle acceptance
 
 Tests A and B must use separate confirmed HIBERNATION cycles because launching a fresh wrapper for Test A can itself wake the daemon and invalidate the Test B precondition.
 
 ## Next execution step
 
-Proceed to **OR-LIFE-008**.
+Proceed to the **independent HIBERNATION lifecycle tests**.
 
-Configure the COMPANION iai MCP wrapper `idle_timeout_seconds` to approximately `600` seconds so the wrapper can recycle before iai's 30-minute HIBERNATION threshold. Then verify the intended sequence:
+Before executing them, re-confirm the exact iai 3.0.8 Windows HIBERNATION preconditions and state transitions from pinned vendor source. The current expected sequence is:
 
-`wrapper recycled -> heartbeat stale -> persisted HIBERNATION -> daemon absent -> next interaction reconnects`
+`Hermes wrapper recycled -> heartbeat becomes stale -> persisted HIBERNATION -> daemon absent -> next interaction starts a fresh wrapper -> iai ensureDaemonAlive() path runs`
 
 Do not substitute SLEEP for HIBERNATION.
 
-After OR-LIFE-008 is verified, run the two independent HIBERNATION acceptance cycles and measure real Windows wake behavior before deciding whether any additional upstream-compatible iai lifecycle patch is justified.
+Measure real Windows behavior before deciding whether any additional upstream-compatible iai lifecycle patch is justified. The Windows wake/activation decision remains evidence-driven under OR-LIFE-007.
 
 ## Explicit non-goals
 
@@ -277,5 +326,6 @@ Do not:
 - create an Orion lifecycle supervisor
 - treat SLEEP as evidence for HIBERNATION
 - reopen the accepted capture path without contradictory evidence
+- reopen OR-LIFE-008 without contradictory runtime evidence
 - begin HUD integration before Phase 1 lifecycle acceptance
 - delete historical evidence solely to make the current state look cleaner
