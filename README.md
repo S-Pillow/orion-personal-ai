@@ -21,7 +21,7 @@ The previous Docker/s6/Jarvis-oriented implementation remains useful historical 
   - post-restart API inference passed
   - post-restart Discord round-trip passed
   - reproducible Phase 0 PowerShell verification passed
-- **Phase 1 — IN PROGRESS / MEMORY ACCEPTED / NEXT GATE OR-LIFE-008**
+- **Phase 1 — IN PROGRESS / MEMORY + OR-LIFE-008 ACCEPTED / NEXT: HIBERNATION LIFECYCLE**
   - `iai-pme==3.0.8` installed in a dedicated native Python 3.11 virtual environment
   - crypto and native Rust embedder accepted
   - native Windows daemon compatibility characterized and brought to a usable state with narrowly scoped upstream-compatible fixes
@@ -31,7 +31,10 @@ The previous Docker/s6/Jarvis-oriented implementation remains useful historical 
   - iai `wake_depth` changed from default `minimal` to supported `standard` so Hermes receives rendered session-start memory context
   - real `/new` fresh-session Discord recall returned the exact captured marker without `session_search`
   - Hermes built-in `MEMORY.md` and `USER.md` persistent memory targets disabled for COMPANION so iai remains the sole persistent memory authority
-  - next step: configure and verify OR-LIFE-008 `idle_timeout_seconds`, then run independent real-HIBERNATION lifecycle tests and the OR-LIFE-007 accept-vs-patch decision
+  - Hermes-managed `iai-mcp` stdio server registered with the bundled iai wrapper and isolated Windows Python/store paths
+  - direct Hermes MCP connectivity test passed and discovered all 14 iai tools
+  - OR-LIFE-008 `idle_timeout_seconds=600` accepted by real runtime observation: one gateway-owned wrapper existed after gateway start and was gone after 660 seconds of inactivity
+  - next step: independent real-HIBERNATION Test A and Test B, OR-LIFE-003a/003b, then OR-LIFE-007 Windows accept-vs-patch decision
 
 HUD, vault-actions, reminders, OpenAI-dependent features, and voice remain downstream work and must not begin until Phase 1 is accepted.
 
@@ -140,27 +143,53 @@ No `Searching past sessions` indicator appeared. The same marker had already bee
 
 Intent-preservation status: **PRESERVED**.
 
+### Hermes-managed iai MCP + OR-LIFE-008
+
+The iai Hermes ambient hooks and the MCP-over-stdio server are separate vendor-supported integration surfaces. COMPANION now has both.
+
+Hermes MCP configuration uses:
+
+- server `iai-mcp`
+- Hermes-managed Node executable
+- bundled iai `_wrapper/index.js`
+- isolated COMPANION iai Python through `IAI_MCP_PYTHON`
+- canonical `%USERPROFILE%\.iai-mcp` store through `IAI_MCP_STORE`
+- `idle_timeout_seconds: 600`
+
+Hermes discovered all 14 iai MCP tools. A direct `hermes -p companion mcp test iai-mcp` connected successfully in 1188 ms and again discovered all 14 tools.
+
+OR-LIFE-008 runtime acceptance then proved:
+
+- supported COMPANION gateway restart started one gateway-owned iai Node wrapper
+- observed wrapper PID `26668`, created `2026-09-03 05:00:34` local
+- after 660 seconds of no Hermes/Discord activity, the wrapper process was absent
+- no Orion supervisor or alternate lifecycle component was introduced
+
+**OR-LIFE-008 is accepted.**
+
+Intent-preservation status: **PRESERVED**.
+
 ## Remaining Phase 1 lifecycle gates
 
-The next implementation work is lifecycle-only; the accepted capture path should not be reopened without contradictory evidence.
+The next implementation work is lifecycle-only; the accepted capture path and OR-LIFE-008 should not be reopened without contradictory evidence.
 
-1. Configure and test OR-LIFE-008 `idle_timeout_seconds` for the COMPANION iai MCP wrapper. Initial target: approximately `600` seconds, meaningfully below iai's 30-minute HIBERNATION threshold.
-2. Verify the intended sequence: wrapper recycled -> heartbeat stale -> persisted HIBERNATION -> daemon absent -> next interaction reconnects.
+1. Re-confirm pinned iai 3.0.8 Windows HIBERNATION preconditions/state transitions before execution.
+2. Run independent real-HIBERNATION Test A and Test B using separate HIBERNATION cycles.
 3. Run OR-LIFE-003a direct-store fallback verification and require `_source: "direct-store"`.
-4. Run independent real-HIBERNATION Test A and Test B using separate HIBERNATION cycles.
-5. Measure OR-LIFE-003b wrapper-start to authenticated daemon-ready latency from a confirmed HIBERNATION + daemon-absent state.
-6. Make the OR-LIFE-007 Windows accept-vs-patch decision from observed wake behavior.
-7. Complete OR-LIFE-005 Windows restart/logoff/logon lifecycle acceptance.
+4. Measure OR-LIFE-003b wrapper-start to authenticated daemon-ready latency from a confirmed HIBERNATION + daemon-absent state.
+5. Make the OR-LIFE-007 Windows accept-vs-patch decision from observed wake behavior.
+6. Complete OR-LIFE-005 Windows restart/logoff/logon lifecycle acceptance.
 
 Do **not** substitute SLEEP for HIBERNATION. Test A and Test B must not reuse one HIBERNATION cycle because launching the wrapper for one test can wake the daemon and invalidate the other's precondition.
 
 ## Separate maintenance observations
 
-These are real but do not invalidate memory acceptance:
+These are real but do not invalidate memory or OR-LIFE-008 acceptance:
 
 - Hermes Discord safe slash-command sync has hit its 600-second timeout on multiple starts; treat as a separate Hermes/Discord maintenance defect.
 - Hermes reports Python SQLite `3.40.1` and uses `journal_mode=DELETE` instead of WAL because of the WAL-reset corruption risk; handle separately from iai acceptance.
 - A Hermes tool-configuration walkthrough unintentionally refreshed `cua-driver` to `0.22.2`; verification showed autostart `not-registered` and telemetry `disabled`.
+- Discord attempts to force a model-selected `mcp__iai_mcp__topology` call returned `TOOL_NOT_CALLED`; this was not used as MCP health or lifecycle acceptance evidence because direct Hermes MCP connectivity and process-level runtime evidence were available.
 
 ## Governing architecture
 
@@ -216,4 +245,4 @@ Hermes remains an upstream dependency unless sustained source-level changes late
 
 ## Resume point
 
-Proceed directly to **OR-LIFE-008**. Configure the COMPANION iai MCP wrapper `idle_timeout_seconds` to approximately `600` seconds, verify wrapper recycling behavior, then continue into the independent real-HIBERNATION lifecycle gates and the Windows accept-vs-patch decision.
+Proceed to the **independent HIBERNATION lifecycle gates**. Before running them, verify the exact pinned iai 3.0.8 Windows HIBERNATION contract and preconditions from source, then run Test A and Test B in separate confirmed cycles and measure real wrapper-to-daemon wake behavior before the OR-LIFE-007 accept-vs-patch decision.
