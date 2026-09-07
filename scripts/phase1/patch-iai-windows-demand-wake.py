@@ -5,13 +5,14 @@ import argparse
 import hashlib
 import importlib.metadata
 import os
+import re
 import shutil
 import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
 
-PATCH_MARKER = "ORION_WINDOWS_DEMAND_WAKE_PATCH_V1"
+PATCH_MARKER = "ORION_WINDOWS_DEMAND_WAKE_PATCH_V2"
 EXPECTED_IAI_VERSION = "3.0.8"
 
 
@@ -23,7 +24,16 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def default_lifecycle_path() -> Path:
+def package_version() -> str:
+    for name in ("iai-pme", "iai_pme"):
+        try:
+            return importlib.metadata.version(name)
+        except importlib.metadata.PackageNotFoundError:
+            continue
+    return "unknown"
+
+
+def default_index_path() -> Path:
     local = os.environ.get("LOCALAPPDATA")
     if not local:
         raise RuntimeError("LOCALAPPDATA is not set")
@@ -38,7 +48,7 @@ def default_lifecycle_path() -> Path:
         / "site-packages"
         / "iai_mcp"
         / "_wrapper"
-        / "lifecycle.js"
+        / "index.js"
     )
 
 
@@ -49,22 +59,15 @@ def default_node_path() -> Path:
     return Path(local) / "hermes" / "node" / "node.exe"
 
 
-def package_version() -> str:
-    for name in ("iai-pme", "iai_pme"):
-        try:
-            return importlib.metadata.version(name)
-        except importlib.metadata.PackageNotFoundError:
-            pass
-    return "unknown"
-
-
 def find_matching_brace(text: str, open_index: int) -> int:
-    if text[open_index] != "{":
+    if open_index < 0 or open_index >= len(text) or text[open_index] != "{":
         raise ValueError("open_index does not point to '{'")
+
     depth = 0
     i = open_index
     state = "code"
     quote = ""
+
     while i < len(text):
         ch = text[i]
         nxt = text[i + 1] if i + 1 < len(text) else ""
@@ -74,6 +77,7 @@ def find_matching_brace(text: str, open_index: int) -> int:
                 state = "code"
             i += 1
             continue
+
         if state == "block_comment":
             if ch == "*" and nxt == "/":
                 state = "code"
@@ -81,6 +85,7 @@ def find_matching_brace(text: str, open_index: int) -> int:
                 continue
             i += 1
             continue
+
         if state == "string":
             if ch == "\\":
                 i += 2
@@ -103,6 +108,7 @@ def find_matching_brace(text: str, open_index: int) -> int:
             quote = ch
             i += 1
             continue
+
         if ch == "{":
             depth += 1
         elif ch == "}":
@@ -110,49 +116,101 @@ def find_matching_brace(text: str, open_index: int) -> int:
             if depth == 0:
                 return i
         i += 1
-    raise ValueError("no matching closing brace found")
+
+    raise RuntimeError("no matching closing brace found")
 
 
-def replace_named_function(text: str, name: str, replacement: str) -> str:
-    marker = f"function {name}("
+def named_block(text: str, marker: str) -> tuple[int, int, str]:
     start = text.find(marker)
     if start < 0:
-        raise RuntimeError(f"required function not found: {name}")
-    second = text.find(marker, start + 1)
-    if second >= 0:
-        raise RuntimeError(f"function appears more than once: {name}")
-    open_brace = text.find("{", start)
+        raise RuntimeError(f"required block not found: {marker}")
+    if text.find(marker, start + 1) >= 0:
+        raise RuntimeError(f"required block appears more than once: {marker}")
+    open_brace = text.find("{", start + len(marker))
     if open_brace < 0:
-        raise RuntimeError(f"opening brace not found for {name}")
+        raise RuntimeError(f"opening brace not found for: {marker}")
     end = find_matching_brace(text, open_brace)
-    return text[:start] + replacement.rstrip() + text[end + 1 :]
+    return start, end + 1, text[start : end + 1]
 
 
-SOCKET_REACHABLE = r'''function defaultSocketReachable(socketPath) {
-  // ORION_WINDOWS_DEMAND_WAKE_PATCH_V1: on Windows, iai uses authenticated
-  // loopback TCP (.daemon.port + .daemon.token), not a Unix-domain socket.
-  return async () => {
-    const { createConnection } = await import("node:net");
+def splice_block(text: str, start: int, end: int, replacement: str) -> str:
+    return text[:start] + replacement + text[end:]
+
+
+def regex_count(pattern: str, text: str) -> int:
+    return len(list(re.finditer(pattern, text, flags=re.MULTILINE)))
+
+
+def insert_after_regex_in_block(
+    text: str,
+    marker: str,
+    pattern: str,
+    insertion: str,
+) -> str:
+    start, end, block = named_block(text, marker)
+    matches = list(re.finditer(pattern, block, flags=re.MULTILINE))
+    if len(matches) != 1:
+        raise RuntimeError(
+            f"expected exactly one insertion anchor in {marker}, found {len(matches)}"
+        )
+    m = matches[0]
+    patched = block[: m.end()] + insertion + block[m.end() :]
+    return splice_block(text, start, end, patched)
+
+
+def insert_before_regex_in_block(
+    text: str,
+    marker: str,
+    pattern: str,
+    insertion: str,
+) -> str:
+    start, end, block = named_block(text, marker)
+    matches = list(re.finditer(pattern, block, flags=re.MULTILINE))
+    if len(matches) != 1:
+        raise RuntimeError(
+            f"expected exactly one insertion anchor in {marker}, found {len(matches)}"
+        )
+    m = matches[0]
+    patched = block[: m.start()] + insertion + block[m.start() :]
+    return splice_block(text, start, end, patched)
+
+
+SOCKET_INSERT = r'''
+    // ORION_WINDOWS_DEMAND_WAKE_PATCH_V2
+    // iai 3.0.8 uses authenticated loopback TCP on Windows, not a Unix socket.
     if (process.platform === "win32") {
       const { readFile } = await import("node:fs/promises");
-      const storeDir = dirname(socketPath);
-      const portPath = join(storeDir, ".daemon.port");
-      const tokenPath = join(storeDir, ".daemon.token");
+      const { dirname: pathDirname, join: pathJoin } = await import("node:path");
+      const storeDir = pathDirname(socketPath);
+      const endpointOverride = process.env.IAI_DAEMON_SOCKET_PATH;
+      const portPath = endpointOverride
+        ? `${endpointOverride}.port`
+        : pathJoin(storeDir, ".daemon.port");
+      const tokenPath = endpointOverride
+        ? `${endpointOverride}.token`
+        : pathJoin(storeDir, ".daemon.token");
+
       let port = 0;
       let token = "";
       try {
-        port = Number.parseInt((await readFile(portPath, { encoding: "utf-8" })).trim(), 10);
+        port = Number.parseInt(
+          (await readFile(portPath, { encoding: "utf-8" })).trim(),
+          10,
+        );
         token = (await readFile(tokenPath, { encoding: "utf-8" })).trim();
       } catch {
         return false;
       }
+
       if (!Number.isInteger(port) || port < 1 || port > 65535 || token.length === 0) {
         return false;
       }
+
       return await new Promise((resolve) => {
         let settled = false;
         let buffer = "";
         const socket = createConnection({ host: "127.0.0.1", port });
+
         const settle = (value) => {
           if (settled) return;
           settled = true;
@@ -162,27 +220,35 @@ SOCKET_REACHABLE = r'''function defaultSocketReachable(socketPath) {
           }
           resolve(value);
         };
+
         socket.setEncoding("utf8");
         socket.setTimeout(SOCKET_PROBE_TIMEOUT_MS);
+
         socket.once("connect", () => {
           try {
-            socket.write(`${token}\n`);
-            socket.write(`${JSON.stringify({ type: "status" })}\n`);
+            // Windows daemon contract: token is the first line, then JSON request.
+            socket.write(`${token}\n${JSON.stringify({ type: "status" })}\n`);
           } catch {
             settle(false);
           }
         });
+
         socket.on("data", (chunk) => {
           buffer += chunk;
-          const nl = buffer.indexOf("\n");
-          if (nl < 0) return;
+          const newline = buffer.indexOf("\n");
+          if (newline < 0) return;
           try {
-            const payload = JSON.parse(buffer.slice(0, nl));
-            settle(typeof payload === "object" && payload !== null);
+            const payload = JSON.parse(buffer.slice(0, newline));
+            settle(
+              typeof payload === "object" &&
+              payload !== null &&
+              payload.ok === true,
+            );
           } catch {
             settle(false);
           }
         });
+
         socket.once("error", () => settle(false));
         socket.once("timeout", () => settle(false));
         socket.once("end", () => settle(false));
@@ -191,161 +257,196 @@ SOCKET_REACHABLE = r'''function defaultSocketReachable(socketPath) {
         });
       });
     }
-    return await new Promise((resolve) => {
-      let settled = false;
-      const settle = (v) => {
-        if (settled) return;
-        settled = true;
-        try {
-          socket.destroy();
-        } catch {
-        }
-        resolve(v);
-      };
-      const socket = createConnection({ path: socketPath });
-      socket.setTimeout(SOCKET_PROBE_TIMEOUT_MS);
-      socket.once("connect", () => settle(true));
-      socket.once("error", () => settle(false));
-      socket.once("timeout", () => settle(false));
-    });
-  };
-}'''
+'''
 
-DAEMON_PID_ALIVE = r'''function defaultDaemonPidAlive(socketPath) {
-  // Identity-verified liveness. Windows does not have /bin/ps, so use the
-  // native CIM process table and preserve the same iai_mcp.daemon/store check.
-  return async () => {
-    const { readFile, realpath } = await import("node:fs/promises");
-    const storeDir = dirname(socketPath);
-    const statePath = join(storeDir, ".daemon-state.json");
-    let pid = 0;
-    try {
-      const raw = await readFile(statePath, { encoding: "utf-8" });
-      const parsed = JSON.parse(raw);
-      pid = typeof parsed.daemon_pid === "number" ? parsed.daemon_pid : 0;
-    } catch {
-      return false;
-    }
-    if (!Number.isInteger(pid) || pid <= 0) {
-      return false;
-    }
-    let resolvedStore = storeDir;
-    try {
-      resolvedStore = await realpath(storeDir);
-    } catch {
-      resolvedStore = storeDir;
-    }
-    try {
+PID_INSERT = r'''
       if (process.platform === "win32") {
+        // ORION_WINDOWS_DEMAND_WAKE_PATCH_V2
+        // Preserve identity-aware liveness using native Windows CIM rather
+        // than the POSIX-only /bin/ps path.
+        const { execFile: execFileWin } = await import("node:child_process");
+        const { promisify: promisifyWin } = await import("node:util");
+        const execFileWinAsync = promisifyWin(execFileWin);
         const psCommand =
           `$p = Get-CimInstance Win32_Process -Filter "ProcessId=${pid}" -ErrorAction SilentlyContinue; ` +
-          `if ($null -eq $p) { exit 1 }; [Console]::Out.Write([string]$p.CommandLine)`;
-        const { stdout } = await execFileAsync(
+          `if ($null -eq $p) { exit 1 }; ` +
+          `[Console]::Out.Write([string]$p.CommandLine)`;
+        const { stdout } = await execFileWinAsync(
           "powershell.exe",
           ["-NoProfile", "-NonInteractive", "-Command", psCommand],
           { timeout: PS_TIMEOUT_MS, windowsHide: true },
         );
         return titleIsDaemonOfStore(stdout, resolvedStore);
       }
-      const { stdout } = await execFileAsync(PS_BIN, ["-o", "command=", "-p", String(pid)], {
-        timeout: PS_TIMEOUT_MS,
-      });
-      return titleIsDaemonOfStore(stdout, resolvedStore);
-    } catch {
-      return false;
-    }
-  };
-}'''
+'''
 
-SPAWN_KICKSTART = r'''function defaultSpawnKickstart() {
-  return async () => {
+SPAWN_INSERT = r'''
     if (process.platform === "win32") {
-      // Reuse iai's own platform abstraction. On Windows this resolves to
-      // the installed per-user Task Scheduler task via `iai-mcp daemon start`.
-      await execFileAsync("iai-mcp", ["daemon", "start"], {
+      // ORION_WINDOWS_DEMAND_WAKE_PATCH_V2
+      // Reuse iai's vendor platform abstraction. `iai-mcp daemon start`
+      // dispatches to the installed per-user Task Scheduler task on Windows.
+      const { execFile: execFileWin } = await import("node:child_process");
+      const { promisify: promisifyWin } = await import("node:util");
+      const execFileWinAsync = promisifyWin(execFileWin);
+      await execFileWinAsync("iai-mcp", ["daemon", "start"], {
         timeout: KICKSTART_TIMEOUT_MS,
         windowsHide: true,
       });
       return;
     }
-    const uid = typeof process.getuid === "function" ? process.getuid() : 0;
-    await execFileAsync(LAUNCHCTL_BIN, kickstartArgs(uid), {
-      timeout: KICKSTART_TIMEOUT_MS,
-    });
-  };
-}'''
+'''
 
 
-def preflight(path: Path) -> tuple[str, str]:
+def validate_unpatched_shape(text: str) -> None:
+    required_markers = [
+        "function defaultSocketReachable(socketPath)",
+        "function defaultDaemonPidAlive(socketPath)",
+        "function defaultSpawnKickstart()",
+        "async ensureDaemonAlive()",
+        'WRAPPER_VERSION = "3.0.8"',
+    ]
+    missing = [m for m in required_markers if m not in text]
+    if missing:
+        raise RuntimeError(f"source-shape mismatch; missing anchors: {missing}")
+
+    for marker in required_markers[:4]:
+        if text.count(marker) != 1:
+            raise RuntimeError(
+                f"source-shape mismatch; expected one occurrence of {marker!r}, "
+                f"found {text.count(marker)}"
+            )
+
+    _, _, socket_block = named_block(text, "function defaultSocketReachable(socketPath)")
+    socket_anchor = r'const\s*\{\s*createConnection\s*\}\s*=\s*await\s+import\(["\']node:net["\']\)\s*;'
+    if regex_count(socket_anchor, socket_block) != 1:
+        raise RuntimeError("source-shape mismatch in defaultSocketReachable")
+
+    _, _, pid_block = named_block(text, "function defaultDaemonPidAlive(socketPath)")
+    pid_anchor = r'const\s*\{\s*stdout\s*\}\s*=\s*await\s+execFileAsync\(PS_BIN\s*,'
+    if regex_count(pid_anchor, pid_block) != 1:
+        raise RuntimeError("source-shape mismatch in defaultDaemonPidAlive")
+
+    _, _, spawn_block = named_block(text, "function defaultSpawnKickstart()")
+    spawn_anchor = r'const\s+uid\s*=\s*typeof\s+process\.getuid\s*===\s*["\']function["\']'
+    if regex_count(spawn_anchor, spawn_block) != 1:
+        raise RuntimeError("source-shape mismatch in defaultSpawnKickstart")
+
+    _, _, ensure_block = named_block(text, "async ensureDaemonAlive()")
+    old_branch = r'if\s*\(\s*this\.platform\s*===\s*["\']darwin["\']\s*\)\s*\{'
+    if regex_count(old_branch, ensure_block) != 1:
+        raise RuntimeError("source-shape mismatch in ensureDaemonAlive Darwin branch")
+
+
+def validate_patched_shape(text: str) -> None:
+    if text.count(PATCH_MARKER) < 3:
+        raise RuntimeError("patch marker count is incomplete")
+    _, _, ensure_block = named_block(text, "async ensureDaemonAlive()")
+    new_branch = r'if\s*\(\s*this\.platform\s*===\s*["\']darwin["\']\s*\|\|\s*this\.platform\s*===\s*["\']win32["\']\s*\)\s*\{'
+    if regex_count(new_branch, ensure_block) != 1:
+        raise RuntimeError("patched Windows activation branch not found")
+
+
+def patch_text(text: str) -> str:
+    if PATCH_MARKER in text:
+        validate_patched_shape(text)
+        return text
+
+    validate_unpatched_shape(text)
+
+    socket_anchor = r'const\s*\{\s*createConnection\s*\}\s*=\s*await\s+import\(["\']node:net["\']\)\s*;'
+    out = insert_after_regex_in_block(
+        text,
+        "function defaultSocketReachable(socketPath)",
+        socket_anchor,
+        SOCKET_INSERT,
+    )
+
+    pid_anchor = r'const\s*\{\s*stdout\s*\}\s*=\s*await\s+execFileAsync\(PS_BIN\s*,'
+    out = insert_before_regex_in_block(
+        out,
+        "function defaultDaemonPidAlive(socketPath)",
+        pid_anchor,
+        PID_INSERT,
+    )
+
+    spawn_anchor = r'const\s+uid\s*=\s*typeof\s+process\.getuid\s*===\s*["\']function["\']'
+    out = insert_before_regex_in_block(
+        out,
+        "function defaultSpawnKickstart()",
+        spawn_anchor,
+        SPAWN_INSERT,
+    )
+
+    start, end, ensure_block = named_block(out, "async ensureDaemonAlive()")
+    old_branch = re.compile(
+        r'if\s*\(\s*this\.platform\s*===\s*["\']darwin["\']\s*\)\s*\{',
+        flags=re.MULTILINE,
+    )
+    matches = list(old_branch.finditer(ensure_block))
+    if len(matches) != 1:
+        raise RuntimeError(
+            f"expected one Darwin activation branch in ensureDaemonAlive, found {len(matches)}"
+        )
+    ensure_patched = old_branch.sub(
+        'if (this.platform === "darwin" || this.platform === "win32") {',
+        ensure_block,
+        count=1,
+    )
+    out = splice_block(out, start, end, ensure_patched)
+
+    validate_patched_shape(out)
+    return out
+
+
+def preflight(path: Path) -> tuple[str, str, bool]:
     if os.name != "nt":
         raise RuntimeError("this patch is Windows-only")
-    if not path.is_file():
-        raise RuntimeError(f"lifecycle.js not found: {path}")
     version = package_version()
     if version != EXPECTED_IAI_VERSION:
         raise RuntimeError(
             f"expected iai-pme {EXPECTED_IAI_VERSION}, found {version}; refusing to patch"
         )
-    text = path.read_text(encoding="utf-8")
+    if not path.is_file():
+        raise RuntimeError(f"installed wrapper bundle not found: {path}")
+
+    text = path.read_bytes().decode("utf-8")
     digest = sha256(path)
-    required = [
-        'WRAPPER_VERSION = "3.0.8"',
-        "function defaultSocketReachable(socketPath)",
-        "function defaultDaemonPidAlive(socketPath)",
-        "function defaultSpawnKickstart()",
-    ]
-    missing = [x for x in required if x not in text]
-    if missing:
-        raise RuntimeError(f"source-shape mismatch; missing anchors: {missing}")
-    condition = 'if (this.platform === "darwin") {'
-    patched_condition = 'if (this.platform === "darwin" || this.platform === "win32") {'
-    if PATCH_MARKER in text:
-        if patched_condition not in text:
-            raise RuntimeError("patch marker present but Windows activation condition missing")
-        return text, digest
-    count = text.count(condition)
-    if count != 1:
-        raise RuntimeError(f"expected exactly one Darwin activation branch, found {count}")
-    return text, digest
+    patched = PATCH_MARKER in text
+
+    if patched:
+        validate_patched_shape(text)
+    else:
+        validate_unpatched_shape(text)
+        # Construct the patch in-memory during preflight. This proves all
+        # surgery anchors resolve before any file write is allowed.
+        candidate = patch_text(text)
+        validate_patched_shape(candidate)
+
+    return text, digest, patched
 
 
-def patch_text(text: str) -> str:
-    if PATCH_MARKER in text:
-        return text
-    out = replace_named_function(text, "defaultSocketReachable", SOCKET_REACHABLE)
-    out = replace_named_function(out, "defaultDaemonPidAlive", DAEMON_PID_ALIVE)
-    out = replace_named_function(out, "defaultSpawnKickstart", SPAWN_KICKSTART)
-    old = 'if (this.platform === "darwin") {'
-    new = 'if (this.platform === "darwin" || this.platform === "win32") {'
-    if out.count(old) != 1:
-        raise RuntimeError("Darwin activation branch changed during patch construction")
-    out = out.replace(old, new, 1)
-    if PATCH_MARKER not in out:
-        raise RuntimeError("internal error: patch marker missing from patched source")
-    return out
-
-
-def run_node_check(node: Path, lifecycle: Path) -> None:
+def run_node_check(node: Path, bundle: Path) -> None:
     if not node.is_file():
         raise RuntimeError(f"Hermes Node executable not found: {node}")
     proc = subprocess.run(
-        [str(node), "--check", str(lifecycle)],
+        [str(node), "--check", str(bundle)],
         capture_output=True,
         text=True,
-        timeout=15,
+        timeout=20,
         check=False,
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     if proc.returncode != 0:
-        detail = (proc.stderr or proc.stdout or "").strip().splitlines()[-1:]
-        raise RuntimeError(f"node --check failed: {detail[0] if detail else 'unknown error'}")
+        details = (proc.stderr or proc.stdout or "").strip().splitlines()
+        tail = details[-1] if details else "unknown syntax error"
+        raise RuntimeError(f"node --check failed: {tail}")
 
 
 def apply_patch(path: Path, node: Path) -> None:
-    text, before = preflight(path)
-    if PATCH_MARKER in text:
+    text, before, already = preflight(path)
+    if already:
         print("Already patched: True")
-        print(f"lifecycle.js SHA256: {before}")
+        print(f"index.js SHA256: {before}")
         return
 
     patched = patch_text(text)
@@ -355,9 +456,11 @@ def apply_patch(path: Path, node: Path) -> None:
 
     tmp = path.with_name(path.name + ".orion.tmp")
     try:
-        tmp.write_text(patched, encoding="utf-8", newline="\n")
+        tmp.write_bytes(patched.encode("utf-8"))
         os.replace(tmp, path)
         run_node_check(node, path)
+        # Re-read what is actually on disk, not just the in-memory candidate.
+        validate_patched_shape(path.read_bytes().decode("utf-8"))
     except Exception:
         try:
             shutil.copy2(backup, path)
@@ -372,6 +475,7 @@ def apply_patch(path: Path, node: Path) -> None:
     print(f"Before SHA256: {before}")
     print(f"After SHA256:  {sha256(path)}")
     print("Node syntax check: PASS")
+    print("Patched-shape validation: PASS")
     print("Patch apply: PASS")
 
 
@@ -387,43 +491,50 @@ def rollback_latest(path: Path, node: Path) -> None:
     shutil.copy2(backup, path)
     run_node_check(node, path)
     print(f"Restored: {backup}")
-    print(f"lifecycle.js SHA256: {sha256(path)}")
+    print(f"index.js SHA256: {sha256(path)}")
     print("Rollback: PASS")
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(
-        description="Preflight/apply the narrow iai-pme 3.0.8 Windows demand-wake wrapper patch."
+    parser = argparse.ArgumentParser(
+        description=(
+            "Guarded native-Windows demand-wake compatibility patch for the "
+            "installed iai-pme 3.0.8 MCP wrapper bundle."
+        )
     )
-    mode = ap.add_mutually_exclusive_group()
-    mode.add_argument("--apply", action="store_true", help="apply the patch after preflight")
-    mode.add_argument("--rollback-latest", action="store_true", help="restore the newest patch backup")
-    ap.add_argument("--lifecycle", type=Path, default=None)
-    ap.add_argument("--node", type=Path, default=None)
-    args = ap.parse_args()
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--apply", action="store_true")
+    mode.add_argument("--rollback-latest", action="store_true")
+    parser.add_argument("--index", type=Path, default=None)
+    parser.add_argument("--node", type=Path, default=None)
+    args = parser.parse_args()
 
-    lifecycle = args.lifecycle or default_lifecycle_path()
+    bundle = args.index or default_index_path()
     node = args.node or default_node_path()
 
-    print("=== ORION IAI WINDOWS DEMAND-WAKE PATCH ===")
-    print(f"Mode: {'ROLLBACK' if args.rollback_latest else 'APPLY' if args.apply else 'PREFLIGHT'}")
+    print("=== ORION IAI WINDOWS DEMAND-WAKE PATCH V2 ===")
+    print(
+        "Mode:",
+        "ROLLBACK" if args.rollback_latest else "APPLY" if args.apply else "PREFLIGHT",
+    )
     print(f"iai-pme version: {package_version()}")
-    print(f"lifecycle.js: {lifecycle}")
+    print(f"index.js: {bundle}")
 
     if args.rollback_latest:
-        rollback_latest(lifecycle, node)
+        rollback_latest(bundle, node)
         return 0
 
-    text, digest = preflight(lifecycle)
+    _text, digest, patched = preflight(bundle)
     print(f"Current SHA256: {digest}")
-    print(f"Already patched: {PATCH_MARKER in text}")
-    print("Source-shape validation: PASS")
+    print(f"Already patched: {patched}")
+    print("Installed-bundle source-shape validation: PASS")
+    print("In-memory patched-shape construction: PASS")
 
     if not args.apply:
         print("PREFLIGHT: READY TO APPLY")
         return 0
 
-    apply_patch(lifecycle, node)
+    apply_patch(bundle, node)
     return 0
 
 
