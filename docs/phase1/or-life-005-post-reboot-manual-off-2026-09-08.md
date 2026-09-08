@@ -33,15 +33,21 @@ This is the desired default manual-off runtime state.
 
 This preserves supported on-demand registrations while preventing automatic Orion/Hermes/iai startup at login.
 
-## Non-blocking observation
+## Hermes status verification
 
-The final informational command:
+The final informational command completed after a short delay:
 
 `hermes -p companion gateway status`
 
-hung after printing no output. The operator was instructed to cancel it with Ctrl+C and not rerun it during this acceptance step. This does not invalidate the manual-off boot-state evidence above because direct HTTP, process, task-trigger, persistence, and legacy-bridge checks had already completed successfully before the hung command.
+Observed:
 
-Treat the CLI-status hang as a separate follow-up observation unless it reproduces during normal supported start/stop behavior.
+- Scheduled Task registered: `Hermes_Gateway_companion`
+- Status: `Ready`
+- Last Run Time: `9/8/2026 12:50:37 AM`
+- Last Run Result: `0`
+- `No gateway process detected`
+
+Therefore there is no CLI-status hang to track from this acceptance step.
 
 ## Disposition
 
