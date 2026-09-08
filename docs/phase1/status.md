@@ -1,10 +1,10 @@
 # Phase 1 Status
 
-Status: **IN PROGRESS — MEMORY + OR-LIFE-008 + HIBERNATION TESTS A/B ACCEPTED / NEXT: OR-LIFE-007 + OR-LIFE-005**
+Status: **IN PROGRESS — MEMORY / HIBERNATION ACCEPTED; MANUAL-OFF CONFIG ACCEPTED; OR-LIFE-005 v2.7.4 CANDIDATE VALIDATED THROUGH GATE 2F**
 
-Controlling baseline: **ORION — Master PRD v2.6 (AI-Optimized Execution Edition)**, approved 2026-08-29.
+Controlling baseline: **ORION — Master PRD v2.7**, approved 2026-09-08.
 
-> Historical Docker/s6 Phase 1 evidence remains in Git history but is not controlling. This file records the native-Windows Phase 1.
+> Historical Docker/s6 evidence and earlier v2.6 execution notes remain useful provenance, but they are not controlling. Current work follows the native-Windows v2.7 manual-off architecture.
 
 ## Frozen dependency baseline
 
@@ -12,222 +12,245 @@ Controlling baseline: **ORION — Master PRD v2.6 (AI-Optimized Execution Editio
 - Hermes package `0.20.6`
 - Hermes commit `5fc308a70719a83cccdbba4c0e39c23f5a8239d5`
 - Hermes named profile `companion`
+- Hermes home `%LOCALAPPDATA%\hermes`
+- COMPANION home `%LOCALAPPDATA%\hermes\profiles\companion`
 - iai-pme `3.0.8`
 - iai virtualenv `%LOCALAPPDATA%\hermes\profiles\companion\iai\venv`
 - canonical iai store `%USERPROFILE%\.iai-mcp`
+- model `qwen3.5-hermes:9b`
+- Ollama `http://localhost:11434/v1`
+- Hermes API `127.0.0.1:8642`
 
-Do not run `hermes update` during the Phase 0/1 pin freeze without an explicit dependency-change decision.
+Do not run `hermes update` during Phase 1 closure without an explicit dependency-change decision.
 
-## Accepted Phase 1 work
+## Governing lifecycle decision
+
+Owner-selected default mode is **manual-off**:
+
+- Windows boot/login must not automatically start Orion/Hermes.
+- `Hermes_Gateway_companion` stays registered/enabled, but its LogonTrigger is disabled.
+- `iai-mcp-daemon` stays registered/enabled for vendor on-demand wake, but its LogonTrigger is disabled.
+- `Orion Host Idle Bridge` is absent.
+- Ollama Startup shortcut is removed.
+- Start Orion / Stop Orion are explicit operator actions.
+- iai remains vendor-managed; Orion must not become a second lifecycle supervisor.
+
+The reboot-off half of OR-LIFE-005 already passed under this policy.
+
+## Accepted Phase 1 memory / iai work
 
 ### Native iai installation / crypto / embedder — PASS
 
-- isolated Python 3.11 environment
-- `pip check` clean
-- iai CLI/MCP executables present
+- isolated Python 3.11.3 environment
+- iai-pme 3.0.8
 - crypto initialization passed
-- Rust embedder passed
-- model `bge-small-en-v1.5`
-- dimensions `384`
-- AVX2 available
+- native Rust `bge-small-en-v1.5`, 384 dimensions, AVX2 available
+- canonical store `%USERPROFILE%\.iai-mcp`
 
 ### Windows daemon compatibility — PASS WITH NARROW UPSTREAM-COMPATIBLE FIXES
 
-Stock iai 3.0.8 first failed on Windows because daemon startup referenced `signal.SIGHUP` without guarding platform support. The stock failure was preserved as baseline evidence before narrow compatibility work proceeded.
+The accepted Windows path preserves iai as the daemon/store/lifecycle authority. No Orion-owned daemon supervisor was added.
 
-No Orion-owned lifecycle supervisor was added. iai remains the daemon/store/lifecycle authority.
+### Hermes ↔ iai ambient capture/recall — PASS / ACCEPTED
 
-### Hermes ↔ iai ambient memory integration — PASS / ACCEPTED
+- native Windows recall/capture adapters installed through Hermes hook path
+- `wake_depth=standard`
+- Hermes built-in persistent `MEMORY.md` / `USER.md` targets disabled for COMPANION
+- real Discord capture accepted
+- canonical-store semantic recall accepted
+- fresh `/new` ambient recall accepted
 
-Native-Windows Python adapters are installed through the supported Hermes hook path:
+Canonical marker:
 
-- `agent-hooks\iai-mcp-hermes-recall.py`
-- `agent-hooks\iai-mcp-hermes-capture.py`
-
-A real Discord turn using marker `ORION_CAPTURE_FRESH_GATEWAY_20260829` proved live `on_session_end` capture into the canonical iai store.
-
-Root causes found and resolved during acceptance:
-
-1. Hermes gateway had started before hooks/config/approvals existed, so a supported `hermes -p companion gateway restart` was required before live acceptance.
-2. iai 3.0.8 defaults `wake_depth=minimal`, which does not render prior-session memory text for this hook path. Orion now uses supported `wake_depth=standard`.
-3. Hermes' separate file-backed `MEMORY.md` / `USER.md` memory targets are disabled for COMPANION:
-   - `memory.memory_enabled=false`
-   - `memory.user_profile_enabled=false`
-
-A fresh Discord `/new` session then returned the exact marker without `session_search`, while the same marker had already been independently proven present in iai's standard session-start payload.
-
-**Memory integration: ACCEPTED.**
+`ORION_CAPTURE_FRESH_GATEWAY_20260829`
 
 Intent-preservation status: **PRESERVED**.
 
-### Hermes-managed iai MCP registration — PASS
+### Hermes-managed iai MCP + OR-LIFE-008 — PASS / ACCEPTED
 
-COMPANION registers the bundled iai stdio wrapper through Hermes using absolute native-Windows paths and the canonical store. Hermes discovery found 14 iai MCP tools.
+- bundled iai wrapper registered through Hermes
+- all 14 tools discovered
+- `idle_timeout_seconds=600`
+- gateway-owned wrapper observed to recycle after idle timeout
 
-### OR-LIFE-008 MCP idle recycling — PASS / ACCEPTED
+No Orion supervisor introduced.
 
-Configured:
+## HIBERNATION lifecycle acceptance — PASS
 
-`mcp_servers.iai-mcp.idle_timeout_seconds = 600`
+Accepted independent real-HIBERNATION Tests A and B:
 
-Runtime verification proved the gateway-owned iai MCP Node wrapper was recycled after the idle timeout without an Orion supervisor.
+- OR-LIFE-003a daemon-independent recall accepted with pinned vendor provenance `_source: "daemon-down-full"`
+- OR-LIFE-003b HIBERNATION wake accepted
+- measured wrapper-start -> authenticated daemon-ready latency: **5.887 s**
+- iai Scheduled Task on-demand wake worked
+- no `doctor --auto` fallback required
+- no duplicate logical daemon state observed
 
-**OR-LIFE-008: ACCEPTED.**
+OR-LIFE-007 owner disposition remains pending final Phase 1 closure. Current recommendation: **ACCEPT / no additional iai patch**.
 
-Intent-preservation status: **PRESERVED**.
+Do not rerun accepted HIBERNATION cycles without contradictory evidence.
 
-## Independent HIBERNATION lifecycle acceptance
+## OR-LIFE-005 manual-off progress
 
-Tests A and B used separate confirmed HIBERNATION cycles.
+Accepted before the current launcher-candidate work:
 
-### Test A — authenticated Windows wake path — PASS / ACCEPTED
+- manual-off task configuration accepted
+- Ollama login autostart removed
+- pre-reboot Start/Stop ownership behavior accepted
+- real Windows reboot-off state passed: Hermes off, Ollama off, wrapper absent, daemon absent, tasks preserved with LogonTriggers disabled
 
-Pristine parked-state precondition:
+A subsequent old-launcher cold-start attempt caused severe transient system slowdown and left Hermes healthy while Ollama was down and no launcher session existed. No hard OOM event was found. Supported direct Hermes stop restored a clean-off state. The exact root cause remains unproven.
 
-```text
-Lifecycle = HIBERNATION
-Daemon = 0
-Wrapper = 0
-wake.signal = False
-daemon.port = absent
-daemon.token = absent
-```
+Earlier launcher revisions v2.7.1, v2.7.2, and v2.7.3 were rejected and must not be installed.
 
-Fresh iai MCP wrapper start produced:
+## v2.7.4 candidate status
 
-```text
-MCP initialized: True
-MCP initialize elapsed ms: 178
-Authenticated daemon ready: True
-Wrapper-start to authenticated daemon-ready ms: 5887
-```
+Candidate: `Orion-Operator-Controls-v2.7.4-candidate1-REVIEW.zip`
 
-Post-test evidence:
+Static disposition: **ACCEPT FOR NATIVE WINDOWS VALIDATION / NOT YET DEPLOYMENT-ACCEPTED**.
 
-- lifecycle moved `HIBERNATION -> WAKE`
-- Windows Scheduled Task `iai-mcp-daemon` activated
-- `.daemon.port` created
-- `.daemon.token` created
-- authenticated IPC status request succeeded
-- `wake.signal` cleaned up
-- daemon process pair was the normal Windows venv launcher -> base Python child, not duplicate logical daemons
-- `.doctor-auto-last` timestamp predated the wake test by about two hours, so `doctor --auto` did not participate
+### Gate 1 — PASS
 
-**OR-LIFE-003b / HIBERNATION Test A: PASS / ACCEPTED.**
+- ZIP SHA-256 verified
+- Windows PowerShell 5.1 parse PASS
+- read-only installed-runtime discovery PASS
+- actual Hermes Python resolved: `%LOCALAPPDATA%\hermes\hermes-agent\venv\Scripts\python.exe`
+- actual pinned source root resolved: `%LOCALAPPDATA%\hermes\hermes-agent`
+- Python 3.11.3 confirmed
+- 27 offline safety tests PASS
+- native Windows primitives PASS
+- exact boot identifier available
+- initial preflight dirtiness traced only to an untracked pre-#17157 backup file
+- that backup was hash-verified and relocated outside the Hermes checkout
+- Hermes checkout then clean at exact approved pin
+- candidate preflight PASS
 
-Measured wrapper-start -> authenticated daemon-ready latency: **5.887 seconds**.
+### Gate 2A — PASS
 
-### Test B — daemon-absent direct recall — PASS / ACCEPTED
+- real worker ready/go/result handshake PASS
+- pinned vendor `gateway_windows` status binding PASS
+- Hermes correctly reported absent
+- local missing-task start/install veto PASS
+- no runtime started
 
-Second independent parked-state precondition:
+### Gate 2B — PASS
 
-```text
-Lifecycle = HIBERNATION
-Daemon = 0
-Wrapper = 0
-wake.signal = False
-daemon.port = absent
-daemon.token = absent
-```
+Controlled candidate cold Start from clean-off state:
 
-Supported iai CLI recall of `ORION_CAPTURE_FRESH_GATEWAY_20260829` returned:
+- `ORION READY`
+- Start exit 0
+- Hermes healthy
+- Ollama healthy
+- candidate session present
+- active operation absent
+- LogonTriggers remained disabled
+- Hermes source remained clean
 
-```text
-Recall exit code: 0
-JSON parse: True
-Recall source: daemon-down-full
-Hit count: 5
-Marker found: True
-```
+### Gate 2C — PASS / TELEMETRY CORRECTION
 
-Post-read state remained:
+Session ownership record validated:
 
-```text
-Lifecycle = HIBERNATION
-Daemon = 0
-Wrapper = 0
-wake.signal = False
-daemon.port = absent
-daemon.token = absent
-Task restarted = False
-```
+- schema 4
+- same boot true
+- exact live Orion-owned Ollama identity present
 
-The local test predicate initially expected `_source == "direct-store"` and therefore printed `NEEDS REVIEW`. Pinned iai 3.0.8 source and vendor tests explicitly use `_source == "daemon-down-full"` for the daemon-independent full structural recall path.
+The initial Gate 2B observer CSV was malformed because localized comma-formatted numbers were written unquoted. Therefore the apparent `264 MB free RAM` result is rejected as resource evidence.
 
-Decision: accept `daemon-down-full` as the canonical pinned-vendor provenance for OR-LIFE-003a. Do not patch iai merely to rename the provenance field.
+Direct Gate 2C snapshot showed about 5.47 GB free RAM, pagefile usage 60 MB, and ample RTX 3070 VRAM.
 
-**OR-LIFE-003a / HIBERNATION Test B: PASS / ACCEPTED.**
+### Gate 2D — PASS
 
-Intent-preservation status: **PRESERVED**.
+First real model inference + Discord + ambient iai recall:
 
-Decision record: `docs/phase1/or-life-003a-provenance-decision-2026-09-07.md`.
+- Discord `/new` succeeded
+- model loaded as `qwen3.5-hermes:9b`, context 65536
+- Hermes recalled `ORION_CAPTURE_FRESH_GATEWAY_20260829`
+- exact-string predicate was false only because Hermes returned explanatory text rather than marker-only output; recall itself succeeded
+- corrected telemetry stayed healthy during first inference:
+  - minimum free RAM ~4.55 GB
+  - maximum pagefile usage 88 MB
+  - maximum GPU used ~2.65 GiB
+  - minimum GPU free ~5.36 GiB
+- severe prior slowdown did not reproduce
 
-## Current Phase 1 acceptance state
+The old incident remains unexplained; do not claim a proven root cause.
 
-Accepted:
+### Gate 2E — PASS
 
-1. native iai installation
-2. crypto initialization
-3. native embedder
-4. Windows daemon compatibility sufficient for Orion
-5. Hermes capture-hook integration
-6. canonical-store persistence
-7. semantic recall
-8. `wake_depth=standard` session-start context
-9. fresh-session Discord ambient recall
-10. Hermes built-in curated memory disabled for COMPANION
-11. Hermes-managed iai MCP registration
-12. OR-LIFE-008 idle wrapper recycling at 600 seconds
-13. independent HIBERNATION Test A
-14. OR-LIFE-003b authenticated wake path, 5.887 s
-15. independent HIBERNATION Test B
-16. OR-LIFE-003a daemon-independent recall using pinned provenance `daemon-down-full`
+Candidate Stop on its own running session:
 
-Still open:
+- `Owned Ollama: stopped`
+- `ORION STOPPED; iai remains vendor-managed.`
+- Hermes API off
+- Ollama API off
+- zero Ollama processes
+- session absent
+- active operation absent
+- wrapper absent after 5 s
+- tasks preserved; LogonTriggers disabled
+- Hermes checkout clean
 
-1. **OR-LIFE-007** — make the Windows accept-vs-patch decision from the now-observed wake behavior
-2. **OR-LIFE-005** — restart/logoff/logon lifecycle acceptance with no corruption
-3. final Phase 1 closure/reproducibility record after those lifecycle gates pass
+### Gate 2F — PASS
 
-## OR-LIFE-007 evidence available for decision
+Independent-runtime ownership boundary:
 
-Observed Windows behavior is now substantially better than the original source-only concern:
+- test launched an independent Ollama process
+- existing vendor Scheduled Task launched Hermes independently
+- candidate Start over healthy runtimes returned `ORION READY`
+- candidate session recorded `ollamaOwnershipRecorded: false`
+- candidate Stop stopped Hermes under explicit operator authority
+- candidate did **not** stop the independent Ollama process
+- exact independent PID/image/start-time identity remained unchanged
+- test cleanup terminated only that exact test-owned Ollama process
+- final state returned to clean-off
 
-- confirmed real HIBERNATION state
-- daemon fully absent
-- fresh wrapper triggered Windows Scheduled Task activation
-- authenticated daemon readiness reached in 5.887 seconds
-- lifecycle transitioned to WAKE
-- wake signal cleaned up
-- no `doctor --auto` fallback was required
-- no Orion lifecycle supervisor was required
+This directly validates the ownership boundary that earlier rejected launcher revisions did not adequately prove.
 
-The accept-vs-patch decision should therefore be based on this runtime evidence, not on the earlier assumption that Windows could not demand-wake an absent daemon.
+## Current machine stopping point
 
-## Next execution step
+End-of-session state after Gate 2F is clean-off:
 
-Proceed to **OR-LIFE-007** and record the accept-vs-patch disposition.
+- Hermes API off
+- Ollama API off
+- Ollama process count 0
+- candidate launcher session absent
+- active operation absent
+- Hermes source clean at approved pin
 
-If the observed 5.887-second authenticated wake path is accepted as sufficient, do not add a new Windows wake patch. Preserve the current vendor-compatible Task Scheduler activation path.
+iai remains vendor-managed and may transition on its own lifecycle; Orion Stop intentionally does not force-kill it.
 
-Then execute **OR-LIFE-005** restart/logoff/logon lifecycle acceptance and verify:
+Checkpoint: `docs/phase1/or-life-005-v274-end-session-clean-off-2026-09-08.md`.
 
-- Hermes COMPANION returns after logon
-- iai Scheduled Task state is healthy
-- canonical store remains readable
-- no store corruption or duplicate daemon state appears
-- memory capture/recall remains functional after the lifecycle event
+## Remaining Phase 1 work
 
-Only after OR-LIFE-007 and OR-LIFE-005 are accepted should native-Windows Phase 1 be closed and HUD work resume.
+v2.7.4 is **not installed, merged to main, or deployment-accepted**.
 
-## Explicit non-goals
+Next work:
+
+1. complete selected remaining Gate 2 native fault/race/recovery coverage, preferably with isolated harnesses rather than destabilizing the accepted Hermes installation
+2. Gate 3 installation/publication/workflow validation, including old-launcher transition and shortcut publication behavior
+3. install only after Gate 3 acceptance
+4. controlled post-install recovery Start/Stop
+5. separate real logoff/logon manual-off durability test
+6. Phase 1 Foundation Recovery Gate
+7. owner OR-LIFE-007 disposition (recommend ACCEPT / no patch)
+8. final Phase 1 closure
+
+Only after those items pass should Phase 2 HUD work begin.
+
+## Explicit non-goals / guardrails
 
 Do not:
 
 - run `hermes update`
+- install rejected v2.7.1/v2.7.2/v2.7.3 launchers
+- install v2.7.4 before remaining validation gates pass
 - create an Orion lifecycle supervisor
+- replace iai lifecycle or memory semantics
 - patch iai only to rename `daemon-down-full`
-- replace iai memory semantics or persistence
-- treat SLEEP as HIBERNATION evidence
 - rerun accepted HIBERNATION tests without contradictory evidence
-- begin HUD integration before Phase 1 lifecycle closure
+- use the old desktop Start/Stop shortcuts during v2.7.4 validation
+- infer the old slowdown root cause without evidence
+- begin HUD integration before Phase 1 closure
+
+Core Intent Preservation: **PRESERVED**.
