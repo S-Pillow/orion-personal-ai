@@ -1,12 +1,14 @@
 # Orion Personal AI
 
-Orion is a privacy-first, local-first personal AI companion for **native Windows 11**. The active architecture is centered on a pinned Hermes Agent runtime, named `companion` profile, local Ollama model, Discord, loopback Hermes API, and native iai persistent memory.
+Orion is a privacy-first, local-first personal AI companion for **native Windows 11**. The accepted foundation uses a pinned Hermes Agent runtime, the named `companion` profile, a local Ollama model, Discord, a loopback Hermes API, and native iai persistent memory.
 
 ## Controlling baseline
 
-The controlling product requirements document is **ORION — Master PRD v2.7**, approved 2026-09-08.
+The controlling product requirements document remains **ORION — Master PRD v2.7**, approved 2026-09-08.
 
-PRD v2.7 supersedes v2.6 and formalizes the owner-selected **manual-off** lifecycle model:
+A **v2.8 HUD & Companion Interface** draft has been prepared for owner review, but it is not controlling until explicitly approved. Phase 2 planning may use it as a proposal; implementation decisions that would conflict with v2.7 remain blocked until resolved.
+
+PRD v2.7 formalizes the owner-selected **manual-off** lifecycle model:
 
 - Orion/Hermes do not start automatically at Windows login.
 - Start Orion / Stop Orion are explicit operator actions.
@@ -15,7 +17,7 @@ PRD v2.7 supersedes v2.6 and formalizes the owner-selected **manual-off** lifecy
 - iai remains its own lifecycle and persistent-memory authority.
 - Orion must not add a parallel gateway, memory system, embedding/ranking stack, or lifecycle supervisor.
 
-Historical Docker/s6/JARVIS implementation records remain useful provenance but are not the controlling MVP path.
+Historical Docker/s6/JARVIS implementation records remain useful provenance but are not the controlling native-Windows path.
 
 ## Current status
 
@@ -34,18 +36,20 @@ Accepted native baseline:
 - context `65536`
 - Discord native gateway accepted
 
-Do **not** run `hermes update` during Phase 1 closure.
+### Phase 1 — PASS / CLOSED
 
-### Phase 1 — IN PROGRESS
+Phase 1 lifecycle and memory acceptance is complete. Closure was merged to `main` in PR #6 at merge commit:
 
-Accepted memory/lifecycle work includes:
+`7c55493e0401f1003b3f0f2438e684a5fb144227`
 
-- iai-pme `3.0.8` in dedicated native Python 3.11.3 environment
+Accepted Phase 1 results include:
+
+- iai-pme `3.0.8` in a dedicated native Python 3.11.3 environment
 - canonical store `%USERPROFILE%\.iai-mcp`
 - native Rust `bge-small-en-v1.5` 384-dimension embedder
 - supported Hermes recall/capture hooks adapted for Windows
 - real ambient Discord capture into iai
-- semantic recall from canonical iai store
+- semantic recall from the canonical iai store
 - `wake_depth=standard` for rendered session-start memory
 - Hermes built-in persistent `MEMORY.md` / `USER.md` targets disabled for COMPANION
 - fresh `/new` ambient recall accepted
@@ -54,113 +58,94 @@ Accepted memory/lifecycle work includes:
 - independent real-HIBERNATION Tests A/B accepted
 - daemon-independent recall accepted with pinned provenance `_source: "daemon-down-full"`
 - authenticated HIBERNATION wake accepted at **5.887 s** wrapper-start -> daemon-ready
+- OR-LIFE-007 owner disposition: **ACCEPT / no further wake patch**
 - manual-off task/startup configuration accepted
-- real reboot-off state accepted
+- v2.7.4 operator controls installed and accepted through restart and pure logoff/logon
+- installed Start/Stop lifecycle accepted after both restart and logon
+- exact process-ownership boundaries accepted
+- corrupted-state, stale-process, interrupted-operation, and concurrent-operation safety gates accepted
+- changed-boot recovery accepted after a Windows boot-identity defect was found and corrected
 
-OR-LIFE-007 owner disposition remains pending final Phase 1 closure; current recommendation is **ACCEPT the 5.887 s vendor wake path with no additional iai patch**.
+Final Phase 1 evidence:
 
-## Manual-off lifecycle
+- `docs/evidence/or-life-005-final-acceptance-2026-09-09.md`
+- `docs/evidence/or-life-007-owner-disposition-2026-09-09.md`
+- `evidence/or-life-005/recovery-gate-d-2026-09-09.md`
 
-Current intended default behavior:
-
-- Windows boot/login -> Hermes off
-- Ollama off
-- iai wrapper absent
-- iai daemon not login-started
-- `Hermes_Gateway_companion` remains registered/enabled with LogonTrigger disabled
-- `iai-mcp-daemon` remains registered/enabled with LogonTrigger disabled so iai can still use its vendor on-demand wake mechanism
-- `Orion Host Idle Bridge` absent
-- Ollama Startup shortcut removed
-
-This preserves vendor lifecycle semantics while allowing the owner to run Orion only when wanted.
-
-## OR-LIFE-005 / Start-Stop hardening
-
-An older launcher cold-start attempt after reboot caused severe transient Windows slowdown and left an inconsistent state: Hermes healthy, Ollama down, and no launcher session record. No hard OOM event was found, and the exact root cause remains unproven.
-
-Launcher revisions v2.7.1, v2.7.2, and v2.7.3 were rejected after review and must not be installed.
-
-### v2.7.4 candidate
-
-Current candidate:
-
-`Orion-Operator-Controls-v2.7.4-candidate1-REVIEW.zip`
-
-Static disposition:
-
-**ACCEPT FOR NATIVE WINDOWS VALIDATION / NOT YET DEPLOYMENT-ACCEPTED**
-
-Native validation completed through **Gate 2F**:
-
-- Gate 1A: Windows PowerShell 5.1 parse PASS
-- Gate 1B: read-only installed-runtime discovery PASS
-- Gate 1C: exact Hermes/Ollama runtime provenance resolved
-- Gate 1D: Python 3.11.3, 27 offline tests PASS, native Windows process/lock primitives PASS, exact-pin clean preflight PASS
-- Gate 2A: real worker handshake + pinned vendor status binding PASS; missing-task start/install veto PASS
-- Gate 2B: controlled cold candidate Start PASS
-- Gate 2C: same-boot exact Ollama ownership record PASS; resource observer issue identified and corrected
-- Gate 2D: first real model inference + Discord `/new` + ambient iai recall PASS
-- Gate 2E: candidate Stop PASS; Orion-owned Ollama stopped cleanly
-- Gate 2F: independent-runtime ownership PASS; independent Ollama was neither claimed nor stopped by Orion
-
-Corrected first-inference telemetry showed approximately:
-
-- minimum free RAM: **4.55 GB**
-- maximum pagefile usage: **88 MB**
-- maximum GPU memory used: **2.65 GiB**
-- minimum GPU memory free: **5.36 GiB**
-
-The prior severe slowdown did **not** reproduce under the controlled v2.7.4 start + first-inference path. This is evidence against a routinely reproducible resource-collapse failure, but it is not proof of the earlier incident's root cause.
-
-### Current safe stopping point
-
-After Gate 2F, the machine returned to clean-off state:
-
-- Hermes API off
-- Ollama API off
-- Ollama process count 0
-- candidate launcher session absent
-- candidate active operation absent
-- Hermes checkout clean at the approved pin
-
-iai remains vendor-managed and is intentionally not force-stopped by Orion Stop.
-
-Detailed stopping-point record:
-
-`docs/phase1/or-life-005-v274-end-session-clean-off-2026-09-08.md`
-
-Current Phase 1 status:
+Current Phase 1 status record:
 
 `docs/phase1/status.md`
 
-## Remaining Phase 1 work
+## Accepted manual-off lifecycle
 
-The v2.7.4 candidate is **not installed, merged to main, or deployment-accepted**.
+Default behavior is intentionally quiet:
 
-Resume with:
+- Windows boot/login -> Hermes off
+- Ollama off
+- iai wrapper absent unless vendor on-demand behavior needs it
+- iai daemon not login-started
+- `Hermes_Gateway_companion` remains registered with LogonTrigger disabled
+- `iai-mcp-daemon` remains registered with LogonTrigger disabled
+- `Orion Host Idle Bridge` absent
+- Ollama Startup shortcut absent
+- Start Orion / Stop Orion remain explicit owner actions
 
-1. selected remaining Gate 2 native fault/race/recovery coverage, preferably using isolated harnesses rather than destabilizing the accepted Hermes installation
-2. Gate 3 installation/publication/workflow validation
-3. one-time old-launcher transition and candidate installation only after Gate 3 acceptance
-4. controlled post-install recovery Start/Stop
-5. separate real logoff/logon manual-off durability test
-6. Phase 1 Foundation Recovery Gate
-7. OR-LIFE-007 owner disposition
-8. final Phase 1 closure
+iai remains vendor-managed and is intentionally not force-killed by Orion Stop.
 
-Only after Phase 1 closes should Phase 2 HUD work begin.
+## Operator controls and recovery note
+
+The accepted installed operator version is `2.7.4-candidate1`.
+
+During final recovery acceptance, the original `win_process.boot_id()` implementation was proven unsuitable because `NtQuerySystemInformation(90)` returned an identifier that remained unchanged across a real Windows Restart. The accepted correction uses kernel `SystemTimeOfDayInformation` (class 3) `BootTime`. It was proven stable within a boot and different after Restart; supported recovery then archived the prior-boot journal without acting on old PIDs.
+
+Source-controlled correction:
+
+`scripts/operator/patches/or-life-recovery-boottime.patch`
+
+**Do not reinstall an original unpatched v2.7.4 candidate package and assume recovery is accepted.** Any repackaged/rebuilt operator controls must include the accepted BootTime correction and pass the relevant recovery preflight.
+
+## Phase 2 — HUD / Companion Interface
+
+Phase 2 is now the active planning target. Current handoff:
+
+`docs/phase2/status.md`
+
+The owner wants a distinct Orion companion interface inspired by the useful parts of the Jarvis HUD while adding Orion-specific capabilities: an animated Orion Core/face, adaptive center workspace, iai Brain access, memory transparency, agent activity, STOP/approval controls, system telemetry, summonable content, and later voice/mobile capabilities.
+
+Important research finding: the **already-accepted Hermes v0.20.6 pin includes native streaming voice, full-duplex barge-in, local wake-word support, and open-vocabulary wake phrases**. Phase 2 should therefore validate and reuse Hermes' native voice surfaces before carrying forward Jarvis' separate STT/TTS orchestration.
+
+Reference study:
+
+`docs/phase2/jarvis-reference-study-2026-09-09.md`
+
+Research backlog and feature ideas:
+
+`docs/phase2/research-ideas-2026-09-09.md`
+
+## Dependency watch
+
+A documentation-only upstream check was completed on 2026-09-09. No dependency was upgraded.
+
+- Hermes latest stable: `v0.21.1` / tag `v2026.9.7`; Orion remains pinned to accepted `v0.20.6` pending isolated qualification.
+- Ollama latest stable: `v0.33.3`; a `v0.34.0-rc3` prerelease also exists. The exact installed Ollama binary version should be captured in the next Phase 2 preflight before any update decision.
+- iai latest stable: `v3.2.0`; Orion remains on accepted `3.0.8` pending isolated store/Windows compatibility qualification. v3.2.0 also ships IAI Brain 1.0.0 Windows installer assets, directly relevant to the planned **IAI Brain** HUD action.
+
+Details:
+
+`docs/phase2/dependency-watch-2026-09-09.md`
 
 ## Architecture guardrails
 
 - **Hermes Agent** is the sole local agent/gateway runtime.
 - **Ollama** is the current local model provider.
-- **iai-pme 3.0.8** is the sole persistent memory authority for COMPANION.
+- **iai-pme** is the sole persistent memory authority for COMPANION.
 - **Obsidian** remains the planned human-facing vault in later phases.
 - No Orion lifecycle supervisor.
 - No second memory semantics, embedding, ranking, or consolidation system.
-- No parallel gateway/service.
+- No parallel agent gateway/service.
 - No Docker/WSL requirement for Orion.
-- Narrow upstream-compatible dependency patches are allowed only when necessary and must preserve the reason the chosen architecture/dependency exists.
+- The HUD may present and control authorized surfaces, but it must not silently become a second lifecycle authority.
+- Narrow upstream-compatible dependency patches are allowed only when necessary and must preserve the reason the selected architecture/dependency exists.
 
 Core Intent Preservation Gate:
 
@@ -180,7 +165,7 @@ Compatibility/tracking fork of `CodeAbra/iai-personal-memory-engine`. Narrow Win
 
 ### `S-Pillow/jarvis_ai`
 
-Historical and possible future HUD source. It is not the active phase; HUD work resumes only after native Phase 1 closure.
+HUD/reference fork. It is now an active **reference implementation and selective code donor** for Phase 2 discovery, not the Orion product architecture. Orion should reuse proven patterns only where they do not duplicate capabilities already provided by the accepted Hermes/iai stack.
 
 ## Security and evidence rules
 
@@ -189,9 +174,9 @@ Historical and possible future HUD source. It is not the active phase; HUD work 
 - Distinguish installed-runtime observations from upstream source claims.
 - Preserve checkpoints/backups before risky mutations.
 - Do not treat historical Docker acceptance as native-Windows acceptance.
-- Do not install rejected launcher revisions.
-- Do not install v2.7.4 until its remaining validation gates pass.
+- Do not update Hermes, Ollama, or iai merely because a newer release exists; qualify dependency changes separately.
+- Keep consequential actions behind explicit operator authority and visible approval boundaries.
 
 ## Resume point
 
-Resume from the **remaining v2.7.4 Gate 2 fault/recovery coverage**, with the machine already in clean-off state. Do not rerun accepted HIBERNATION cycles or Gates 1 / 2A–2F without contradictory evidence.
+Resume with **Phase 2 design/compatibility discovery**. Before implementation, review/approve or revise the v2.8 HUD PRD draft, record the installed Ollama version, and validate which Hermes v0.20.6 native voice/HUD-facing APIs can be reused without introducing a second voice or lifecycle stack.
