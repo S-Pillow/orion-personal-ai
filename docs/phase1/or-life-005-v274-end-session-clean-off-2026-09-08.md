@@ -1,13 +1,13 @@
 # OR-LIFE-005 v2.7.4 Candidate — End-of-Session Clean-Off Checkpoint
 
 Date: 2026-09-08
-Candidate validation branch: `feature/orion-start-v272-lifecycle-safety`
+Branch: `feature/orion-start-v272-lifecycle-safety`
 Candidate: `Orion-Operator-Controls-v2.7.4-candidate1-REVIEW.zip`
 Hermes pin: `5fc308a70719a83cccdbba4c0e39c23f5a8239d5`
 
 ## Purpose
 
-Record the safe stopping point after native Windows candidate validation through Gate 2F. This is documentation only; it does not merge or install the candidate implementation.
+Record the safe stopping point after native Windows candidate validation through Gate 2F so work can resume later without replaying accepted gates.
 
 ## Final runtime state
 
@@ -46,7 +46,7 @@ iai remains vendor-managed and is intentionally not force-stopped by Orion Stop.
 
 ## Important correction
 
-The initial Gate 2B CSV observer produced invalid numeric column interpretation because formatted numbers containing commas were written without CSV quoting. The apparent `264 MB free RAM` result is rejected as telemetry evidence.
+The initial Gate 2B CSV observer produced invalid numeric column interpretation because formatted numbers containing commas were written without CSV quoting. That `264 MB free RAM` result is rejected as telemetry evidence.
 
 Corrected Gate 2D telemetry during real first inference showed approximately:
 
@@ -59,7 +59,7 @@ The earlier severe post-reboot slowdown remains unexplained, but it did not repr
 
 ## Not yet accepted / not installed
 
-The v2.7.4 candidate is **not installed, merged to main, or deployment-accepted**. This main-branch document records validation status only.
+The v2.7.4 candidate is **not installed, merged to main, or deployment-accepted**.
 
 Remaining acceptance work includes selected native fault/race/recovery cases, installation/publication validation, then post-install OR-LIFE-005 recovery Start/Stop and a separate real logoff/logon manual-off durability test.
 

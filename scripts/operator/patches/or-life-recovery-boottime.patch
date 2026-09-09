@@ -1,0 +1,60 @@
+--- a/win_process.py
++++ b/win_process.py
+@@
+ def boot_id():
+-    """Kernel boot identifier. No wall-clock/uptime arithmetic for recovery.
+-
+-    Windows acceptance MUST verify stability during a session and change after
+-    Restart. If the identifier is unavailable or unchanged, recovery fails closed.
+-    """
+-    if os.name != "nt":
+-        raise IdentityUnavailable("Windows is required")
+-    n = ctypes.WinDLL("ntdll")
+-    n.NtQuerySystemInformation.argtypes = [W.ULONG, W.LPVOID, W.ULONG, ctypes.POINTER(W.ULONG)]
+-    n.NtQuerySystemInformation.restype = W.LONG
+-    buf = ctypes.create_string_buffer(32)
+-    used = W.ULONG()
+-    if n.NtQuerySystemInformation(90, buf, len(buf), ctypes.byref(used)) != 0:
+-        raise IdentityUnavailable("Cannot establish Windows boot identity")
+-    value = int.from_bytes(buf.raw[:16], "little", signed=False)
+-    if value <= 0:
+-        raise IdentityUnavailable("Invalid Windows boot identity")
+-    return value
++    """Kernel boot identity derived from Windows kernel BootTime.
++
++    Stable during one Windows boot and changes after Restart.
++    No wall-clock/uptime arithmetic is used.
++    """
++    if os.name != "nt":
++        raise IdentityUnavailable("Windows is required")
++
++    n = ctypes.WinDLL("ntdll")
++    n.NtQuerySystemInformation.argtypes = [
++        W.ULONG,
++        W.LPVOID,
++        W.ULONG,
++        ctypes.POINTER(W.ULONG),
++    ]
++    n.NtQuerySystemInformation.restype = W.LONG
++
++    # SystemTimeOfDayInformation = 3.
++    # SYSTEM_TIMEOFDAY_INFORMATION begins with LARGE_INTEGER BootTime.
++    buf = ctypes.create_string_buffer(48)
++    used = W.ULONG()
++
++    status = n.NtQuerySystemInformation(
++        3,
++        buf,
++        len(buf),
++        ctypes.byref(used),
++    )
++
++    if status != 0:
++        raise IdentityUnavailable("Cannot establish Windows boot identity")
++
++    value = int.from_bytes(buf.raw[:8], "little", signed=True)
++
++    if value <= 0:
++        raise IdentityUnavailable("Invalid Windows boot identity")
++
++    return value

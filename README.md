@@ -82,13 +82,9 @@ Launcher revisions v2.7.1, v2.7.2, and v2.7.3 were rejected after review and mus
 
 ### v2.7.4 candidate
 
-Current validation candidate:
+Current candidate:
 
 `Orion-Operator-Controls-v2.7.4-candidate1-REVIEW.zip`
-
-Validation branch:
-
-`feature/orion-start-v272-lifecycle-safety`
 
 Static disposition:
 
@@ -114,7 +110,7 @@ Corrected first-inference telemetry showed approximately:
 - maximum GPU memory used: **2.65 GiB**
 - minimum GPU memory free: **5.36 GiB**
 
-The prior severe slowdown did **not** reproduce under the controlled v2.7.4 start + first-inference path. This is useful evidence, but it does not prove the earlier incident's root cause.
+The prior severe slowdown did **not** reproduce under the controlled v2.7.4 start + first-inference path. This is evidence against a routinely reproducible resource-collapse failure, but it is not proof of the earlier incident's root cause.
 
 ### Current safe stopping point
 
@@ -139,7 +135,7 @@ Current Phase 1 status:
 
 ## Remaining Phase 1 work
 
-The v2.7.4 candidate is **not installed, merged to main, or deployment-accepted**. Main contains documentation of validation status only; candidate implementation remains on the validation branch/package.
+The v2.7.4 candidate is **not installed, merged to main, or deployment-accepted**.
 
 Resume with:
 
@@ -176,7 +172,7 @@ A CONFLICT or UNCERTAIN result blocks implementation until resolved.
 
 ### `S-Pillow/orion-personal-ai`
 
-Canonical Orion integration/control repository for current architecture, acceptance evidence, reproducibility instructions, lifecycle controls, compatibility notes, and Orion-owned glue.
+Canonical Orion integration/control repository for the current architecture, acceptance evidence, reproducibility instructions, lifecycle controls, compatibility notes, and Orion-owned glue.
 
 ### `S-Pillow/iai-personal-memory-engine`
 

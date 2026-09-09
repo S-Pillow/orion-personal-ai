@@ -39,23 +39,41 @@ The reboot-off half of OR-LIFE-005 already passed under this policy.
 
 ## Accepted Phase 1 memory / iai work
 
-- native iai installation / crypto / embedder: PASS
-- iai-pme 3.0.8 in isolated Python 3.11.3 environment
-- canonical iai store `%USERPROFILE%\.iai-mcp`
+### Native iai installation / crypto / embedder — PASS
+
+- isolated Python 3.11.3 environment
+- iai-pme 3.0.8
+- crypto initialization passed
 - native Rust `bge-small-en-v1.5`, 384 dimensions, AVX2 available
-- Windows daemon compatibility accepted with narrow upstream-compatible fixes
-- Hermes ↔ iai ambient capture/recall: PASS / ACCEPTED
+- canonical store `%USERPROFILE%\.iai-mcp`
+
+### Windows daemon compatibility — PASS WITH NARROW UPSTREAM-COMPATIBLE FIXES
+
+The accepted Windows path preserves iai as the daemon/store/lifecycle authority. No Orion-owned daemon supervisor was added.
+
+### Hermes ↔ iai ambient capture/recall — PASS / ACCEPTED
+
+- native Windows recall/capture adapters installed through Hermes hook path
 - `wake_depth=standard`
 - Hermes built-in persistent `MEMORY.md` / `USER.md` targets disabled for COMPANION
+- real Discord capture accepted
+- canonical-store semantic recall accepted
 - fresh `/new` ambient recall accepted
-- Hermes-managed iai MCP wrapper registered; all 14 tools discovered
-- OR-LIFE-008 wrapper idle recycling at 600 s: PASS / ACCEPTED
 
 Canonical marker:
 
 `ORION_CAPTURE_FRESH_GATEWAY_20260829`
 
 Intent-preservation status: **PRESERVED**.
+
+### Hermes-managed iai MCP + OR-LIFE-008 — PASS / ACCEPTED
+
+- bundled iai wrapper registered through Hermes
+- all 14 tools discovered
+- `idle_timeout_seconds=600`
+- gateway-owned wrapper observed to recycle after idle timeout
+
+No Orion supervisor introduced.
 
 ## HIBERNATION lifecycle acceptance — PASS
 
@@ -87,8 +105,6 @@ Earlier launcher revisions v2.7.1, v2.7.2, and v2.7.3 were rejected and must not
 
 ## v2.7.4 candidate status
 
-Candidate validation branch: `feature/orion-start-v272-lifecycle-safety`
-
 Candidate: `Orion-Operator-Controls-v2.7.4-candidate1-REVIEW.zip`
 
 Static disposition: **ACCEPT FOR NATIVE WINDOWS VALIDATION / NOT YET DEPLOYMENT-ACCEPTED**.
@@ -105,8 +121,8 @@ Static disposition: **ACCEPT FOR NATIVE WINDOWS VALIDATION / NOT YET DEPLOYMENT-
 - native Windows primitives PASS
 - exact boot identifier available
 - initial preflight dirtiness traced only to an untracked pre-#17157 backup file
-- backup hash-verified and relocated outside the Hermes checkout
-- Hermes checkout clean at exact approved pin
+- that backup was hash-verified and relocated outside the Hermes checkout
+- Hermes checkout then clean at exact approved pin
 - candidate preflight PASS
 
 ### Gate 2A — PASS
@@ -207,12 +223,12 @@ Checkpoint: `docs/phase1/or-life-005-v274-end-session-clean-off-2026-09-08.md`.
 
 ## Remaining Phase 1 work
 
-v2.7.4 is **not installed, merged to main, or deployment-accepted**. Main contains status documentation only; candidate implementation remains on its validation branch/package.
+v2.7.4 is **not installed, merged to main, or deployment-accepted**.
 
 Next work:
 
 1. complete selected remaining Gate 2 native fault/race/recovery coverage, preferably with isolated harnesses rather than destabilizing the accepted Hermes installation
-2. Gate 3 installation/publication/workflow validation
+2. Gate 3 installation/publication/workflow validation, including old-launcher transition and shortcut publication behavior
 3. install only after Gate 3 acceptance
 4. controlled post-install recovery Start/Stop
 5. separate real logoff/logon manual-off durability test
