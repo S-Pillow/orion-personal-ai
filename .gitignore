@@ -10,6 +10,10 @@ credentials/
 runtime/
 evidence/raw-private/
 
+# Python artifacts
+__pycache__/
+*.py[cod]
+
 # Local/editor artifacts
 .DS_Store
 Thumbs.db
