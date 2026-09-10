@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-BRIDGE_VERSION = "2a-0.1"
+BRIDGE_VERSION = "2a-0.2"
 DEFAULT_BIND_HOST = "127.0.0.1"
 DEFAULT_BIND_PORT = 8765
 DEFAULT_HERMES_URL = "http://127.0.0.1:8642"
@@ -205,6 +205,10 @@ class OrionHandler(BaseHTTPRequestHandler):
     def hermes(self) -> HermesClient:
         return HermesClient(self.state)
 
+    @property
+    def expected_host(self) -> str:
+        return f"{DEFAULT_BIND_HOST}:{self.server.server_port}"  # type: ignore[attr-defined]
+
     def log_message(self, fmt: str, *args: Any) -> None:
         # Paths/status only. Request/response bodies and authorization are never logged.
         sys.stderr.write("[orion-hud] " + (fmt % args) + "\n")
@@ -213,7 +217,12 @@ class OrionHandler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Cache-Control", "no-store")
-        self.send_header("Content-Security-Policy", "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+        self.send_header(
+            "Content-Security-Policy",
+            "default-src 'self'; connect-src 'self'; img-src 'self' data:; "
+            "style-src 'self'; script-src 'self'; frame-ancestors 'none'; "
+            "base-uri 'none'; form-action 'self'",
+        )
 
     def _set_ui_cookie(self) -> None:
         self.send_header(
@@ -231,12 +240,12 @@ class OrionHandler(BaseHTTPRequestHandler):
         morsel = cookie.get("orion_ui")
         return bool(morsel and secrets.compare_digest(morsel.value, self.state.ui_cookie))
 
+    def _host_ok(self) -> bool:
+        return secrets.compare_digest(self.headers.get("Host", ""), self.expected_host)
+
     def _origin_ok(self) -> bool:
-        origin = self.headers.get("Origin")
-        host = self.headers.get("Host")
-        if not origin or not host:
-            return False
-        return origin == f"http://{host}"
+        expected = f"http://{self.expected_host}"
+        return secrets.compare_digest(self.headers.get("Origin", ""), expected)
 
     def _send_bytes(
         self,
@@ -258,6 +267,12 @@ class OrionHandler(BaseHTTPRequestHandler):
     def _send_json(self, status: int, obj: Any) -> None:
         data = json.dumps(obj, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         self._send_bytes(status, data, "application/json; charset=utf-8")
+
+    def _request_host_guard(self) -> bool:
+        if self._host_ok():
+            return True
+        self._send_json(421, {"error": "loopback_host_required"})
+        return False
 
     def _api_guard(self, *, mutation: bool = False) -> bool:
         if not self._has_ui_cookie():
@@ -293,7 +308,14 @@ class OrionHandler(BaseHTTPRequestHandler):
     def _valid_id(value: str) -> bool:
         return bool(ID_RE.fullmatch(value))
 
-    def _proxy_json(self, method: str, path: str, *, body: dict[str, Any] | None = None, authenticated: bool = True) -> None:
+    def _proxy_json(
+        self,
+        method: str,
+        path: str,
+        *,
+        body: dict[str, Any] | None = None,
+        authenticated: bool = True,
+    ) -> None:
         try:
             status, content_type, data = self.hermes.request(
                 method,
@@ -310,6 +332,8 @@ class OrionHandler(BaseHTTPRequestHandler):
         self._send_bytes(status, data, content_type)
 
     def do_GET(self) -> None:  # noqa: N802
+        if not self._request_host_guard():
+            return
         path = urlparse(self.path).path
 
         if path in STATIC_FILES:
@@ -362,10 +386,11 @@ class OrionHandler(BaseHTTPRequestHandler):
         hermes_online = False
         health_status = None
         try:
-            status, _, data = self.hermes.request("GET", "/health", authenticated=False, timeout=2.0)
+            status, _, data = self.hermes.request(
+                "GET", "/health", authenticated=False, timeout=2.0
+            )
             health_status = status
             hermes_online = 200 <= status < 300
-            # Intentionally do not expose unexpected public-health body content.
             del data
         except (OSError, http.client.HTTPException, RuntimeError):
             pass
@@ -373,10 +398,18 @@ class OrionHandler(BaseHTTPRequestHandler):
         detailed: Any = None
         if hermes_online and self.state.api_key:
             try:
-                status, content_type, data = self.hermes.request("GET", "/health/detailed", timeout=3.0)
+                status, content_type, data = self.hermes.request(
+                    "GET", "/health/detailed", timeout=3.0
+                )
                 if 200 <= status < 300 and "json" in content_type.lower():
                     detailed = json.loads(data.decode("utf-8"))
-            except (OSError, http.client.HTTPException, RuntimeError, UnicodeError, json.JSONDecodeError):
+            except (
+                OSError,
+                http.client.HTTPException,
+                RuntimeError,
+                UnicodeError,
+                json.JSONDecodeError,
+            ):
                 detailed = None
 
         self._send_json(
@@ -386,7 +419,7 @@ class OrionHandler(BaseHTTPRequestHandler):
                     "status": "ok",
                     "version": BRIDGE_VERSION,
                     "lifecycle_authority": False,
-                    "bind": f"{DEFAULT_BIND_HOST}:{self.server.server_port}",  # type: ignore[attr-defined]
+                    "bind": self.expected_host,
                 },
                 "hermes": {
                     "online": hermes_online,
@@ -398,6 +431,8 @@ class OrionHandler(BaseHTTPRequestHandler):
         )
 
     def do_POST(self) -> None:  # noqa: N802
+        if not self._request_host_guard():
+            return
         path = urlparse(self.path).path
         if not path.startswith("/api/orion/"):
             self._send_json(404, {"error": "not_found"})
@@ -458,9 +493,17 @@ class OrionHandler(BaseHTTPRequestHandler):
                 return
             choice = body.get("choice")
             if choice not in APPROVAL_CHOICES:
-                self._send_json(400, {"error": "invalid_approval_choice", "allowed": sorted(APPROVAL_CHOICES)})
+                self._send_json(
+                    400,
+                    {
+                        "error": "invalid_approval_choice",
+                        "allowed": sorted(APPROVAL_CHOICES),
+                    },
+                )
                 return
-            self._proxy_json("POST", f"/v1/runs/{run_id}/approval", body={"choice": choice})
+            self._proxy_json(
+                "POST", f"/v1/runs/{run_id}/approval", body={"choice": choice}
+            )
             return
 
         self._send_json(404, {"error": "operation_not_allowlisted"})
@@ -472,10 +515,16 @@ class OrionHandler(BaseHTTPRequestHandler):
                 body={"input": text},
             )
         except BridgeConfigError as exc:
-            self._send_json(503, {"error": "hermes_credentials_unavailable", "message": str(exc)})
+            self._send_json(
+                503,
+                {"error": "hermes_credentials_unavailable", "message": str(exc)},
+            )
             return
         except (OSError, http.client.HTTPException) as exc:
-            self._send_json(502, {"error": "hermes_unavailable", "message": type(exc).__name__})
+            self._send_json(
+                502,
+                {"error": "hermes_unavailable", "message": type(exc).__name__},
+            )
             return
 
         try:
@@ -483,7 +532,11 @@ class OrionHandler(BaseHTTPRequestHandler):
                 data = response.read(MAX_PROXY_BYTES + 1)
                 if len(data) > MAX_PROXY_BYTES:
                     data = b'{"error":"upstream_error_too_large"}'
-                self._send_bytes(response.status, data, response.getheader("Content-Type", "application/json"))
+                self._send_bytes(
+                    response.status,
+                    data,
+                    response.getheader("Content-Type", "application/json"),
+                )
                 return
 
             self.send_response(response.status)
@@ -501,8 +554,6 @@ class OrionHandler(BaseHTTPRequestHandler):
                 self.wfile.flush()
             self.close_connection = True
         except (BrokenPipeError, ConnectionResetError):
-            # Browser navigation/disconnect closes only this proxy stream. It is
-            # not translated into a Hermes process or lifecycle action.
             self.close_connection = True
         finally:
             conn.close()
@@ -517,7 +568,12 @@ def build_state(args: argparse.Namespace) -> BridgeState:
     env_path = Path(args.hermes_env).expanduser() if args.hermes_env else None
     key = load_hermes_api_key(env_path)
     static_root = Path(__file__).resolve().parent / "static"
-    return BridgeState(target=target, api_key=key, ui_cookie=secrets.token_urlsafe(32), static_root=static_root)
+    return BridgeState(
+        target=target,
+        api_key=key,
+        ui_cookie=secrets.token_urlsafe(32),
+        static_root=static_root,
+    )
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -525,7 +581,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--host", default=DEFAULT_BIND_HOST)
     parser.add_argument("--port", type=int, default=DEFAULT_BIND_PORT)
     parser.add_argument("--hermes-url", default=DEFAULT_HERMES_URL)
-    parser.add_argument("--hermes-env", default="", help="Optional path to COMPANION .env")
+    parser.add_argument(
+        "--hermes-env", default="", help="Optional path to COMPANION .env"
+    )
     return parser.parse_args(argv)
 
 
