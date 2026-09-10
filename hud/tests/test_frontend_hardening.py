@@ -80,6 +80,28 @@ class FrontendHardeningContractTests(unittest.TestCase):
                     APP_JS,
                 )
 
+    def test_startup_loads_persisted_session_history_once(self):
+        self.assertIn(
+            "async function refreshStatus(loadCurrentSession = false)",
+            APP_JS,
+        )
+        self.assertIn(
+            "refreshSessions({ loadCurrent: loadCurrentSession })",
+            APP_JS,
+        )
+        self.assertIn(
+            "refreshStatus(true);",
+            APP_JS,
+        )
+        self.assertIn(
+            "setInterval(refreshStatus, 15000);",
+            APP_JS,
+        )
+        self.assertNotIn(
+            "setInterval(() => refreshStatus(true)",
+            APP_JS,
+        )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

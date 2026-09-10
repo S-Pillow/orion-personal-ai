@@ -383,7 +383,7 @@ async function refreshDiscovery() {
   }
 }
 
-async function refreshStatus() {
+async function refreshStatus(loadCurrentSession = false) {
   try {
     const payload = await api("/api/orion/status");
     const online = Boolean(payload?.hermes?.online);
@@ -395,7 +395,10 @@ async function refreshStatus() {
     ui.credentialValue.textContent = payload?.hermes?.credentials_available ? "available" : "missing";
 
     if (online) {
-      await Promise.all([refreshDiscovery(), refreshSessions({ loadCurrent: false })]);
+      await Promise.all([
+        refreshDiscovery(),
+        refreshSessions({ loadCurrent: loadCurrentSession }),
+      ]);
 
       if (!state.streaming && !state.approvalEvent) {
         if (degraded) {
@@ -631,5 +634,5 @@ setInterval(formatClock, 1000);
 clearActivity();
 syncSessionLabels();
 updateRunControls();
-refreshStatus();
+refreshStatus(true);
 setInterval(refreshStatus, 15000);
