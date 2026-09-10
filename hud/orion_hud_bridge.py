@@ -554,7 +554,9 @@ class OrionHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
             while True:
-                chunk = response.read(4096)
+                # Forward available SSE bytes without waiting to fill the buffer.
+                # Early run/approval events must arrive before upstream completion.
+                chunk = response.read1(4096)
                 if not chunk:
                     break
                 self.wfile.write(chunk)
