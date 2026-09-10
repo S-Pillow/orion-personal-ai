@@ -4,11 +4,11 @@ Orion is a privacy-first, local-first personal AI companion for **native Windows
 
 ## Controlling baseline
 
-The controlling product requirements document remains **ORION — Master PRD v2.7**, approved 2026-09-08.
+The controlling product requirements document is **ORION — Master PRD v2.8**, approved 2026-09-10.
 
-A **v2.8 HUD & Companion Interface** draft has been prepared for owner review, but it is not controlling until explicitly approved. Phase 2 planning may use it as a proposal; implementation decisions that would conflict with v2.7 remain blocked until resolved.
+PRD v2.8 supersedes v2.7 and carries forward the accepted Phase 1 native-Windows foundation while defining the Phase 2 HUD & Companion Interface architecture and execution workflow.
 
-PRD v2.7 formalizes the owner-selected **manual-off** lifecycle model:
+The accepted **manual-off** lifecycle model remains unchanged:
 
 - Orion/Hermes do not start automatically at Windows login.
 - Start Orion / Stop Orion are explicit operator actions.
@@ -106,13 +106,19 @@ Source-controlled correction:
 
 ## Phase 2 — HUD / Companion Interface
 
-Phase 2 is now the active planning target. Current handoff:
+Phase 2 is the active execution target under approved PRD v2.8. Current handoff:
 
 `docs/phase2/status.md`
 
-The owner wants a distinct Orion companion interface inspired by the useful parts of the Jarvis HUD while adding Orion-specific capabilities: an animated Orion Core/face, adaptive center workspace, iai Brain access, memory transparency, agent activity, STOP/approval controls, system telemetry, summonable content, and later voice/mobile capabilities.
+Orion will be a distinct companion interface inspired by the useful parts of the Jarvis HUD while adding Orion-specific capabilities: an animated Orion Core/face, adaptive center workspace, iai Brain access, memory transparency, agent activity, STOP/approval controls, system telemetry, summonable content, native voice/wake integration, and later device/mobile capabilities.
 
-Important research finding: the **already-accepted Hermes v0.20.6 pin includes native streaming voice, full-duplex barge-in, local wake-word support, and open-vocabulary wake phrases**. Phase 2 should therefore validate and reuse Hermes' native voice surfaces before carrying forward Jarvis' separate STT/TTS orchestration.
+The governing architecture is:
+
+- **Hermes owns the agent runtime and native voice/wake path.**
+- **iai owns persistent memory.**
+- **Orion owns the living visual companion, presentation, and authorized control surface.**
+
+Important research finding: the **already-accepted Hermes v0.20.6 pin includes native streaming voice, full-duplex barge-in, local wake-word support, and open-vocabulary wake phrases**. Phase 2 must validate and reuse Hermes' native voice surfaces before considering any separate STT/TTS orchestration.
 
 Reference study:
 
@@ -136,7 +142,7 @@ Details:
 
 ## Architecture guardrails
 
-- **Hermes Agent** is the sole local agent/gateway runtime.
+- **Hermes Agent** is the sole local agent/gateway runtime and preferred voice/wake authority.
 - **Ollama** is the current local model provider.
 - **iai-pme** is the sole persistent memory authority for COMPANION.
 - **Obsidian** remains the planned human-facing vault in later phases.
@@ -165,7 +171,7 @@ Compatibility/tracking fork of `CodeAbra/iai-personal-memory-engine`. Narrow Win
 
 ### `S-Pillow/jarvis_ai`
 
-HUD/reference fork. It is now an active **reference implementation and selective code donor** for Phase 2 discovery, not the Orion product architecture. Orion should reuse proven patterns only where they do not duplicate capabilities already provided by the accepted Hermes/iai stack.
+HUD/reference fork. It is an active **reference implementation and selective code donor** for Phase 2, not the Orion product architecture. Orion should reuse proven patterns only where they do not duplicate capabilities already provided by the accepted Hermes/iai stack.
 
 ## Security and evidence rules
 
@@ -179,4 +185,4 @@ HUD/reference fork. It is now an active **reference implementation and selective
 
 ## Resume point
 
-Resume with **Phase 2 design/compatibility discovery**. Before implementation, review/approve or revise the v2.8 HUD PRD draft, record the installed Ollama version, and validate which Hermes v0.20.6 native voice/HUD-facing APIs can be reused without introducing a second voice or lifecycle stack.
+Resume with **Phase 2A compatibility and typed-control discovery under approved PRD v2.8**. First record the exact installed Ollama version and map the accepted Hermes v0.20.6 session, run, tool, approval, STOP, health, and native voice/wake surfaces needed by Orion. Do not introduce a second voice, memory, gateway, or lifecycle stack.
