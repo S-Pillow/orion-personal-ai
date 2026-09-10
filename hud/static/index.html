@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Orion // Phase 2A</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">ORION</span>
+      <span class="brand-sub">COMPANION INTERFACE // PHASE 2A</span>
+    </div>
+    <div class="top-status">
+      <span id="bridgeStatus" class="status-chip"><i></i> BRIDGE</span>
+      <span id="hermesStatus" class="status-chip offline"><i></i> HERMES OFFLINE</span>
+      <time id="clock" aria-label="local time">--:--:--</time>
+    </div>
+  </header>
+
+  <main class="hud-grid">
+    <aside class="rail left-rail" aria-label="Orion status and session controls">
+      <section class="panel">
+        <div class="panel-title"><span>SYSTEM LINK</span><b>01</b></div>
+        <dl class="status-list">
+          <div><dt>Bridge</dt><dd id="bridgeValue">online</dd></div>
+          <div><dt>Hermes</dt><dd id="hermesValue">checking</dd></div>
+          <div><dt>API credential</dt><dd id="credentialValue">checking</dd></div>
+          <div><dt>Lifecycle authority</dt><dd>none</dd></div>
+        </dl>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title"><span>SESSION</span><b>02</b></div>
+        <label class="field-label" for="sessionSelect">Hermes conversation</label>
+        <select id="sessionSelect" class="select-control" aria-label="Hermes session">
+          <option value="">No session selected</option>
+        </select>
+        <button id="newSession" class="outline-button" type="button">+ NEW ORION SESSION</button>
+        <div id="sessionMeta" class="muted-line">Hermes SessionDB is authoritative.</div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title"><span>MEMORY</span><b>03</b></div>
+        <dl class="status-list">
+          <div><dt>Authority</dt><dd>iai</dd></div>
+          <div><dt>Editor</dt><dd>native Brain</dd></div>
+        </dl>
+        <button class="outline-button" type="button" disabled title="Scheduled for Phase 2D">IAI BRAIN // PHASE 2D</button>
+      </section>
+    </aside>
+
+    <section class="center-stage" aria-label="Orion conversation">
+      <div class="core-stage" aria-label="Orion Core placeholder">
+        <div class="core-halo halo-a"></div>
+        <div class="core-halo halo-b"></div>
+        <div class="core-ring">
+          <div class="core-eye"></div>
+          <span id="coreState">READY</span>
+        </div>
+        <p id="coreDetail">Typed control proof // voice remains Hermes-owned and deferred</p>
+      </div>
+
+      <div id="transcript" class="transcript" role="log" aria-live="polite" aria-label="Conversation transcript">
+        <div class="empty-state">
+          <strong>ORION HUD LINK READY</strong>
+          <span>Select or create a Hermes session to begin.</span>
+        </div>
+      </div>
+
+      <form id="composer" class="composer">
+        <label class="sr-only" for="messageInput">Message Orion</label>
+        <textarea id="messageInput" rows="1" placeholder="Message Orion..." maxlength="65536"></textarea>
+        <button id="sendButton" class="primary-button" type="submit">SEND</button>
+        <button id="stopButton" class="stop-button" type="button" disabled>STOP</button>
+      </form>
+    </section>
+
+    <aside class="rail right-rail" aria-label="Hermes activity and capabilities">
+      <section class="panel activity-panel">
+        <div class="panel-title"><span>AGENT ACTIVITY</span><b>04</b></div>
+        <div id="activity" class="activity-list">
+          <div class="muted-line">No active tool use.</div>
+        </div>
+      </section>
+
+      <section id="approvalPanel" class="panel approval-panel hidden">
+        <div class="panel-title"><span>APPROVAL REQUIRED</span><b>!</b></div>
+        <div id="approvalDetail" class="approval-detail"></div>
+        <div id="approvalActions" class="approval-actions"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title"><span>CAPABILITIES</span><b>05</b></div>
+        <dl class="status-list">
+          <div><dt>Sessions</dt><dd id="capSessions">—</dd></div>
+          <div><dt>Run stop</dt><dd id="capStop">—</dd></div>
+          <div><dt>Approvals</dt><dd id="capApproval">—</dd></div>
+          <div><dt>Streaming</dt><dd id="capStream">—</dd></div>
+        </dl>
+      </section>
+
+      <section class="panel split-panel">
+        <div>
+          <div class="mini-title">SKILLS</div>
+          <div id="skillCount" class="big-number">—</div>
+        </div>
+        <div>
+          <div class="mini-title">JOBS</div>
+          <div id="jobCount" class="big-number">—</div>
+        </div>
+      </section>
+
+      <section class="panel boundary-panel">
+        <div class="panel-title"><span>BOUNDARY</span><b>06</b></div>
+        <p>HUD is a client only. It cannot start, stop, supervise, install, or update Hermes, Ollama, or iai.</p>
+      </section>
+    </aside>
+  </main>
+
+  <footer class="footer-line">
+    <span>ORION PHASE 2A // LOCAL LOOPBACK</span>
+    <span id="footerSession">NO SESSION</span>
+  </footer>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>
