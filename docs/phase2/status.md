@@ -1,47 +1,75 @@
 # Phase 2 Status — HUD / Companion Interface
 
-Status: **READY FOR PHASE 2A IMPLEMENTATION DISCOVERY**
+Status: **PHASE 2A TYPED-CONTROL SLICE ACCEPTED / MERGED; PRD PHASE 2 REMAINS ACTIVE**
 
 Date: 2026-09-10
 
 Controlling baseline: **ORION — Master PRD v2.8**, approved 2026-09-10.
 
-PRD v2.8 supersedes v2.7 and is the current normative specification for the HUD & Companion Interface phase.
+PRD v2.8 supersedes v2.7 and is the current normative specification. Historical repository labels such as `Phase 2A` through `Phase 2F` are subordinate planning subdivisions and must not override the PRD v2.8 phase table.
 
-## Entry condition
+## Entry condition and accepted foundation
+
+Phase 0 is **PASS / CLOSED** on the accepted native-Windows/manual-off baseline.
 
 Phase 1 is **PASS / CLOSED**. Closure was merged to `main` in PR #6 at commit:
 
 `7c55493e0401f1003b3f0f2438e684a5fb144227`
 
-The accepted lifecycle/memory foundation must not be reopened without contradictory evidence.
+The accepted lifecycle/memory foundation remains unchanged unless contradictory evidence or a dependency/configuration change invalidates its premise.
+
+## Current checkpoint
+
+The internal **Phase 2A compatibility + typed-control HUD bridge slice** is **PASS / ACCEPTED / MERGED**.
+
+Accepted feature head:
+
+`faec8769a34e049cd48408be2445198f7647765b`
+
+Merged through PR #9 into `main` at:
+
+`55a229ef77972491eff8765727ddbe26f2920b95`
+
+The final synthetic HUD suite passed **25/25** tests. Controlled live acceptance covered loopback serving, persistent COMPANION typed-session continuity, progressive SSE streaming, STOP, browser credential isolation, DEFAULT-vs-COMPANION credential separation, Hermes-routed iai `memory_recall`, truthful degraded-state presentation, blank transcript suppression, automatic persisted-session transcript load on restart, and return to clean manual-off state.
+
+Detailed record:
+
+`evidence/phase2a/live-acceptance-2026-09-10.md`
+
+This closes the **internal Phase 2A typed-control slice only**. Do not mark the entire PRD Phase 2 acceptance plan closed yet.
+
+## Why PRD Phase 2 is still administratively open
+
+PRD v2.8 §16.3 Typed HUD acceptance contains requirements not exercised by the accepted Phase 2A bridge slice, including:
+
+- visible summoned content through an explicit display path;
+- deterministic Orion Core gaze/state behavior tied to active UI/system state;
+- Memory Lens handoff to the installed iai-native IAI Brain surface with installed-version-supported health/provenance context.
+
+Those requirements align materially with the PRD Phase 3 presentation/workspace scope. They remain open until implemented and accepted; Phase 2A merge evidence must not be stretched to cover them.
 
 ## Product direction
 
 Orion's HUD is a distinct companion interface, not a reskinned Jarvis clone.
 
-The approved design direction is:
+The approved direction remains:
 
-- a central **Orion Core** that acts as the visual face/presence of the assistant
-- subtle celestial/masked-face identity rather than a literal Iron-Man reactor
-- voice-reactive particles/rings and state-driven eye/core behavior
-- lightweight human-like idle motion: blink, eye saccades, small head/parallax drift, breathing/pulse
-- gaze-aware attention so Orion can subtly look toward active panels, approvals, or summoned content
-- adaptive center workspace that expands when Orion needs to present useful content
-- compact side rails for runtime, memory, activity, approvals, system status, skills, and automations
-- an explicit **IAI Brain** action/workspace plus a compact Orion Memory Lens
-- first-class visible agent activity, STOP/cancel, and approval boundaries
-- summonable media/content panels driven by an explicit Hermes tool contract
-- explicit microphone/privacy states such as VOICE OFF, PUSH TO TALK, WAKE, and CONVERSATION
-- bounded follow-up conversation windows rather than an indefinitely open microphone
-- reduced-motion/performance modes from the start
-- future stable display/device identities for targeted content presentation
+- a persistent **Orion Core** as the assistant's visual presence;
+- subtle celestial/masked-face identity rather than a literal Iron-Man reactor;
+- lightweight state-driven motion such as blink, micro-saccade, small head/parallax drift, breathing/pulse, and gaze toward active UI targets;
+- adaptive center workspace that expands when useful content needs focus;
+- compact status/activity/approval surfaces;
+- explicit **Memory Lens -> native IAI Brain** handoff rather than a second memory-management system;
+- first-class visible agent activity, STOP/cancel, and approval boundaries;
+- explicit display/summon paths for content shown to the user;
+- truthful local/cloud/source, authority, and voice-privacy indicators;
+- reduced-motion/performance behavior from the start.
 
-Full 3D facial rigging, photorealistic lip sync, or heavyweight Unreal/MetaHuman rendering is not required for V1. Those remain optional later enhancements only if the lightweight Orion Core cannot meet the experience goal.
+Full 3D facial rigging, photorealistic lip sync, or heavyweight Unreal/MetaHuman rendering is not required for V1.
 
 ## Governing architecture
 
-The approved ownership model is:
+The accepted ownership model is unchanged:
 
 - **Hermes owns the agent runtime and native voice/wake path.**
 - **iai owns persistent memory.**
@@ -49,172 +77,49 @@ The approved ownership model is:
 
 Orion must not duplicate those authorities for convenience.
 
-## Key architecture discovery
-
-The Jarvis reference repo contains a custom Python voice pipeline that performs browser audio capture, partial/final Whisper transcription, Hermes session streaming, TTS, barge-in, approvals, usage tracking, machine telemetry, and media-panel broadcast.
-
-However, the **accepted Orion Hermes pin itself (`v2026.8.27` / package `0.20.6`) already documents native:**
-
-- streaming TTS
-- local `faster-whisper` STT
-- full-duplex barge-in while thinking or speaking
-- interruption awareness in the next model turn
-- voice stop phrases
-- local wake-word detection
-- openWakeWord, sherpa open-vocabulary, and Porcupine wake providers
-- custom wake phrases such as `hey Orion`
-- desktop/client voice surfaces and authenticated profile-scoped voice configuration
-
-Therefore Phase 2 must **validate reuse of Hermes-native voice before adopting any separate STT/TTS stack**. Duplicating voice ownership would increase latency, configuration drift, security surface, and lifecycle complexity.
-
-Reference:
-
-`docs/phase2/jarvis-reference-study-2026-09-09.md`
-
-## Approved implementation sequence
-
-### Phase 2A — Compatibility and typed-control proof
-
-Goal: establish the smallest Orion HUD backend/client without voice duplication.
-
-Acceptance targets:
-
-- document exact Hermes v0.20.6 endpoints/events needed for typed sessions, run IDs, tool events, approvals, STOP, health, sessions, skills, jobs, and voice configuration
-- keep Hermes API on loopback and keep bearer credentials out of browser code
-- prove typed chat uses the intended persistent Hermes session
-- prove live tool/activity events can drive UI state
-- prove STOP/cancel fails safely when there is no active run
-- prove approval events remain explicit and visible
-- prove starting/stopping the HUD does not start/stop Hermes, Ollama, or iai
-- record exact installed Ollama version
-- no dependency upgrades in this gate
-
-### Phase 2B — Modular Orion HUD shell
-
-Goal: build the real interface structure before cosmetic complexity.
-
-Acceptance targets:
-
-- modular frontend rather than a single monolithic HTML file
-- left/right status rails plus adaptive center workspace
-- typed chat and live activity feed
-- lifecycle/status indicators sourced from observed state only
-- STOP and approval UI
-- system telemetry
-- skills/automations visibility
-- responsive 1440p/ultrawide behavior
-- reduced-motion mode
-
-### Phase 2C — Orion Core V1
-
-Goal: establish Orion's visual identity with low-cost animation.
-
-V1 behaviors:
-
-- idle breathing/pulse
-- randomized blink timing
-- small eye saccades
-- subtle head/parallax drift left/right
-- gaze toward active panels or content when contextually useful
-- state-specific eye/core color/intensity
-- listening/thinking/tool/speaking/error states
-- voice-energy ring/particle response
-- motion pauses/reduces when workspace takes priority
-- no requirement for full skeletal 3D rig or phoneme-perfect lip sync
-
-Implementation preference: use a lightweight state-machine animation approach such as Rive, SVG, or Canvas layers before considering Three.js/VRM. A later spike may evaluate VRM if the owner wants more realistic head movement/lip sync after V1 is stable.
-
-### Phase 2D — Adaptive workspace + IAI Brain
-
-Goal: make the center useful, not just decorative.
-
-Acceptance targets:
-
-- Orion Core can contract to a smaller presence while content takes center stage
-- explicit workspaces for media, documents, memory, tasks, comparisons, and diagnostics
-- **IAI Brain** button/action opens the actual supported iai Brain surface when available rather than inventing a second memory editor
-- Orion Memory Lens exposes only supported/read-only memory status and provenance needed for the current interaction
-- memory status is transparent: source/provenance, availability, stale/degraded state where supported
-- agent-summoned content uses an explicit tool contract
-- display actions never grant new execution authority by themselves
-
-### Phase 2E — Voice and wake integration
-
-Goal: add voice only after typed/control paths are stable.
-
-Preferred order:
-
-1. validate Hermes-native voice on the accepted pin
-2. expose its state/events cleanly to Orion HUD
-3. add push-to-talk
-4. add continuous conversation/barge-in
-5. validate wake phrase `hey Orion` using Hermes-supported local wake capability, preferring sherpa/open-vocabulary for the first proof
-6. implement explicit privacy/listening state in the HUD
-7. use a bounded follow-up window with VAD/no-speech exit and a small hard cap on automatic continuation
-8. only add custom voice-server code where Hermes-native behavior demonstrably cannot satisfy a requirement
-
-### Phase 2F — Hardening and polish
-
-Acceptance targets:
-
-- browser security/origin/auth review
-- no secret-bearing browser state beyond the minimum authorized session mechanism
-- reconnect/reload behavior
-- interrupted-turn recovery
-- offline/degraded indicators
-- animation CPU/GPU budget
-- accessibility/reduced-motion
-- multi-display identity and target selection before broadcast-style summon behavior
-- documented rollback and smoke tests
-- Windows-focused start/stop/runbook integration that preserves manual-off lifecycle
-
-## Reuse policy for `S-Pillow/jarvis_ai`
-
-Jarvis is an active reference implementation and selective code donor.
-
-Prefer to adapt:
-
-- explicit `hud_display`-style tool concept
-- STOP/approval UX patterns
-- Hermes credential isolation / allowlisted proxy concept
-- session/tool event handling patterns
-- holographic/summonable panel interactions
-- machine/usage/status ideas
-
-Do not inherit blindly:
-
-- macOS launchd lifecycle
-- the single-file HUD architecture
-- a second always-on lifecycle authority
-- custom STT/TTS orchestration if Hermes-native voice meets the requirement
-- broadcast-to-every-screen semantics without device targeting
-- old Hermes v0.16 assumptions
+The accepted Phase 2A bridge preserves this split: it is a narrow loopback presentation/control adapter with no subprocess/shell/process-management authority and no independent memory or voice runtime.
 
 ## Dependency posture
 
 No upstream dependency upgrade is authorized by this status record.
 
-Current watch:
+Accepted baselines remain:
 
-- Hermes accepted: `0.20.6`; upstream stable `0.21.1`
-- iai accepted: `3.0.8`; upstream stable `3.2.0`
-- Ollama latest stable observed: `0.33.3`; exact local binary version still needs capture
+- Hermes: `v2026.8.27` / package `0.20.6`
+- iai: `iai-pme==3.0.8`
+- accepted operator publication: `2.7.4-candidate1`
+- installed Ollama observed during Phase 2A preflight: `0.32.15`
 
-Details:
+Newer Hermes, iai, Ollama, or presentation dependencies require their own evidence-backed qualification gate.
 
-`docs/phase2/dependency-watch-2026-09-09.md`
+## Roadmap reconciliation
 
-## Immediate next work
+The earlier repository status document used internal labels `Phase 2A` through `Phase 2F` to subdivide HUD implementation. After PRD v2.8 approval, the **PRD phase table is controlling**.
 
-Begin **Phase 2A as a read-only/API-contract discovery ticket first**, then move to one bounded typed-control implementation ticket after the contract is understood.
+Use the following mapping going forward:
 
-First actions:
+- internal **Phase 2A** = the now-accepted compatibility + typed-control bridge slice within PRD Phase 2;
+- former internal **2B/2C/2D** concepts are not future peer phase numbers; their remaining shell/Core/workspace/memory-transparency work belongs under **PRD Phase 3**;
+- former internal **2E** voice/wake work belongs under **PRD Phase 4**;
+- remaining mutating vault/display, cloud/reminder, and device/LAN/proactivity/hardening work follows PRD Phases **5–7**.
 
-1. record exact installed Ollama version
-2. map the accepted Hermes v0.20.6 session, run, tool-event, approval, STOP, health, skills/jobs, and voice/wake surfaces
-3. identify which Jarvis patterns can be reused without duplicating Hermes or iai authority
-4. define the minimum authenticated Orion HUD bridge contract
-5. keep lifecycle policy unchanged throughout discovery
+This prevents two competing phase-number systems from driving execution.
+
+## Next authorization target
+
+The next product-development target is **PRD Phase 3 — Orion Core + adaptive workspace + memory transparency**.
+
+Begin with a bounded **read-only design/source inventory** before changing presentation code. The inventory should establish the smallest implementation plan for:
+
+1. Orion Core state machine and deterministic gaze/state mapping;
+2. adaptive center workspace and summonable-panel shell;
+3. Memory Lens health/provenance surface and native IAI Brain handoff on the actually installed iai version;
+4. truthful local/cloud/source and descriptive authority indicators;
+5. modular frontend decomposition, responsive/reduced-motion constraints, and the least-complex rendering approach that preserves product intent.
+
+Rive MAY be prototyped only if a small isolated comparison demonstrates material UX/maintainability value; SVG/Canvas remains an acceptable fallback. Do not introduce a broad frontend framework or build pipeline without a separate owner decision.
+
+Voice/wake is not the next implementation unit. PRD Phase 4 comes after the typed/Core/workspace path is stable and should reuse Hermes-native voice/wake unless a demonstrated gap is separately approved.
 
 No HUD convenience feature may mutate the accepted manual-off lifecycle or silently create a second gateway, memory system, voice stack, or supervisor.
 
