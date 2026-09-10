@@ -1,5 +1,7 @@
 "use strict";
 
+import { installCorePresence } from "./core-state.js";
+
 const $ = (id) => document.getElementById(id);
 
 const ui = {
@@ -12,6 +14,7 @@ const ui = {
   sessionSelect: $("sessionSelect"),
   newSession: $("newSession"),
   sessionMeta: $("sessionMeta"),
+  coreStage: $("coreStage"),
   coreState: $("coreState"),
   coreDetail: $("coreDetail"),
   transcript: $("transcript"),
@@ -39,9 +42,15 @@ const state = {
   approvalEvent: null,
 };
 
+const corePresence = installCorePresence(
+  ui.coreStage,
+  ui.coreState,
+);
+
 function setCore(name, detail = "") {
   ui.coreState.textContent = name;
   if (detail) ui.coreDetail.textContent = detail;
+  corePresence.update(name);
 }
 
 function setHermesOnline(online, degraded = false) {

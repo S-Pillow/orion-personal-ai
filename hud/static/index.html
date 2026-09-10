@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Orion // Phase 2A</title>
+  <title>Orion // Phase 3 Core</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
       <span class="brand-mark">ORION</span>
-      <span class="brand-sub">COMPANION INTERFACE // PHASE 2A</span>
+      <span class="brand-sub">COMPANION INTERFACE // CORE FOUNDATION</span>
     </div>
     <div class="top-status">
       <span id="bridgeStatus" class="status-chip"><i></i> BRIDGE</span>
@@ -47,19 +47,29 @@
           <div><dt>Authority</dt><dd>iai</dd></div>
           <div><dt>Editor</dt><dd>native Brain</dd></div>
         </dl>
-        <button class="outline-button" type="button" disabled title="Scheduled for Phase 2D">IAI BRAIN // PHASE 2D</button>
+        <button class="outline-button" type="button" disabled title="Native iai Brain handoff is scheduled for P3-03">IAI BRAIN // P3-03</button>
       </section>
     </aside>
 
     <section class="center-stage" aria-label="Orion conversation">
-      <div class="core-stage" aria-label="Orion Core placeholder">
-        <div class="core-halo halo-a"></div>
-        <div class="core-halo halo-b"></div>
+      <div
+        id="coreStage"
+        class="core-stage"
+        aria-label="Orion Core"
+        data-core-state="READY"
+        data-gaze="forward"
+        data-motion="full"
+      >
+        <div class="core-halo halo-a" aria-hidden="true"></div>
+        <div class="core-halo halo-b" aria-hidden="true"></div>
         <div class="core-ring">
-          <div class="core-eye"></div>
+          <div class="core-mask" aria-hidden="true">
+            <span class="core-eye core-eye-left"></span>
+            <span class="core-eye core-eye-right"></span>
+          </div>
           <span id="coreState">READY</span>
         </div>
-        <p id="coreDetail">Typed control proof // voice remains Hermes-owned and deferred</p>
+        <p id="coreDetail">Observed Hermes state // Orion presentation only</p>
       </div>
 
       <div id="transcript" class="transcript" role="log" aria-live="polite" aria-label="Conversation transcript">
@@ -120,10 +130,10 @@
   </main>
 
   <footer class="footer-line">
-    <span>ORION PHASE 2A // LOCAL LOOPBACK</span>
+    <span>ORION PHASE 3 // CORE FOUNDATION // LOCAL LOOPBACK</span>
     <span id="footerSession">NO SESSION</span>
   </footer>
 
-  <script src="/app.js" defer></script>
+  <script type="module" src="/app.js"></script>
 </body>
 </html>
