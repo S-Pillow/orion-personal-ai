@@ -261,6 +261,8 @@ class OrionHandler(BaseHTTPRequestHandler):
             self._set_ui_cookie()
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
+        if self.close_connection:
+            self.send_header("Connection", "close")
         self.end_headers()
         self.wfile.write(data)
 
@@ -431,6 +433,11 @@ class OrionHandler(BaseHTTPRequestHandler):
         )
 
     def do_POST(self) -> None:  # noqa: N802
+        # POST requests are deliberately one-request connections. This prevents
+        # unread rejected request bodies from being interpreted as a follow-on
+        # HTTP request by BaseHTTPRequestHandler.
+        self.close_connection = True
+
         if not self._request_host_guard():
             return
         path = urlparse(self.path).path
