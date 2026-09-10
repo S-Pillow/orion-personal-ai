@@ -1,12 +1,12 @@
 # Phase 2 Status — HUD / Companion Interface
 
-Status: **READY FOR DESIGN / COMPATIBILITY DISCOVERY**
+Status: **READY FOR PHASE 2A IMPLEMENTATION DISCOVERY**
 
-Date: 2026-09-09
+Date: 2026-09-10
 
-Controlling baseline: **ORION — Master PRD v2.7**, approved 2026-09-08.
+Controlling baseline: **ORION — Master PRD v2.8**, approved 2026-09-10.
 
-A **v2.8 HUD & Companion Interface** PRD draft has been prepared for owner review. It is not controlling until explicitly approved.
+PRD v2.8 supersedes v2.7 and is the current normative specification for the HUD & Companion Interface phase.
 
 ## Entry condition
 
@@ -18,22 +18,36 @@ The accepted lifecycle/memory foundation must not be reopened without contradict
 
 ## Product direction
 
-Orion's HUD should be a distinct companion interface, not a reskinned Jarvis clone.
+Orion's HUD is a distinct companion interface, not a reskinned Jarvis clone.
 
-The current design direction is:
+The approved design direction is:
 
 - a central **Orion Core** that acts as the visual face/presence of the assistant
 - subtle celestial/masked-face identity rather than a literal Iron-Man reactor
 - voice-reactive particles/rings and state-driven eye/core behavior
 - lightweight human-like idle motion: blink, eye saccades, small head/parallax drift, breathing/pulse
+- gaze-aware attention so Orion can subtly look toward active panels, approvals, or summoned content
 - adaptive center workspace that expands when Orion needs to present useful content
 - compact side rails for runtime, memory, activity, approvals, system status, skills, and automations
-- an explicit **IAI Brain** action/workspace
+- an explicit **IAI Brain** action/workspace plus a compact Orion Memory Lens
 - first-class visible agent activity, STOP/cancel, and approval boundaries
-- summonable media/content panels driven by an explicit Hermes tool
+- summonable media/content panels driven by an explicit Hermes tool contract
+- explicit microphone/privacy states such as VOICE OFF, PUSH TO TALK, WAKE, and CONVERSATION
+- bounded follow-up conversation windows rather than an indefinitely open microphone
 - reduced-motion/performance modes from the start
+- future stable display/device identities for targeted content presentation
 
-Full 3D facial rigging, photorealistic lip sync, or heavyweight Unreal/MetaHuman rendering is not required for V1.
+Full 3D facial rigging, photorealistic lip sync, or heavyweight Unreal/MetaHuman rendering is not required for V1. Those remain optional later enhancements only if the lightweight Orion Core cannot meet the experience goal.
+
+## Governing architecture
+
+The approved ownership model is:
+
+- **Hermes owns the agent runtime and native voice/wake path.**
+- **iai owns persistent memory.**
+- **Orion owns the living visual companion, presentation, and authorized control surface.**
+
+Orion must not duplicate those authorities for convenience.
 
 ## Key architecture discovery
 
@@ -48,16 +62,16 @@ However, the **accepted Orion Hermes pin itself (`v2026.8.27` / package `0.20.6`
 - voice stop phrases
 - local wake-word detection
 - openWakeWord, sherpa open-vocabulary, and Porcupine wake providers
-- custom wake phrases such as a future `hey Orion`
+- custom wake phrases such as `hey Orion`
 - desktop/client voice surfaces and authenticated profile-scoped voice configuration
 
-Therefore Phase 2 should **validate reuse of Hermes-native voice before adopting Jarvis' separate STT/TTS stack**. Duplicating voice ownership would increase latency, configuration drift, security surface, and lifecycle complexity.
+Therefore Phase 2 must **validate reuse of Hermes-native voice before adopting any separate STT/TTS stack**. Duplicating voice ownership would increase latency, configuration drift, security surface, and lifecycle complexity.
 
 Reference:
 
 `docs/phase2/jarvis-reference-study-2026-09-09.md`
 
-## Proposed implementation sequence
+## Approved implementation sequence
 
 ### Phase 2A — Compatibility and typed-control proof
 
@@ -101,13 +115,14 @@ V1 behaviors:
 - randomized blink timing
 - small eye saccades
 - subtle head/parallax drift left/right
+- gaze toward active panels or content when contextually useful
 - state-specific eye/core color/intensity
 - listening/thinking/tool/speaking/error states
 - voice-energy ring/particle response
 - motion pauses/reduces when workspace takes priority
 - no requirement for full skeletal 3D rig or phoneme-perfect lip sync
 
-Implementation preference: use a lightweight state-machine animation approach (for example Rive/SVG/Canvas layers) before considering Three.js/VRM. A later spike may evaluate VRM if the owner wants more realistic head movement/lip sync.
+Implementation preference: use a lightweight state-machine animation approach such as Rive, SVG, or Canvas layers before considering Three.js/VRM. A later spike may evaluate VRM if the owner wants more realistic head movement/lip sync after V1 is stable.
 
 ### Phase 2D — Adaptive workspace + IAI Brain
 
@@ -118,11 +133,12 @@ Acceptance targets:
 - Orion Core can contract to a smaller presence while content takes center stage
 - explicit workspaces for media, documents, memory, tasks, comparisons, and diagnostics
 - **IAI Brain** button/action opens the actual supported iai Brain surface when available rather than inventing a second memory editor
+- Orion Memory Lens exposes only supported/read-only memory status and provenance needed for the current interaction
 - memory status is transparent: source/provenance, availability, stale/degraded state where supported
 - agent-summoned content uses an explicit tool contract
 - display actions never grant new execution authority by themselves
 
-### Phase 2E — Voice integration
+### Phase 2E — Voice and wake integration
 
 Goal: add voice only after typed/control paths are stable.
 
@@ -132,8 +148,10 @@ Preferred order:
 2. expose its state/events cleanly to Orion HUD
 3. add push-to-talk
 4. add continuous conversation/barge-in
-5. evaluate wake phrase `hey Orion` with Hermes sherpa/open-vocabulary path
-6. only add custom voice-server code where Hermes-native behavior demonstrably cannot satisfy the requirement
+5. validate wake phrase `hey Orion` using Hermes-supported local wake capability, preferring sherpa/open-vocabulary for the first proof
+6. implement explicit privacy/listening state in the HUD
+7. use a bounded follow-up window with VAD/no-speech exit and a small hard cap on automatic continuation
+8. only add custom voice-server code where Hermes-native behavior demonstrably cannot satisfy a requirement
 
 ### Phase 2F — Hardening and polish
 
@@ -166,7 +184,7 @@ Prefer to adapt:
 Do not inherit blindly:
 
 - macOS launchd lifecycle
-- the single-file 45 KB HUD architecture
+- the single-file HUD architecture
 - a second always-on lifecycle authority
 - custom STT/TTS orchestration if Hermes-native voice meets the requirement
 - broadcast-to-every-screen semantics without device targeting
@@ -174,7 +192,7 @@ Do not inherit blindly:
 
 ## Dependency posture
 
-No upstream dependency upgrade is authorized by this planning record.
+No upstream dependency upgrade is authorized by this status record.
 
 Current watch:
 
@@ -186,8 +204,18 @@ Details:
 
 `docs/phase2/dependency-watch-2026-09-09.md`
 
-## Immediate next decision
+## Immediate next work
 
-Owner review should approve or revise the v2.8 HUD PRD draft. After that, Phase 2A should begin as a **read-only/API-contract discovery ticket first**, followed by one bounded implementation ticket. No HUD code should be allowed to mutate accepted lifecycle policy as part of convenience setup.
+Begin **Phase 2A as a read-only/API-contract discovery ticket first**, then move to one bounded typed-control implementation ticket after the contract is understood.
+
+First actions:
+
+1. record exact installed Ollama version
+2. map the accepted Hermes v0.20.6 session, run, tool-event, approval, STOP, health, skills/jobs, and voice/wake surfaces
+3. identify which Jarvis patterns can be reused without duplicating Hermes or iai authority
+4. define the minimum authenticated Orion HUD bridge contract
+5. keep lifecycle policy unchanged throughout discovery
+
+No HUD convenience feature may mutate the accepted manual-off lifecycle or silently create a second gateway, memory system, voice stack, or supervisor.
 
 Core Intent Preservation: **PRESERVED**.
