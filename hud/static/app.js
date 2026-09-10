@@ -44,10 +44,25 @@ function setCore(name, detail = "") {
   if (detail) ui.coreDetail.textContent = detail;
 }
 
-function setHermesOnline(online) {
+function setHermesOnline(online, degraded = false) {
+  const isDegraded = online && degraded;
+
   ui.hermesStatus.classList.toggle("offline", !online);
-  ui.hermesStatus.innerHTML = "<i></i> " + (online ? "HERMES ONLINE" : "HERMES OFFLINE");
-  ui.hermesValue.textContent = online ? "online" : "offline";
+  ui.hermesStatus.classList.toggle("degraded", isDegraded);
+
+  let label = "HERMES OFFLINE";
+  let value = "offline";
+
+  if (online && isDegraded) {
+    label = "HERMES DEGRADED";
+    value = "degraded";
+  } else if (online) {
+    label = "HERMES ONLINE";
+    value = "online";
+  }
+
+  ui.hermesStatus.innerHTML = "<i></i> " + label;
+  ui.hermesValue.textContent = value;
 }
 
 function updateRunControls() {
@@ -152,13 +167,18 @@ function appendMessage(role, text = "") {
 
 function renderMessages(payload) {
   const messages = arrayFrom(payload, ["messages", "items", "data"]);
-  const visible = messages.filter((m) => m && (m.role === "user" || m.role === "assistant"));
+  const visible = messages
+    .filter((m) => m && (m.role === "user" || m.role === "assistant"))
+    .map((m) => ({ role: m.role, text: messageText(m) }))
+    .filter((m) => m.text.trim().length > 0);
+
   if (!visible.length) {
     showTranscriptEmpty("Session is ready. Send the first message.");
     return;
   }
+
   clearTranscript();
-  for (const message of visible) appendMessage(message.role, messageText(message));
+  for (const message of visible) appendMessage(message.role, message.text);
 }
 
 function sessionTitle(item) {
@@ -367,12 +387,24 @@ async function refreshStatus() {
   try {
     const payload = await api("/api/orion/status");
     const online = Boolean(payload?.hermes?.online);
-    setHermesOnline(online);
+    const detailedStatus = String(payload?.hermes?.detailed?.status || "").toLowerCase();
+    const degraded = online && detailedStatus !== "ok";
+
+    setHermesOnline(online, degraded);
     ui.bridgeValue.textContent = payload?.bridge?.status || "online";
     ui.credentialValue.textContent = payload?.hermes?.credentials_available ? "available" : "missing";
+
     if (online) {
       await Promise.all([refreshDiscovery(), refreshSessions({ loadCurrent: false })]);
-      if (!state.streaming && !state.approvalEvent) setCore("READY", "Hermes link online // persistent session transport available");
+
+      if (!state.streaming && !state.approvalEvent) {
+        if (degraded) {
+          const readiness = detailedStatus || "unavailable";
+          setCore("DEGRADED", `Hermes online // detailed readiness ${readiness}`);
+        } else {
+          setCore("READY", "Hermes link online // persistent session transport available");
+        }
+      }
     } else if (!state.streaming) {
       setCore("OFFLINE", "Manual-off preserved // HUD did not start Hermes");
     }
@@ -401,7 +433,15 @@ function parseSSEFrame(frame) {
   return { event: eventName || data?.event || "message", data };
 }
 
-function handleStreamEvent(eventName, data, assistantBody) {
+function ensureAssistantBody(holder) {
+  if (!holder.body) {
+    holder.body = appendMessage("assistant", "");
+  }
+
+  return holder.body;
+}
+
+function handleStreamEvent(eventName, data, assistant) {
   const runId = String(data?.run_id || "");
   if (runId && !state.activeRunId) {
     state.activeRunId = runId;
@@ -417,10 +457,17 @@ function handleStreamEvent(eventName, data, assistantBody) {
     case "message.started":
       setCore("THINKING", "Generating response...");
       break;
-    case "assistant.delta":
-      assistantBody.textContent += String(data?.delta || "");
-      ui.transcript.scrollTop = ui.transcript.scrollHeight;
+    case "assistant.delta": {
+      const delta = String(data?.delta || "");
+
+      if (delta) {
+        const assistantBody = ensureAssistantBody(assistant);
+        assistantBody.textContent += delta;
+        ui.transcript.scrollTop = ui.transcript.scrollHeight;
+      }
+
       break;
+    }
     case "tool.progress":
       setCore("THINKING", String(data?.delta || data?.preview || "Reasoning...").slice(0, 160));
       break;
@@ -441,7 +488,11 @@ function handleStreamEvent(eventName, data, assistantBody) {
       showApproval(data || {});
       break;
     case "assistant.completed":
-      if (typeof data?.content === "string" && data.content) assistantBody.textContent = data.content;
+      if (typeof data?.content === "string" && data.content) {
+        const assistantBody = ensureAssistantBody(assistant);
+        assistantBody.textContent = data.content;
+      }
+
       setCore("FINALIZING", "Reconciling Hermes session...");
       break;
     case "run.completed":
@@ -481,7 +532,7 @@ async function streamTurn(input) {
     throw new Error(message);
   }
 
-  const assistantBody = appendMessage("assistant", "");
+  const assistant = { body: null };
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -496,14 +547,14 @@ async function streamTurn(input) {
       const frame = buffer.slice(0, splitAt);
       buffer = buffer.slice(splitAt + delimiterLength);
       const parsed = parseSSEFrame(frame);
-      if (parsed) handleStreamEvent(parsed.event, parsed.data, assistantBody);
+      if (parsed) handleStreamEvent(parsed.event, parsed.data, assistant);
     }
     if (done) break;
   }
 
   if (buffer.trim()) {
     const parsed = parseSSEFrame(buffer);
-    if (parsed) handleStreamEvent(parsed.event, parsed.data, assistantBody);
+    if (parsed) handleStreamEvent(parsed.event, parsed.data, assistant);
   }
 }
 
