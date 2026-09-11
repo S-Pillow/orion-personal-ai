@@ -271,7 +271,7 @@ Do not create a generic `AUTHORIZED` badge. Authorization is action/target/state
 
 ## First implementation architecture
 
-The source investigation supports a **frontend-first P3-04 slice with no bridge/API change required**.
+The source investigation supports a **frontend-owned P3-04 classification/presentation slice with no new Hermes API or upstream proxy route required**.
 
 Recommended new pure module:
 
@@ -295,6 +295,8 @@ Responsibilities:
 - keep accepted baseline default separate from observed turn runtime;
 - mirror authority state from existing run/approval/control observations;
 - preserve current conversation/session reconciliation behavior.
+
+Because Orion serves browser modules through an explicit static-file allowlist, adding `provenance-state.js` also requires a **minimal static-asset registration** in `hud/orion_hud_bridge.py`. That is a file-serving change only; it does not add an Orion API route, Hermes proxy route, credential path, lifecycle authority, or network behavior.
 
 Likely UI additions:
 
@@ -393,15 +395,16 @@ If the accepted Hermes version does not provide sufficient evidence to classify 
 
 ## Next bounded action
 
-Implement the frontend-only P3-04 state foundation after the Windows machine is available for immediate test execution:
+Before changing HUD source, complete a read-only review of all current HUD tests for static-module allowlist assumptions, workspace-count assumptions, and stale provenance/authority expectations. Then, when the Windows machine is available for immediate execution:
 
 1. add pure `provenance-state.js`;
-2. wire supported completion-event runtime metadata into it;
-3. add restrained provenance/authority UI in the current top/System surfaces;
-4. add focused P3-04 contract tests;
-5. run focused + full HUD suites before any implementation commit is accepted;
-6. perform bounded live visual smoke before merge.
+2. register that module in the bridge static-file allowlist only;
+3. wire supported completion-event runtime metadata into it;
+4. add restrained provenance/authority UI in the current top/System surfaces;
+5. add focused P3-04 contract tests and update only genuinely stale existing assertions;
+6. run focused + full HUD suites before any implementation commit is accepted;
+7. perform bounded live visual smoke before merge.
 
-Until the PC is available, avoid committing unexecuted HUD code merely to advance the branch. Documentation/source discovery is now sufficiently complete to start implementation directly when testing is available.
+Until the PC is available, avoid committing unexecuted HUD code merely to advance the branch. Documentation/source/test discovery is now sufficiently complete to start implementation directly when testing is available.
 
 Core Intent Preservation: **PRESERVED**.
