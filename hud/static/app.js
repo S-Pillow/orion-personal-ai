@@ -1,6 +1,7 @@
 "use strict";
 
 import { installCorePresence } from "./core-state.js";
+import { installWorkspaceController } from "./workspace-state.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -14,9 +15,25 @@ const ui = {
   sessionSelect: $("sessionSelect"),
   newSession: $("newSession"),
   sessionMeta: $("sessionMeta"),
+  lifecycleValue: $("lifecycleValue"),
   coreStage: $("coreStage"),
   coreState: $("coreState"),
   coreDetail: $("coreDetail"),
+  workspaceShell: $("workspaceShell"),
+  workspaceContext: $("workspaceContext"),
+  workspaceBridge: $("workspaceBridge"),
+  workspaceHermes: $("workspaceHermes"),
+  workspaceReadiness: $("workspaceReadiness"),
+  workspaceCredential: $("workspaceCredential"),
+  workspaceLifecycle: $("workspaceLifecycle"),
+  workspaceSession: $("workspaceSession"),
+  workspaceCoreState: $("workspaceCoreState"),
+  workspaceCapSessions: $("workspaceCapSessions"),
+  workspaceCapStop: $("workspaceCapStop"),
+  workspaceCapApproval: $("workspaceCapApproval"),
+  workspaceCapStream: $("workspaceCapStream"),
+  workspaceSkills: $("workspaceSkills"),
+  workspaceJobs: $("workspaceJobs"),
   transcript: $("transcript"),
   composer: $("composer"),
   messageInput: $("messageInput"),
@@ -47,8 +64,54 @@ const corePresence = installCorePresence(
   ui.coreState,
 );
 
+const workspaceController = installWorkspaceController(
+  ui.workspaceShell,
+  {
+    buttons: [
+      ...document.querySelectorAll("[data-workspace-target]"),
+    ],
+    panes: [
+      ...document.querySelectorAll("[data-workspace-pane]"),
+    ],
+    contextNode: ui.workspaceContext,
+  },
+);
+
+function textOrDash(node) {
+  const value = String(node?.textContent || "").trim();
+  return value || "\u2014";
+}
+
+function syncSystemWorkspace() {
+  ui.workspaceBridge.textContent = textOrDash(ui.bridgeValue);
+  ui.workspaceHermes.textContent = textOrDash(ui.hermesValue);
+  ui.workspaceCredential.textContent = textOrDash(
+    ui.credentialValue,
+  );
+  ui.workspaceLifecycle.textContent = textOrDash(
+    ui.lifecycleValue,
+  );
+
+  ui.workspaceSession.textContent = state.sessionId
+    ? state.sessionId
+    : "none";
+
+  ui.workspaceCoreState.textContent = textOrDash(ui.coreState);
+  ui.workspaceCapSessions.textContent = textOrDash(
+    ui.capSessions,
+  );
+  ui.workspaceCapStop.textContent = textOrDash(ui.capStop);
+  ui.workspaceCapApproval.textContent = textOrDash(
+    ui.capApproval,
+  );
+  ui.workspaceCapStream.textContent = textOrDash(ui.capStream);
+  ui.workspaceSkills.textContent = textOrDash(ui.skillCount);
+  ui.workspaceJobs.textContent = textOrDash(ui.jobCount);
+}
+
 function setCore(name, detail = "") {
   ui.coreState.textContent = name;
+  ui.workspaceCoreState.textContent = name;
   if (detail) ui.coreDetail.textContent = detail;
   corePresence.update(name);
 }
@@ -72,6 +135,7 @@ function setHermesOnline(online, degraded = false) {
 
   ui.hermesStatus.innerHTML = "<i></i> " + label;
   ui.hermesValue.textContent = value;
+  syncSystemWorkspace();
 }
 
 function updateRunControls() {
@@ -233,6 +297,7 @@ function syncSessionLabels() {
   ui.sessionMeta.textContent = state.sessionId
     ? `Hermes SessionDB // ${state.sessionId}`
     : "Hermes SessionDB is authoritative.";
+  syncSystemWorkspace();
 }
 
 async function loadMessages() {
@@ -306,6 +371,7 @@ function finishActivity(name, failed = false) {
 
 function hideApproval() {
   state.approvalEvent = null;
+  workspaceController.setApprovalFocus(false);
   ui.approvalPanel.classList.add("hidden");
   ui.approvalDetail.textContent = "";
   ui.approvalActions.replaceChildren();
@@ -313,6 +379,7 @@ function hideApproval() {
 
 function showApproval(data) {
   state.approvalEvent = data;
+  workspaceController.setApprovalFocus(true);
   ui.approvalPanel.classList.remove("hidden");
   const summary = data.command || data.description || data.reason || data.tool_name || "Hermes requires an operator decision.";
   ui.approvalDetail.textContent = String(summary).slice(0, 1000);
@@ -374,6 +441,7 @@ function renderCapabilities(payload) {
   ui.capStop.textContent = capabilityFlag(payload, ["run_stop"]) ? "YES" : "—";
   ui.capApproval.textContent = capabilityFlag(payload, ["run_approval"]) ? "YES" : "—";
   ui.capStream.textContent = capabilityFlag(payload, ["run_events_sse", "session_chat_stream"]) ? "YES" : "—";
+  syncSystemWorkspace();
 }
 
 async function refreshDiscovery() {
@@ -390,6 +458,7 @@ async function refreshDiscovery() {
   if (results[2].status === "fulfilled") {
     ui.jobCount.textContent = String(arrayFrom(results[2].value, ["jobs", "items", "data"]).length);
   }
+  syncSystemWorkspace();
 }
 
 async function refreshStatus(loadCurrentSession = false) {
@@ -398,6 +467,9 @@ async function refreshStatus(loadCurrentSession = false) {
     const online = Boolean(payload?.hermes?.online);
     const detailedStatus = String(payload?.hermes?.detailed?.status || "").toLowerCase();
     const degraded = online && detailedStatus !== "ok";
+
+    ui.workspaceReadiness.textContent =
+      detailedStatus || "unavailable";
 
     setHermesOnline(online, degraded);
     ui.bridgeValue.textContent = payload?.bridge?.status || "online";
@@ -423,6 +495,8 @@ async function refreshStatus(loadCurrentSession = false) {
   } catch (error) {
     setHermesOnline(false);
     ui.hermesValue.textContent = "unavailable";
+    ui.workspaceReadiness.textContent = "unavailable";
+    syncSystemWorkspace();
     if (!state.streaming) setCore("ERROR", `Bridge status failed: ${error.message}`);
   }
 }
