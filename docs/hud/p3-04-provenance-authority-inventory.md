@@ -1,6 +1,6 @@
 # P3-04 Provenance / Origin / Authority — Read-Only Source Inventory and Execution Contract
 
-Status: **SOURCE INVENTORY COMPLETE / IMPLEMENTATION NOT YET STARTED**
+Status: **SOURCE + TEST INVENTORY COMPLETE / IMPLEMENTATION NOT YET STARTED**
 
 Date: 2026-09-11
 
@@ -306,6 +306,50 @@ Likely UI additions:
 
 No model/provider picker is part of P3-04.
 
+## Current HUD test inventory: CLOSED
+
+All seven current HUD test files on accepted `main` were reviewed before source implementation planning:
+
+- `test_bridge.py`;
+- `test_frontend_hardening.py`;
+- `test_phase3_core_state.py`;
+- `test_phase3_memory_lens.py`;
+- `test_phase3_workspace.py`;
+- `test_post_connection_close.py`;
+- `test_stream_delivery.py`.
+
+Findings:
+
+1. `test_phase3_workspace.py` asserts exactly three workspace targets. P3-04 does not add a workspace, so this assertion remains correct and should not be changed.
+2. Core and Memory tests assert their existing module allowlists and authority boundaries. P3-04 can preserve them unchanged.
+3. `test_frontend_hardening.py` protects persisted-transcript behavior, degraded state, terminal states, and startup history loading. P3-04 integration must preserve all of those exact behaviors.
+4. `test_stream_delivery.py` deliberately supplies SSE completion events with no runtime metadata. This is a useful regression anchor: P3-04 must tolerate missing runtime metadata and remain `UNOBSERVED` without breaking streaming.
+5. `test_bridge.py` does not require a fixed total number of static files. Adding one exact `provenance-state.js` static allowlist entry does not require weakening its security tests.
+6. `test_post_connection_close.py` is unrelated to provenance and should remain unchanged.
+7. No existing test contains a stale P3-04 placeholder or an assertion that provenance/authority must be absent.
+
+Recommended test strategy:
+
+- add new `hud/tests/test_phase3_provenance.py` for the P3-04 contract;
+- do not edit existing tests unless implementation reveals a genuinely stale assertion;
+- new test should explicitly verify the bridge serves/allowlists only the new static module, not a new API/proxy route;
+- new test should enforce pure-module authority scanning, default `UNOBSERVED`, completion-runtime normalization, final-vs-start event semantics, and preservation of accepted baseline/observed-runtime distinction.
+
+This pre-review removes the stale-test discovery risk that affected earlier Phase 3 work.
+
+## Expected first implementation file scope
+
+Subject to exact preflight when the Windows machine is available, the expected implementation scope is six files:
+
+1. `hud/orion_hud_bridge.py` — add static asset allowlist entry only;
+2. `hud/static/provenance-state.js` — new pure presentation classifier;
+3. `hud/static/app.js` — event/state integration only;
+4. `hud/static/index.html` — provenance/authority presentation nodes;
+5. `hud/static/styles.css` — restrained presentation styles;
+6. `hud/tests/test_phase3_provenance.py` — new focused contract tests.
+
+Existing test files are expected to remain unchanged. If implementation requires any seventh path, stop and review the reason before broadening scope.
+
 ## No Windows discovery probe required for architecture
 
 The central source question is closed from the exact accepted Hermes tag and tests. A broad Windows discovery probe is no longer needed before implementation.
@@ -395,16 +439,15 @@ If the accepted Hermes version does not provide sufficient evidence to classify 
 
 ## Next bounded action
 
-Before changing HUD source, complete a read-only review of all current HUD tests for static-module allowlist assumptions, workspace-count assumptions, and stale provenance/authority expectations. Then, when the Windows machine is available for immediate execution:
+When the Windows machine is available for immediate execution:
 
-1. add pure `provenance-state.js`;
-2. register that module in the bridge static-file allowlist only;
-3. wire supported completion-event runtime metadata into it;
-4. add restrained provenance/authority UI in the current top/System surfaces;
-5. add focused P3-04 contract tests and update only genuinely stale existing assertions;
-6. run focused + full HUD suites before any implementation commit is accepted;
-7. perform bounded live visual smoke before merge.
+1. preflight exact main/feature refs and clean-off state;
+2. implement the expected six-file P3-04 scope;
+3. run focused P3-04 tests;
+4. run the full HUD suite;
+5. commit/push only after both suites pass and file scope is exact;
+6. perform bounded live visual smoke before merge.
 
-Until the PC is available, avoid committing unexecuted HUD code merely to advance the branch. Documentation/source/test discovery is now sufficiently complete to start implementation directly when testing is available.
+Until the PC is available, avoid committing unexecuted HUD code merely to advance the branch. Source and test discovery are now complete enough to begin implementation directly when testing is available.
 
 Core Intent Preservation: **PRESERVED**.
