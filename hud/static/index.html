@@ -45,9 +45,18 @@
         <div class="panel-title"><span>MEMORY</span><b>03</b></div>
         <dl class="status-list">
           <div><dt>Authority</dt><dd>iai</dd></div>
-          <div><dt>Editor</dt><dd>native Brain</dd></div>
+          <div><dt>Baseline</dt><dd>iai-pme 3.0.8</dd></div>
+          <div><dt>Detail UI</dt><dd>native Brain</dd></div>
         </dl>
-        <button class="outline-button" type="button" disabled title="Native iai Brain handoff is scheduled for P3-03">IAI BRAIN // P3-03</button>
+        <a
+          id="iaiBrainLink"
+          class="outline-button brain-link"
+          href="http://127.0.0.1:4477/"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Open the native iai Brain loopback surface if it is already running"
+        >OPEN IAI BRAIN</a>
+        <div class="muted-line">Link only // Orion does not start or supervise iai Brain.</div>
       </section>
     </aside>
 
@@ -67,6 +76,13 @@
           data-workspace-target="system"
           aria-pressed="false"
         >SYSTEM</button>
+        <button
+          id="workspaceMemoryButton"
+          class="workspace-tab"
+          type="button"
+          data-workspace-target="memory"
+          aria-pressed="false"
+        >MEMORY</button>
         <span class="workspace-context-label">
           ACTIVE // <b id="workspaceContext">CONVERSATION</b>
         </span>
@@ -235,6 +251,74 @@
                   <strong id="workspaceJobs">&#8212;</strong>
                 </div>
               </div>
+            </article>
+          </div>
+        </section>
+
+        <section
+          class="workspace-pane memory-workspace"
+          data-workspace-pane="memory"
+          aria-labelledby="workspaceMemoryButton"
+          hidden
+        >
+          <div class="workspace-heading">
+            <div>
+              <span class="workspace-kicker">MEMORY LENS</span>
+              <h1>iai Memory Authority</h1>
+              <p>
+                Orion explains the accepted memory boundary and hands detailed
+                memory inspection or administration to the native iai Brain.
+                Orion does not maintain a second memory store or memory model.
+              </p>
+            </div>
+            <span class="workspace-badge">IAI AUTHORITATIVE</span>
+          </div>
+
+          <div class="memory-grid">
+            <article class="workspace-card memory-card">
+              <h2>AUTHORITY</h2>
+              <dl class="status-list workspace-status-list">
+                <div><dt>Memory owner</dt><dd>iai</dd></div>
+                <div><dt>Accepted baseline</dt><dd>iai-pme 3.0.8</dd></div>
+                <div><dt>Persistence</dt><dd>encrypted local store</dd></div>
+                <div><dt>Orion role</dt><dd>presentation + handoff</dd></div>
+              </dl>
+            </article>
+
+            <article class="workspace-card memory-card">
+              <h2>NATIVE BRAIN</h2>
+              <dl class="status-list workspace-status-list">
+                <div><dt>Surface</dt><dd>iai brain</dd></div>
+                <div><dt>Bind</dt><dd>127.0.0.1 only</dd></div>
+                <div><dt>Default port</dt><dd>4477</dd></div>
+                <div><dt>Availability</dt><dd>not probed by HUD</dd></div>
+              </dl>
+              <a
+                class="outline-button brain-link memory-handoff"
+                href="http://127.0.0.1:4477/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >OPEN NATIVE IAI BRAIN</a>
+            </article>
+
+            <article class="workspace-card memory-card memory-boundary-card">
+              <h2>BOUNDARY</h2>
+              <p>
+                Detailed search, capture, teach, pin, fade/forget-hint,
+                rescue, graph inspection, and memory administration belong to
+                iai Brain or documented iai interfaces. This HUD does not
+                proxy, reproduce, or mutate those functions.
+              </p>
+            </article>
+
+            <article class="workspace-card memory-card memory-provenance-card">
+              <h2>PROVENANCE</h2>
+              <p>
+                Baseline and handoff details shown here come from the accepted
+                Orion iai 3.0.8 installation contract. Brain reachability is
+                intentionally not inferred from this static Lens.
+              </p>
+              <span class="memory-note">LINK ONLY // NO PROCESS AUTHORITY</span>
             </article>
           </div>
         </section>

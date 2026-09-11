@@ -230,6 +230,17 @@ textarea:focus { border-color: var(--line-strong); box-shadow: 0 0 0 1px rgba(87
 .outline-button { width: 100%; }
 .outline-button:hover:not(:disabled),
 .primary-button:hover:not(:disabled) { background: rgba(87, 231, 255, 0.19); }
+.brain-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 9px;
+  text-align: center;
+  text-decoration: none;
+}
+.brain-link:hover {
+  background: rgba(87, 231, 255, 0.19);
+}
 .stop-button {
   border-color: rgba(255, 111, 135, 0.44);
   color: var(--bad);
@@ -312,7 +323,8 @@ textarea:focus { border-color: var(--line-strong); box-shadow: 0 0 0 1px rgba(87
     box-shadow 180ms ease;
 }
 
-.workspace-shell[data-workspace="system"] {
+.workspace-shell[data-workspace="system"],
+.workspace-shell[data-workspace="memory"] {
   grid-template-rows:
     minmax(150px, 20vh)
     minmax(0, 1fr);
@@ -339,7 +351,8 @@ textarea:focus { border-color: var(--line-strong); box-shadow: 0 0 0 1px rgba(87
   grid-template-rows: minmax(0, 1fr) auto;
 }
 
-.system-workspace {
+.system-workspace,
+.memory-workspace {
   overflow: auto;
   padding: 14px;
   border-top: 1px solid rgba(87, 231, 255, 0.08);
@@ -389,7 +402,8 @@ textarea:focus { border-color: var(--line-strong); box-shadow: 0 0 0 1px rgba(87
   letter-spacing: 0.1em;
 }
 
-.system-grid {
+.system-grid,
+.memory-grid {
   display: grid;
   grid-template-columns:
     repeat(auto-fit, minmax(210px, 1fr));
@@ -448,6 +462,31 @@ textarea:focus { border-color: var(--line-strong); box-shadow: 0 0 0 1px rgba(87
   font-family: var(--font-mono);
   font-size: 22px;
   font-weight: 500;
+}
+
+.memory-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.memory-handoff {
+  margin-top: 12px;
+}
+
+.memory-boundary-card,
+.memory-provenance-card {
+  min-height: 132px;
+}
+
+.memory-note {
+  display: block;
+  margin-top: 12px;
+  color: var(--good);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.1em;
 }
 
 .core-stage {
@@ -811,7 +850,8 @@ textarea:focus { border-color: var(--line-strong); box-shadow: 0 0 0 1px rgba(87
   }
 
   .workspace-shell,
-  .workspace-shell[data-workspace="system"] {
+  .workspace-shell[data-workspace="system"],
+  .workspace-shell[data-workspace="memory"] {
     grid-template-rows:
       minmax(145px, 22vh)
       minmax(0, 1fr);
@@ -826,7 +866,8 @@ textarea:focus { border-color: var(--line-strong); box-shadow: 0 0 0 1px rgba(87
     margin-top: 9px;
   }
 
-  .system-grid {
+  .system-grid,
+  .memory-grid {
     grid-template-columns: 1fr;
   }
 }

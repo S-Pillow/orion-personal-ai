@@ -3,6 +3,7 @@
 const WORKSPACES = new Set([
   "conversation",
   "system",
+  "memory",
 ]);
 
 export function normalizeWorkspace(value) {
