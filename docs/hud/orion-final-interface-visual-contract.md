@@ -193,6 +193,8 @@ Rules:
 6. Browser assets never infer filesystem, shell, cloud, approval, or lifecycle rights from convenience or shared Windows identity.
 7. Color is supplementary; every critical state has text/icon semantics as well.
 
+P3-04 source discovery further established that Hermes can surface actual provider/model metadata on supported completion events for certain non-global runtime selections, but ordinary global-default turns may not include that metadata. Provider/model identity also does not by itself prove endpoint locality. Therefore the target top edge must be designed to display `ORIGIN · UNOBSERVED` cleanly rather than treating uncertainty as an error.
+
 ## Approval surface
 
 Consequential action UX should clearly show the boundary being crossed.
