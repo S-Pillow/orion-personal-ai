@@ -120,6 +120,20 @@ class Phase3AdaptiveWorkspaceContractTests(unittest.TestCase):
             APP,
         )
 
+    def test_status_observations_sync_before_online_branch(self):
+        expected = (
+            '    ui.bridgeValue.textContent = '
+            'payload?.bridge?.status || "online";\n'
+            '    ui.credentialValue.textContent = '
+            'payload?.hermes?.credentials_available '
+            '? "available" : "missing";\n'
+            '    syncSystemWorkspace();\n'
+            '\n'
+            '    if (online) {\n'
+        )
+
+        self.assertIn(expected, APP)
+
     def test_workspace_state_is_deterministic_and_testable(self):
         self.assertIn(
             '"conversation"',

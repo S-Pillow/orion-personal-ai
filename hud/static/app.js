@@ -474,6 +474,7 @@ async function refreshStatus(loadCurrentSession = false) {
     setHermesOnline(online, degraded);
     ui.bridgeValue.textContent = payload?.bridge?.status || "online";
     ui.credentialValue.textContent = payload?.hermes?.credentials_available ? "available" : "missing";
+    syncSystemWorkspace();
 
     if (online) {
       await Promise.all([
