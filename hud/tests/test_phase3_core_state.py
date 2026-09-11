@@ -156,14 +156,26 @@ class Phase3CoreStateContractTests(unittest.TestCase):
             with self.subTest(token=token):
                 self.assertNotIn(token, CORE)
 
-    def test_memory_handoff_remains_explicitly_deferred(self):
+    def test_memory_handoff_is_explicit_vendor_surface(self):
         self.assertIn(
-            "IAI BRAIN // P3-03",
+            "OPEN IAI BRAIN",
+            INDEX,
+        )
+        self.assertIn(
+            "OPEN NATIVE IAI BRAIN",
+            INDEX,
+        )
+        self.assertIn(
+            'href="http://127.0.0.1:4477/"',
+            INDEX,
+        )
+        self.assertIn(
+            "Link only // Orion does not start or supervise iai Brain.",
             INDEX,
         )
         self.assertNotIn(
             "127.0.0.1:4477",
-            INDEX + APP + CORE,
+            APP + CORE,
         )
 
 
