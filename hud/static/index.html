@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Orion // Phase 3 Core</title>
+  <title>Orion // Phase 3 Workspace</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
       <span class="brand-mark">ORION</span>
-      <span class="brand-sub">COMPANION INTERFACE // CORE FOUNDATION</span>
+      <span class="brand-sub">COMPANION INTERFACE // ADAPTIVE WORKSPACE</span>
     </div>
     <div class="top-status">
       <span id="bridgeStatus" class="status-chip"><i></i> BRIDGE</span>
@@ -27,7 +27,7 @@
           <div><dt>Bridge</dt><dd id="bridgeValue">online</dd></div>
           <div><dt>Hermes</dt><dd id="hermesValue">checking</dd></div>
           <div><dt>API credential</dt><dd id="credentialValue">checking</dd></div>
-          <div><dt>Lifecycle authority</dt><dd>none</dd></div>
+          <div><dt>Lifecycle authority</dt><dd id="lifecycleValue">none</dd></div>
         </dl>
       </section>
 
@@ -51,40 +51,194 @@
       </section>
     </aside>
 
-    <section class="center-stage" aria-label="Orion conversation">
+    <section class="center-stage" aria-label="Orion adaptive workspace">
+      <nav class="workspace-switcher" aria-label="Workspace views">
+        <button
+          id="workspaceConversationButton"
+          class="workspace-tab"
+          type="button"
+          data-workspace-target="conversation"
+          aria-pressed="true"
+        >CONVERSATION</button>
+        <button
+          id="workspaceSystemButton"
+          class="workspace-tab"
+          type="button"
+          data-workspace-target="system"
+          aria-pressed="false"
+        >SYSTEM</button>
+        <span class="workspace-context-label">
+          ACTIVE // <b id="workspaceContext">CONVERSATION</b>
+        </span>
+      </nav>
+
       <div
-        id="coreStage"
-        class="core-stage"
-        aria-label="Orion Core"
-        data-core-state="READY"
-        data-gaze="forward"
-        data-motion="full"
+        id="workspaceShell"
+        class="workspace-shell"
+        data-workspace="conversation"
+        data-workspace-focus="normal"
       >
-        <div class="core-halo halo-a" aria-hidden="true"></div>
-        <div class="core-halo halo-b" aria-hidden="true"></div>
-        <div class="core-ring">
-          <div class="core-mask" aria-hidden="true">
-            <span class="core-eye core-eye-left"></span>
-            <span class="core-eye core-eye-right"></span>
+        <div
+          id="coreStage"
+          class="core-stage"
+          aria-label="Orion Core"
+          data-core-state="READY"
+          data-gaze="forward"
+          data-motion="full"
+        >
+          <div class="core-halo halo-a" aria-hidden="true"></div>
+          <div class="core-halo halo-b" aria-hidden="true"></div>
+          <div class="core-ring">
+            <div class="core-mask" aria-hidden="true">
+              <span class="core-eye core-eye-left"></span>
+              <span class="core-eye core-eye-right"></span>
+            </div>
+            <span id="coreState">READY</span>
           </div>
-          <span id="coreState">READY</span>
+          <p id="coreDetail">Observed Hermes state // Orion presentation only</p>
         </div>
-        <p id="coreDetail">Observed Hermes state // Orion presentation only</p>
-      </div>
 
-      <div id="transcript" class="transcript" role="log" aria-live="polite" aria-label="Conversation transcript">
-        <div class="empty-state">
-          <strong>ORION HUD LINK READY</strong>
-          <span>Select or create a Hermes session to begin.</span>
-        </div>
-      </div>
+        <section
+          class="workspace-pane conversation-workspace"
+          data-workspace-pane="conversation"
+          aria-labelledby="workspaceConversationButton"
+        >
+          <div
+            id="transcript"
+            class="transcript"
+            role="log"
+            aria-live="polite"
+            aria-label="Conversation transcript"
+          >
+            <div class="empty-state">
+              <strong>ORION HUD LINK READY</strong>
+              <span>Select or create a Hermes session to begin.</span>
+            </div>
+          </div>
 
-      <form id="composer" class="composer">
-        <label class="sr-only" for="messageInput">Message Orion</label>
-        <textarea id="messageInput" rows="1" placeholder="Message Orion..." maxlength="65536"></textarea>
-        <button id="sendButton" class="primary-button" type="submit">SEND</button>
-        <button id="stopButton" class="stop-button" type="button" disabled>STOP</button>
-      </form>
+          <form id="composer" class="composer">
+            <label class="sr-only" for="messageInput">Message Orion</label>
+            <textarea
+              id="messageInput"
+              rows="1"
+              placeholder="Message Orion..."
+              maxlength="65536"
+            ></textarea>
+            <button
+              id="sendButton"
+              class="primary-button"
+              type="submit"
+            >SEND</button>
+            <button
+              id="stopButton"
+              class="stop-button"
+              type="button"
+              disabled
+            >STOP</button>
+          </form>
+        </section>
+
+        <section
+          class="workspace-pane system-workspace"
+          data-workspace-pane="system"
+          aria-labelledby="workspaceSystemButton"
+          hidden
+        >
+          <div class="workspace-heading">
+            <div>
+              <span class="workspace-kicker">SYSTEM OVERVIEW</span>
+              <h1>Observed Orion Link State</h1>
+              <p>
+                Mirrors existing HUD observations only. No new runtime,
+                lifecycle, model, or memory authority is introduced here.
+              </p>
+            </div>
+            <span class="workspace-badge">OBSERVED ONLY</span>
+          </div>
+
+          <div class="system-grid">
+            <article class="workspace-card">
+              <h2>LINK</h2>
+              <dl class="status-list workspace-status-list">
+                <div>
+                  <dt>Bridge</dt>
+                  <dd id="workspaceBridge">online</dd>
+                </div>
+                <div>
+                  <dt>Hermes</dt>
+                  <dd id="workspaceHermes">checking</dd>
+                </div>
+                <div>
+                  <dt>Readiness</dt>
+                  <dd id="workspaceReadiness">checking</dd>
+                </div>
+                <div>
+                  <dt>Credential</dt>
+                  <dd id="workspaceCredential">checking</dd>
+                </div>
+                <div>
+                  <dt>Lifecycle authority</dt>
+                  <dd id="workspaceLifecycle">none</dd>
+                </div>
+              </dl>
+            </article>
+
+            <article class="workspace-card">
+              <h2>CONTEXT</h2>
+              <dl class="status-list workspace-status-list">
+                <div>
+                  <dt>Session</dt>
+                  <dd id="workspaceSession">none</dd>
+                </div>
+                <div>
+                  <dt>Session authority</dt>
+                  <dd>Hermes SessionDB</dd>
+                </div>
+                <div>
+                  <dt>Core state</dt>
+                  <dd id="workspaceCoreState">READY</dd>
+                </div>
+              </dl>
+            </article>
+
+            <article class="workspace-card">
+              <h2>CAPABILITIES</h2>
+              <dl class="status-list workspace-status-list">
+                <div>
+                  <dt>Sessions</dt>
+                  <dd id="workspaceCapSessions">&#8212;</dd>
+                </div>
+                <div>
+                  <dt>Run stop</dt>
+                  <dd id="workspaceCapStop">&#8212;</dd>
+                </div>
+                <div>
+                  <dt>Approvals</dt>
+                  <dd id="workspaceCapApproval">&#8212;</dd>
+                </div>
+                <div>
+                  <dt>Streaming</dt>
+                  <dd id="workspaceCapStream">&#8212;</dd>
+                </div>
+              </dl>
+            </article>
+
+            <article class="workspace-card">
+              <h2>INVENTORY</h2>
+              <div class="workspace-inventory">
+                <div>
+                  <span>SKILLS</span>
+                  <strong id="workspaceSkills">&#8212;</strong>
+                </div>
+                <div>
+                  <span>JOBS</span>
+                  <strong id="workspaceJobs">&#8212;</strong>
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+      </div>
     </section>
 
     <aside class="rail right-rail" aria-label="Hermes activity and capabilities">
@@ -130,7 +284,7 @@
   </main>
 
   <footer class="footer-line">
-    <span>ORION PHASE 3 // CORE FOUNDATION // LOCAL LOOPBACK</span>
+    <span>ORION PHASE 3 // ADAPTIVE WORKSPACE // LOCAL LOOPBACK</span>
     <span id="footerSession">NO SESSION</span>
   </footer>
 
