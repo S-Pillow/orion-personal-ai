@@ -265,11 +265,27 @@ Already accepted on `main`:
 - P3-02 adaptive Conversation/System workspace;
 - P3-03 Memory workspace + native iai Brain handoff.
 
-Next implementation slice:
+Current implementation slice:
 
 - P3-04 provenance/origin/authority evidence model and truthful indicators.
 
+P3-04 source discovery established an important visual rule for the north star: the top-bar origin indicator must be able to say `UNOBSERVED`. The accepted local Ollama baseline and an observed per-turn inference origin are separate facts and must be presented separately until evidence joins them.
+
 Future slices may progressively reshape composition toward this visual north star, but they must preserve the accepted runtime and authority boundaries. Phase 4 supplies native Hermes voice/wake behavior; Phase 5 supplies vault/actions/approval/display tooling; Phase 6 supplies bounded cloud escalation/reminders; Phase 7 may add target-aware display/device/LAN behavior.
+
+## Build sequencing toward the north star
+
+The image is reached through bounded slices rather than a single visual rewrite.
+
+Recommended sequence:
+
+1. **P3-04 — provenance/origin/authority foundation**: make the future top/status language truthful before amplifying it visually.
+2. **P3-05 — composition convergence**: reshape spacing, rails, top edge, conversation hierarchy, and Core prominence using only capabilities already accepted at that point. No fake Research/Create/Vault/Tasks controls.
+3. **Phase 4 — voice/wake integration**: let the Core become the voice surface only after the supported Hermes voice/wake path is proven on the machine.
+4. **Phase 5 — vault/action/display surfaces**: introduce the richer right-side approval/action composition and summonable document/evidence surfaces when their backend capabilities exist.
+5. **Phase 6+ — cloud/reminders/device context**: only then enable cloud-assisted, reminders, device/LAN indicators and related visual states.
+
+This sequence allows the interface to look increasingly like the approved concept without lying about capabilities that have not reached their phase gate.
 
 ## Acceptance principles for visual work
 
