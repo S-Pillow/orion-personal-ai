@@ -15,6 +15,10 @@
     <div class="top-status">
       <span id="bridgeStatus" class="status-chip"><i></i> BRIDGE</span>
       <span id="hermesStatus" class="status-chip offline"><i></i> HERMES OFFLINE</span>
+      <span id="originStatus" class="status-chip provenance-chip" data-provenance-origin="UNOBSERVED">ORIGIN &#183; UNOBSERVED</span>
+      <span id="sourceStatus" class="status-chip provenance-chip">SOURCE &#183; UNOBSERVED</span>
+      <span id="memoryUseStatus" class="status-chip provenance-chip">MEMORY USE &#183; UNOBSERVED</span>
+      <span id="authorityStatus" class="status-chip authority-chip" data-authority-state="OBSERVE">AUTHORITY &#183; OBSERVE</span>
       <time id="clock" aria-label="local time">--:--:--</time>
     </div>
   </header>
@@ -239,6 +243,47 @@
               </dl>
             </article>
 
+            <article class="workspace-card provenance-card">
+              <h2>PROVENANCE + AUTHORITY</h2>
+              <dl class="status-list workspace-status-list">
+                <div>
+                  <dt>Response origin</dt>
+                  <dd id="workspaceOrigin">UNOBSERVED</dd>
+                </div>
+                <div>
+                  <dt>Observed provider</dt>
+                  <dd id="workspaceProvider">UNOBSERVED</dd>
+                </div>
+                <div>
+                  <dt>Observed model</dt>
+                  <dd id="workspaceModel">UNOBSERVED</dd>
+                </div>
+                <div>
+                  <dt>Evidence class</dt>
+                  <dd id="workspaceProvenanceEvidence">UNOBSERVED</dd>
+                </div>
+                <div>
+                  <dt>Source</dt>
+                  <dd id="workspaceSource">UNOBSERVED</dd>
+                </div>
+                <div>
+                  <dt>Memory use</dt>
+                  <dd id="workspaceMemoryUse">UNOBSERVED</dd>
+                </div>
+                <div>
+                  <dt>Authority</dt>
+                  <dd id="workspaceAuthority">OBSERVE</dd>
+                </div>
+                <div>
+                  <dt>Accepted baseline</dt>
+                  <dd id="workspaceBaseline">qwen3.5-hermes:9b / Ollama / LOCAL</dd>
+                </div>
+              </dl>
+              <p class="provenance-note">
+                Accepted baseline is configuration evidence only; it is not
+                per-turn response-origin proof.
+              </p>
+            </article>
             <article class="workspace-card">
               <h2>INVENTORY</h2>
               <div class="workspace-inventory">

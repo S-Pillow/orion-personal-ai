@@ -2,12 +2,23 @@
 
 import { installCorePresence } from "./core-state.js";
 import { installWorkspaceController } from "./workspace-state.js";
+import {
+  ACCEPTED_BASELINE,
+  classifyAuthority,
+  createProvenanceState,
+  displayProvenanceValue,
+  observeCompletionRuntime,
+} from "./provenance-state.js";
 
 const $ = (id) => document.getElementById(id);
 
 const ui = {
   bridgeStatus: $("bridgeStatus"),
   hermesStatus: $("hermesStatus"),
+  originStatus: $("originStatus"),
+  authorityStatus: $("authorityStatus"),
+  sourceStatus: $("sourceStatus"),
+  memoryUseStatus: $("memoryUseStatus"),
   bridgeValue: $("bridgeValue"),
   hermesValue: $("hermesValue"),
   credentialValue: $("credentialValue"),
@@ -21,6 +32,14 @@ const ui = {
   coreDetail: $("coreDetail"),
   workspaceShell: $("workspaceShell"),
   workspaceContext: $("workspaceContext"),
+  workspaceOrigin: $("workspaceOrigin"),
+  workspaceProvider: $("workspaceProvider"),
+  workspaceModel: $("workspaceModel"),
+  workspaceProvenanceEvidence: $("workspaceProvenanceEvidence"),
+  workspaceSource: $("workspaceSource"),
+  workspaceMemoryUse: $("workspaceMemoryUse"),
+  workspaceAuthority: $("workspaceAuthority"),
+  workspaceBaseline: $("workspaceBaseline"),
   workspaceBridge: $("workspaceBridge"),
   workspaceHermes: $("workspaceHermes"),
   workspaceReadiness: $("workspaceReadiness"),
@@ -57,6 +76,7 @@ const state = {
   activeRunId: "",
   streaming: false,
   approvalEvent: null,
+  provenance: createProvenanceState(),
 };
 
 const corePresence = installCorePresence(
@@ -77,6 +97,48 @@ const workspaceController = installWorkspaceController(
   },
 );
 
+function syncProvenancePresentation() {
+  const provenance = state.provenance || createProvenanceState();
+  const authority = classifyAuthority({
+    streaming: state.streaming,
+    approvalPending: Boolean(state.approvalEvent),
+    activeRunId: state.activeRunId,
+  });
+
+  const origin = displayProvenanceValue(provenance.origin);
+  const provider = displayProvenanceValue(provenance.provider);
+  const model = displayProvenanceValue(provenance.model);
+  const evidence = displayProvenanceValue(
+    provenance.evidenceClass,
+  );
+  const source = displayProvenanceValue(provenance.source);
+  const memoryUse = displayProvenanceValue(
+    provenance.memoryUse,
+  );
+
+  ui.originStatus.textContent = `ORIGIN \u00b7 ${origin}`;
+  ui.originStatus.dataset.provenanceOrigin = origin;
+
+  ui.authorityStatus.textContent =
+    `AUTHORITY \u00b7 ${authority}`;
+  ui.authorityStatus.dataset.authorityState = authority;
+
+  ui.sourceStatus.textContent = `SOURCE \u00b7 ${source}`;
+  ui.memoryUseStatus.textContent =
+    `MEMORY USE \u00b7 ${memoryUse}`;
+
+  ui.workspaceOrigin.textContent = origin;
+  ui.workspaceProvider.textContent = provider;
+  ui.workspaceModel.textContent = model;
+  ui.workspaceProvenanceEvidence.textContent = evidence;
+  ui.workspaceSource.textContent = source;
+  ui.workspaceMemoryUse.textContent = memoryUse;
+  ui.workspaceAuthority.textContent = authority;
+  ui.workspaceBaseline.textContent =
+    `${ACCEPTED_BASELINE.model} / ` +
+    `${ACCEPTED_BASELINE.provider} / ` +
+    `${ACCEPTED_BASELINE.origin}`;
+}
 function textOrDash(node) {
   const value = String(node?.textContent || "").trim();
   return value || "\u2014";
@@ -143,6 +205,7 @@ function updateRunControls() {
   ui.sendButton.disabled = state.streaming;
   ui.newSession.disabled = state.streaming;
   ui.sessionSelect.disabled = state.streaming;
+  syncProvenancePresentation();
 }
 
 function formatClock() {
@@ -282,6 +345,8 @@ async function refreshSessions({ loadCurrent = true } = {}) {
       ui.sessionSelect.value = previous;
     } else if (previous) {
       state.sessionId = "";
+      state.provenance = createProvenanceState();
+      syncProvenancePresentation();
       localStorage.removeItem("orion.hermesSession");
     }
 
@@ -323,6 +388,8 @@ async function createSession() {
     const id = extractId(payload);
     if (!id) throw new Error("Hermes created a session without an id");
     state.sessionId = id;
+    state.provenance = createProvenanceState();
+    syncProvenancePresentation();
     localStorage.setItem("orion.hermesSession", id);
     await refreshSessions({ loadCurrent: true });
     ui.sessionSelect.value = id;
@@ -371,6 +438,7 @@ function finishActivity(name, failed = false) {
 
 function hideApproval() {
   state.approvalEvent = null;
+  syncProvenancePresentation();
   workspaceController.setApprovalFocus(false);
   ui.approvalPanel.classList.add("hidden");
   ui.approvalDetail.textContent = "";
@@ -379,6 +447,7 @@ function hideApproval() {
 
 function showApproval(data) {
   state.approvalEvent = data;
+  syncProvenancePresentation();
   workspaceController.setApprovalFocus(true);
   ui.approvalPanel.classList.remove("hidden");
   const summary = data.command || data.description || data.reason || data.tool_name || "Hermes requires an operator decision.";
@@ -537,6 +606,7 @@ function handleStreamEvent(eventName, data, assistant) {
 
   switch (eventName) {
     case "run.started":
+      state.provenance = createProvenanceState();
       state.activeRunId = runId;
       setCore("THINKING", runId ? `Hermes run ${runId}` : "Hermes run started");
       updateRunControls();
@@ -575,6 +645,11 @@ function handleStreamEvent(eventName, data, assistant) {
       showApproval(data || {});
       break;
     case "assistant.completed":
+      state.provenance = observeCompletionRuntime(
+        state.provenance,
+        data?.runtime,
+      );
+      syncProvenancePresentation();
       if (typeof data?.content === "string" && data.content) {
         const assistantBody = ensureAssistantBody(assistant);
         assistantBody.textContent = data.content;
@@ -583,10 +658,20 @@ function handleStreamEvent(eventName, data, assistant) {
       setCore("FINALIZING", "Reconciling Hermes session...");
       break;
     case "run.completed":
+      state.provenance = observeCompletionRuntime(
+        state.provenance,
+        data?.runtime,
+      );
+      syncProvenancePresentation();
+      if (!runId || runId === state.activeRunId) state.activeRunId = "";
+      hideApproval();
+      setCore("READY", "Turn complete");
+      updateRunControls();
+      break;
     case "run.cancelled":
       if (!runId || runId === state.activeRunId) state.activeRunId = "";
       hideApproval();
-      setCore("READY", eventName === "run.cancelled" ? "Run cancelled" : "Turn complete");
+      setCore("READY", "Run cancelled");
       updateRunControls();
       break;
     case "run.failed":
@@ -701,6 +786,8 @@ ui.composer.addEventListener("submit", sendMessage);
 ui.stopButton.addEventListener("click", stopRun);
 ui.sessionSelect.addEventListener("change", async () => {
   state.sessionId = ui.sessionSelect.value;
+  state.provenance = createProvenanceState();
+  syncProvenancePresentation();
   if (state.sessionId) localStorage.setItem("orion.hermesSession", state.sessionId);
   else localStorage.removeItem("orion.hermesSession");
   syncSessionLabels();
