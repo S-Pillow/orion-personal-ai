@@ -70,9 +70,19 @@ class Phase3AdaptiveWorkspaceContractTests(unittest.TestCase):
             INDEX,
         )
 
+        self.assertIn(
+            'data-workspace-target="memory"',
+            INDEX,
+        )
+
+        self.assertIn(
+            'data-workspace-pane="memory"',
+            INDEX,
+        )
+
         self.assertEqual(
             INDEX.count("data-workspace-target="),
-            2,
+            3,
         )
 
     def test_existing_typed_conversation_controls_remain(self):
@@ -146,6 +156,11 @@ class Phase3AdaptiveWorkspaceContractTests(unittest.TestCase):
         )
 
         self.assertIn(
+            '"memory"',
+            WORKSPACE,
+        )
+
+        self.assertIn(
             "root.dataset.workspace = workspace;",
             WORKSPACE,
         )
@@ -163,6 +178,11 @@ class Phase3AdaptiveWorkspaceContractTests(unittest.TestCase):
     def test_nonconversation_workspace_compacts_core_area(self):
         self.assertIn(
             '.workspace-shell[data-workspace="system"]',
+            STYLES,
+        )
+
+        self.assertIn(
+            '.workspace-shell[data-workspace="memory"]',
             STYLES,
         )
 
@@ -211,9 +231,14 @@ class Phase3AdaptiveWorkspaceContractTests(unittest.TestCase):
             with self.subTest(token=token):
                 self.assertNotIn(token, WORKSPACE)
 
-    def test_future_surfaces_are_not_falsely_advertised(self):
-        self.assertNotIn(
+    def test_memory_is_real_but_later_surfaces_are_not_falsely_advertised(self):
+        self.assertIn(
             'data-workspace-target="memory"',
+            INDEX,
+        )
+
+        self.assertIn(
+            'data-workspace-pane="memory"',
             INDEX,
         )
 
@@ -227,8 +252,13 @@ class Phase3AdaptiveWorkspaceContractTests(unittest.TestCase):
             INDEX,
         )
 
-        self.assertIn(
+        self.assertNotIn(
             "IAI BRAIN // P3-03",
+            INDEX,
+        )
+
+        self.assertIn(
+            "OPEN IAI BRAIN",
             INDEX,
         )
 
