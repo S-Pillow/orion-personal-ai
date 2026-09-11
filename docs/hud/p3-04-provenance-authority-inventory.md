@@ -34,6 +34,8 @@ PRD v2.8 Phase 3 requires:
 
 P3-01 through P3-03 established the first three items. P3-04 therefore addresses provenance/origin/authority before later visual composition and voice/action phases depend on those labels.
 
+The owner-approved Orion final-interface visual contract also makes P3-04 the first build step toward the visual north star: provenance and authority language must become truthful before those indicators are made more prominent in the top edge and adaptive workspace.
+
 PRD v2.8 also requires evidence calibration:
 
 - diagnostics distinguish observed runtime evidence, installed-source confirmation, upstream documentation, and hypothesis;
