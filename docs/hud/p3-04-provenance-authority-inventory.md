@@ -1,6 +1,6 @@
 # P3-04 Provenance / Origin / Authority — Read-Only Source Inventory and Execution Contract
 
-Status: **SOURCE INVENTORY IN PROGRESS / NO HUD IMPLEMENTATION YET**
+Status: **SOURCE INVENTORY COMPLETE / IMPLEMENTATION NOT YET STARTED**
 
 Date: 2026-09-11
 
@@ -34,6 +34,12 @@ PRD v2.8 Phase 3 requires:
 
 P3-01 through P3-03 established the first three items. P3-04 therefore addresses provenance/origin/authority before later visual composition and voice/action phases depend on those labels.
 
+PRD v2.8 also requires evidence calibration:
+
+- diagnostics distinguish observed runtime evidence, installed-source confirmation, upstream documentation, and hypothesis;
+- authority/status visualization is descriptive evidence, not an authorization mechanism;
+- presence/provenance indicators must not fabricate tool execution, permissions, memory health, or cloud/local origin.
+
 ## Accepted entry state
 
 Current accepted `main`:
@@ -52,6 +58,14 @@ Already accepted:
 - Orion Core deterministic presentation/gaze state;
 - Conversation/System adaptive workspaces;
 - Memory workspace with iai authority statement and link-only native Brain handoff.
+
+Accepted repository baseline also records the normal COMPANION model path as:
+
+- model `qwen3.5-hermes:9b`;
+- Ollama provider `http://localhost:11434/v1`;
+- context `65536`.
+
+That is accepted **baseline configuration evidence**. It is not automatically a live per-turn origin observation.
 
 ## Evidence hierarchy
 
@@ -81,14 +95,9 @@ Current `hud/static/app.js` and `hud/orion_hud_bridge.py` already expose or mirr
 - jobs count;
 - current run/tool/approval activity.
 
-Current Orion source does **not** expose a first-class per-turn field that proves:
+The bridge's session-chat SSE path forwards upstream event bytes incrementally rather than reconstructing event payloads. Therefore supported Hermes event fields already present in the session stream can reach browser `app.js` without adding a new generic backend proxy.
 
-- effective model provider;
-- local versus remote inference execution;
-- whether a response used a particular provider after Hermes routing precedence resolved;
-- a generic "confidence" score for an answer.
-
-Therefore P3-04 must not derive `ORIGIN · LOCAL` from loopback topology, Hermes liveness, or an Ollama process alone.
+Current `app.js` handles `assistant.completed` and `run.completed` but does not currently consume their `runtime` fields.
 
 ## Accepted Hermes v0.20.6 exact-tag findings
 
@@ -98,45 +107,83 @@ The accepted Hermes baseline is:
 - package `0.20.6`;
 - accepted Orion source baseline commit `5fc308a70719a83cccdbba4c0e39c23f5a8239d5b`.
 
-Primary exact-tag references:
+Primary exact-tag references inspected:
 
-- `gateway/platforms/api_server.py`
-- `website/docs/user-guide/features/api-server.md`
+- `gateway/platforms/api_server.py`;
+- `website/docs/user-guide/features/api-server.md`;
+- `hermes_cli/inventory.py`;
+- `hermes_cli/model_switch.py`;
+- `tests/gateway/test_session_api.py`.
 
-### Provider/model inventory exists
+### Source question: CLOSED
 
-The exact accepted tag documents authenticated:
+The exact accepted Hermes tag **does expose sanitized effective provider/model metadata on supported session-stream completion events when Hermes has a non-global runtime selection to report**.
+
+For `POST /api/sessions/{id}/chat/stream`:
+
+- `run.started` includes a `runtime` object derived before execution from requested/route state;
+- after the turn completes, Hermes reads runtime metadata from the agent result/usage;
+- `assistant.completed` includes `runtime: effective_runtime`;
+- `run.completed` includes the same `runtime: effective_runtime`.
+
+The runtime sanitizer uses fields including:
+
+- `provider`;
+- `model`;
+- `route_source`;
+- requested runtime when applicable;
+- model-lock state when applicable.
+
+When actual runtime metadata is emitted, `_run_agent` reads the real constructed agent's `provider` and `model` and overwrites requested placeholders with the actual values. The exact-tag tests explicitly verify that actual provider/model win over requested metadata.
+
+This means Orion does **not** need a new backend endpoint merely to receive supported provider/model metadata for turns where Hermes emits it.
+
+### Important limitation: ordinary global-default turns
+
+Hermes intentionally includes actual runtime metadata from `_run_agent` only when at least one of these is true:
+
+- `requested_runtime` exists;
+- a model route exists;
+- a confirmed runtime lock exists;
+- `route_source` is non-global.
+
+For a plain session turn using only the global default, the exact-tag test suite verifies that `usage` contains no `runtime` field. The session-stream wrapper consequently sanitizes an empty runtime object with `route_source: global`, but does not gain actual global provider/model values from `_run_agent`.
+
+Therefore the normal Orion path — which sends only `{input: ...}` and does not request a provider/model — cannot assume that every completed turn will carry effective provider/model identity.
+
+This is the decisive P3-04 finding.
+
+### Provider/model identity is not the same as local/cloud origin
+
+Even when Hermes emits an actual provider/model pair, that pair is **runtime identity**, not necessarily proof of execution locality.
+
+Reasons:
+
+- provider endpoints may be configurable;
+- custom providers can be local or remote;
+- a built-in provider slug does not by itself prove where the endpoint actually resides;
+- the supported completion runtime metadata does not expose the resolved inference endpoint/base URL.
+
+P3-04 may display an observed `PROVIDER` or `MODEL` when Hermes supplies it. It must not mechanically translate an arbitrary provider/model name into `LOCAL` or `CLOUD` without a separately accepted evidence rule.
+
+### `/api/model/options` is useful but not network-silent
+
+The exact accepted tag exposes authenticated:
 
 `GET /api/model/options`
 
-This returns the richer Hermes provider/model inventory used by the dashboard/TUI, including provider rows, curated model lists, pricing, and capability hints.
+It returns the current configured provider/model plus the richer picker inventory used by Hermes UI surfaces.
 
-Important safety behavior:
+However the exact implementation is not a zero-network status probe:
 
-- normal `GET /api/model/options` is intentionally conservative;
-- for custom providers it probes only the currently selected endpoint;
-- `?refresh=1` performs broader probing and cache busting.
+- the model-options builder enables pricing enrichment;
+- pricing enrichment may perform network calls, including pricing fetch / Nous tier checks;
+- normal opens may probe the currently selected custom provider;
+- `?refresh=1` performs broader custom-provider probing and cache refresh.
 
-P3-04 discovery should **not** use `refresh=1` unless a later, separately justified test specifically needs it.
+Therefore P3-04 should **not** poll `/api/model/options` merely to paint a provenance badge, and a future "read-only/no-external-call" smoke must not use this route while claiming no external network activity.
 
-### Request model/provider selection is deterministic
-
-The exact tag documents request fields:
-
-- `model`;
-- `provider`;
-- `model_options`.
-
-Those fields are accepted by the Hermes-native session chat/stream path used by Orion as well as runs and OpenAI-compatible endpoints.
-
-Selection precedence is documented as:
-
-1. existing session `/model` override;
-2. configured `model_routes` alias;
-3. direct request model/provider when no route alias matches;
-4. global gateway config/environment defaults.
-
-This proves that response origin cannot safely be inferred from a single generic model alias without knowing the effective resolution path.
+This corrects the earlier candidate probe plan.
 
 ### `/v1/models` is not sufficient provenance
 
@@ -144,60 +191,24 @@ The exact tag explicitly describes `/v1/models` as the cheap OpenAI-compatible d
 
 Therefore `/v1/models` or `model: "hermes-agent"` is **not** sufficient evidence for `LOCAL` or `CLOUD` origin.
 
-### Run status is useful but not yet proven sufficient
+### Session metadata is intentionally narrow
 
-The exact tag documents `GET /v1/runs/{run_id}` for reconciliation and shows a stable `model` field in the example response.
+`GET /api/sessions/{id}` exposes a safe session representation including a `model` field and boolean `has_model_config`, while intentionally hiding the full `model_config`.
 
-The published contract does not, by itself, prove that run status includes the effective provider for every completed session-chat turn.
-
-This remains the central P3-04 source question.
-
-## Central source question
-
-Before implementing per-turn origin labels, determine from the exact accepted Hermes tag:
-
-> After Hermes resolves session/model/provider precedence for `POST /api/sessions/{id}/chat/stream`, is the **effective provider and effective model** surfaced through any stable, supported response/event/session/run field available to an external UI?
-
-Preferred proof order:
-
-1. exact-tag API-server/session-chat source;
-2. exact-tag event/run data structures;
-3. exact-tag public docs/tests;
-4. only if source remains ambiguous, one bounded installed-runtime read-only probe.
-
-Do not start with broad Windows filesystem/process discovery.
-
-## Remaining source-inspection targets
-
-Read-only exact-tag inspection should focus only on:
-
-- session-chat request normalization;
-- model/provider resolution helper call;
-- run/event object construction;
-- `run.started`, `assistant.completed`, `run.completed`, or equivalent session-stream payloads;
-- persisted session metadata returned by `GET /api/sessions/{id}`;
-- `GET /v1/runs/{run_id}` serialization;
-- existing tests that assert model/provider fields.
-
-The goal is to answer one question: **what supported field, if any, proves effective origin for the turn?**
-
-## Runtime probe only if source cannot close the question
-
-If exact-tag source still leaves ambiguity, the later Windows probe must be narrow and read-only.
-
-Candidate probe, subject to explicit execution authorization when the PC is available:
-
-1. accepted manual-off clean state preflight;
-2. start accepted Orion/Hermes runtime using existing operator controls;
-3. authenticated server-side `GET /api/model/options` using the COMPANION credential without printing/logging it;
-4. no `refresh=1`;
-5. inspect one existing persisted session's read-only metadata and/or one already-completed run if available;
-6. no POST, no new session, no message, no model invocation, no iai call;
-7. stop accepted runtime and return to clean-off.
-
-Do not use `iai-mcp-core --help`; it is not part of this ticket and can open the memory store.
+This is useful for detecting that session-level model state may exist, but it does not expose enough provider/endpoint detail to prove local/cloud origin by itself.
 
 ## Provenance state model
+
+### Evidence class
+
+P3-04 should explicitly distinguish evidence class in internal presentation state:
+
+- `OBSERVED_RUNTIME` — value came from the current Hermes event/runtime payload;
+- `ACCEPTED_BASELINE` — value comes from current source-controlled Orion acceptance state;
+- `SOURCE_VERIFIED` — exact accepted vendor source/docs prove the behavior or contract;
+- `UNOBSERVED` — no supported current evidence proves the value.
+
+The UI does not need to display these long names everywhere, but System/provenance drill-down should be able to explain them.
 
 ### Response origin
 
@@ -210,17 +221,32 @@ Initial state vocabulary:
 
 Do not introduce `MIXED` unless a concrete supported workflow requires it and the evidence can identify both contributors.
 
+For the first P3-04 implementation, ordinary global-default typed turns should remain `ORIGIN · UNOBSERVED` unless new evidence is explicitly supplied. The accepted Ollama baseline may be shown separately as `DEFAULT/BASELINE · LOCAL OLLAMA`, not misrepresented as observed per-turn origin.
+
+### Provider/model runtime identity
+
+When a completed Hermes event includes non-empty actual runtime metadata, Orion may show:
+
+- `PROVIDER · <observed-provider>`;
+- `MODEL · <observed-model>`.
+
+When absent:
+
+- do not backfill a fake value from `hermes-agent`;
+- omit the field or show `UNOBSERVED` in provenance detail;
+- keep accepted baseline configuration visually distinct from observed runtime identity.
+
 ### Source indicators
 
 A source label identifies where relevant context/evidence came from, not where the model executed.
 
 Examples that may become valid when actually observed:
 
-- `MEMORY · IAI`
-- `SOURCE · GITHUB`
-- `SOURCE · OBSIDIAN`
-- `SOURCE · HERMES SESSION`
-- `SOURCE · TOOL OUTPUT`
+- `MEMORY · IAI`;
+- `SOURCE · GITHUB`;
+- `SOURCE · OBSIDIAN`;
+- `SOURCE · HERMES SESSION`;
+- `SOURCE · TOOL OUTPUT`.
 
 Rules:
 
@@ -236,42 +262,61 @@ Authority labels describe the current action boundary. They never grant permissi
 Candidate normalized presentation states:
 
 - `AUTHORITY · OBSERVE` — currently displayed interaction is read-only/observational;
-- `AUTHORITY · ACT WITH APPROVAL` — the consequential action requires and is waiting on an explicit Hermes/operator approval boundary;
+- `AUTHORITY · ASSIST` — Orion/Hermes is actively reasoning/tooling within already granted non-consequential capability; exact use requires testable state rules;
+- `AUTHORITY · ACT WITH APPROVAL` — a consequential action requires and is waiting on an explicit Hermes/operator approval boundary;
 - `AUTHORITY · CONTROL` — reserve only for already-supported bounded controls such as STOP when the active run id and backend capability are known; final wording requires implementation review;
 - `AUTHORITY · NONE` / `UNAVAILABLE` — no applicable supported action is available.
 
 Do not create a generic `AUTHORIZED` badge. Authorization is action/target/state-specific.
 
-## Deterministic classification rules
+## First implementation architecture
 
-P3-04 implementation should use a pure presentation module rather than scatter label decisions through `app.js`.
+The source investigation supports a **frontend-first P3-04 slice with no bridge/API change required**.
 
-Recommended module:
+Recommended new pure module:
 
 `hud/static/provenance-state.js`
 
 Responsibilities:
 
-- normalize evidence inputs;
-- classify response origin only from explicit evidence;
+- normalize completion-event runtime metadata;
+- retain only bounded display-safe provider/model/route information;
+- classify response origin only from explicit accepted evidence;
 - classify descriptive authority from existing UI/runtime observations;
-- produce stable display labels/data attributes;
+- track evidence class;
+- produce stable labels/data attributes;
 - contain no fetch, filesystem, shell, storage, lifecycle, model, or memory authority.
 
-`app.js` should only feed observed state into the pure classifier and render the result.
+`app.js` integration should:
 
-If a read-only Hermes endpoint must later be exposed through Orion, the bridge change must be a fixed explicit allowlist route with existing server-side credential handling; no arbitrary proxy is permitted.
+- feed `assistant.completed.runtime` and/or `run.completed.runtime` into the pure module;
+- never treat `run.started.runtime` as final actual-runtime proof;
+- reset per-turn observed-runtime state at the start of a new run;
+- keep accepted baseline default separate from observed turn runtime;
+- mirror authority state from existing run/approval/control observations;
+- preserve current conversation/session reconciliation behavior.
 
-## UI placement
-
-Target presentation should align with the approved Orion visual contract:
+Likely UI additions:
 
 - compact top-edge provenance/authority strip;
-- optional per-response provenance footer when turn-specific evidence exists;
-- System workspace can show the evidence source and current classification details;
-- detailed explanation available without dominating the conversation.
+- System workspace provenance card showing response origin, observed provider/model when available, and evidence class;
+- optional restrained per-response provenance footer later, after the base state model is visually accepted.
 
-Critical states require text/icon semantics; color alone is insufficient.
+No model/provider picker is part of P3-04.
+
+## No Windows discovery probe required for architecture
+
+The central source question is closed from the exact accepted Hermes tag and tests. A broad Windows discovery probe is no longer needed before implementation.
+
+When the PC is available, Windows is needed for:
+
+1. running the focused and full HUD synthetic tests on the actual feature head;
+2. controlled live visual smoke;
+3. optionally confirming that the accepted baseline configuration still matches the running COMPANION profile, if a later UI wants to show it as current rather than accepted-baseline information.
+
+Do **not** use `/api/model/options` in a smoke that is supposed to prove "no external network calls".
+
+Do not use `iai-mcp-core --help`; it is unrelated to P3-04 and can instantiate the memory store.
 
 ## What P3-04 does not do
 
@@ -285,6 +330,7 @@ P3-04 does not:
 - claim a response is local because Ollama is running;
 - scrape private Hermes Python internals at runtime;
 - reimplement provider routing;
+- poll model inventory/pricing endpoints just for decoration;
 - add voice/privacy controls;
 - add vault/tasks/reminders;
 - add a second approval system;
@@ -297,6 +343,11 @@ Implementation tests should prove at minimum:
 - unknown evidence renders `UNOBSERVED` rather than `LOCAL`;
 - loopback-only bridge/Hermes input alone cannot classify model origin as local;
 - Ollama availability alone cannot classify model origin as local;
+- accepted baseline model/provider is not mislabeled as observed current-turn runtime;
+- `assistant.completed.runtime` actual provider/model is normalized when present;
+- missing/empty runtime metadata remains unobserved;
+- requested runtime cannot outrank actual runtime metadata;
+- `run.started.runtime` is not treated as final actual-runtime evidence;
 - memory authority iai alone does not claim memory was used in a turn;
 - source indicators appear only when their evidence flag/event is present;
 - authority classification is deterministic from existing supported UI state;
@@ -313,12 +364,16 @@ Implementation tests should prove at minimum:
 Once implementation is synthetic-green and the PC is available:
 
 - controlled live smoke against the exact tested feature head;
-- do not generate a model call merely to make the origin badge look interesting unless separately authorized;
-- confirm default state is truthful when no per-turn origin evidence exists;
+- no need to generate a model call solely to make the origin badge look interesting;
+- confirm default state is truthful with no observed per-turn runtime evidence;
+- confirm accepted baseline configuration is visually distinguished from observed runtime evidence;
 - confirm existing persisted conversation, System, and Memory surfaces remain intact;
 - confirm degraded Hermes state remains truthful;
+- confirm approval/STOP authority presentation does not imply broader control;
 - return to accepted manual-off clean state;
 - no merge until the visual/evidence behavior is accepted.
+
+A later separately authorized turn may exercise real completion-event runtime metadata if needed, but that is not required to accept the default unobserved state.
 
 ## Stop conditions
 
@@ -334,12 +389,19 @@ Stop P3-04 and report before implementation if proving origin would require:
 - widening lifecycle/process authority;
 - performing cloud/model calls only for discovery without explicit authorization.
 
-If the accepted Hermes version does not expose effective provider/model provenance to an external UI, the correct P3-04 behavior is to display `ORIGIN · UNOBSERVED` and document the limitation rather than inventing certainty.
+If the accepted Hermes version does not provide sufficient evidence to classify execution locality for a turn, the correct P3-04 behavior is `ORIGIN · UNOBSERVED` while still showing any separately observed provider/model identity truthfully.
 
 ## Next bounded action
 
-Continue exact-tag source inspection of the accepted Hermes session-chat/run/event serialization to determine whether effective provider/model provenance is already exposed.
+Implement the frontend-only P3-04 state foundation after the Windows machine is available for immediate test execution:
 
-No Windows probe and no HUD implementation is needed until that source question is exhausted.
+1. add pure `provenance-state.js`;
+2. wire supported completion-event runtime metadata into it;
+3. add restrained provenance/authority UI in the current top/System surfaces;
+4. add focused P3-04 contract tests;
+5. run focused + full HUD suites before any implementation commit is accepted;
+6. perform bounded live visual smoke before merge.
+
+Until the PC is available, avoid committing unexecuted HUD code merely to advance the branch. Documentation/source discovery is now sufficiently complete to start implementation directly when testing is available.
 
 Core Intent Preservation: **PRESERVED**.
