@@ -1,6 +1,6 @@
 # P3-04 Provenance / Origin / Authority — Read-Only Source Inventory and Execution Contract
 
-Status: **SOURCE + TEST INVENTORY COMPLETE / IMPLEMENTATION NOT YET STARTED**
+Status: **IMPLEMENTED / SYNTHETIC + LIVE VISUAL ACCEPTANCE PASSED / DRAFT PR UNMERGED**
 
 Date: 2026-09-11
 
@@ -423,6 +423,99 @@ Once implementation is synthetic-green and the PC is available:
 
 A later separately authorized turn may exercise real completion-event runtime metadata if needed, but that is not required to accept the default unobserved state.
 
+## Implementation and acceptance closure
+
+P3-04 implementation and acceptance are complete on the draft feature branch.
+
+Implementation commit:
+
+`182b60a364ece53ba5b071cb7b55a05fd66e3045` (`feat: add HUD provenance and authority foundation`)
+
+The implementation matched the authorized six-file scope exactly:
+
+1. `hud/orion_hud_bridge.py` — static `provenance-state.js` registration only;
+2. `hud/static/provenance-state.js` — pure provenance / descriptive-authority presentation state;
+3. `hud/static/app.js` — completion-event and UI-state integration;
+4. `hud/static/index.html` — restrained top-edge and System provenance/authority presentation;
+5. `hud/static/styles.css` — presentation only;
+6. `hud/tests/test_phase3_provenance.py` — focused P3-04 contract tests.
+
+No seventh implementation path was added.
+
+### Synthetic acceptance
+
+Synthetic validation passed on the exact implementation commit:
+
+- focused P3-04 provenance suite: **12/12 PASS**;
+- full HUD suite: **64/64 PASS**;
+- `git diff --check`: **PASS**;
+- changed implementation scope: exactly the authorized six files;
+- working tree clean after commit/push;
+- no new provenance backend/API route;
+- no model/provider mutation UI;
+- no Hermes, model, memory, lifecycle, or storage authority added to the pure classifier;
+- response origin remains `UNOBSERVED` unless separately proven;
+- observed provider/model never imply local/cloud origin;
+- source and memory-use state default to `UNOBSERVED`;
+- accepted local Ollama configuration remains visually separate from per-turn response-origin evidence.
+
+No remote CI status checks were configured for the implementation SHA; acceptance evidence is the executed Windows focused/full HUD suites plus the controlled live smoke below.
+
+### Live visual acceptance
+
+A controlled Windows live visual smoke passed against the exact implementation commit using the accepted Orion operator publication.
+
+Observed acceptance:
+
+- accepted Orion runtime reported `ORION READY`;
+- Hermes listener `127.0.0.1:8642` available;
+- Ollama listener `127.0.0.1:11434` available;
+- P3-04 HUD listener `127.0.0.1:8765` owned by the exact launched HUD process;
+- HUD root returned HTTP 200;
+- `provenance-state.js` was served successfully;
+- HUD observed Hermes online;
+- HUD continued to report lifecycle authority as none;
+- top edge rendered `ORIGIN · UNOBSERVED`, `SOURCE · UNOBSERVED`, `MEMORY USE · UNOBSERVED`, and `AUTHORITY · OBSERVE` without overlap;
+- System `PROVENANCE + AUTHORITY` card rendered current-turn origin/provider/model/evidence/source/memory as `UNOBSERVED` and authority as `OBSERVE`;
+- accepted baseline `qwen3.5-hermes:9b / Ollama / LOCAL` remained visibly distinguished from per-turn response-origin proof;
+- System layout showed no blocking clipping, overlap, broken card, or blank-workspace regression;
+- returning to Conversation preserved the existing Core, persisted transcript, and composer;
+- operator visual verdict: **PASS**.
+
+Hermes detailed readiness was observed as **degraded** during the smoke while Hermes remained online and HUD/API capability probes passed. P3-04 correctly surfaced that degraded runtime observation rather than hiding it. This was not treated as provenance evidence and was not a P3-04 acceptance blocker.
+
+The smoke intentionally did **not**:
+
+- send a new message;
+- create or switch a session;
+- request a model inference for provenance decoration;
+- open iai Brain;
+- invoke a memory tool;
+- mutate Orion source or configuration.
+
+Read-only local HUD/Hermes probes did occur.
+
+### Runtime cleanup and integrity
+
+The accepted Stop procedure completed successfully after the live smoke:
+
+- Hermes port 8642 listeners: **0**;
+- HUD port 8765 listeners: **0**;
+- Ollama port 11434 listeners: **0**;
+- Ollama processes: **0**;
+- launcher session file: absent;
+- active operation file: absent;
+- Git branch/HEAD unchanged;
+- working tree clean.
+
+Final runtime state returned to the accepted manual-off baseline.
+
+### Smoke-harness correction
+
+The first live-smoke harness attempt incorrectly wrapped the long-lived Orion launcher in `Start-Process -Wait`, which caused the harness to wait on the launched process tree after Orion had successfully started. The accepted Stop procedure restored clean-off state before retry.
+
+The corrected harness invoked the operator Start/Stop scripts as bounded native PowerShell commands and independently verified listener/process ownership. The retry passed. This was a smoke-harness issue, not an Orion product/source defect.
+
 ## Stop conditions
 
 Stop P3-04 and report before implementation if proving origin would require:
@@ -441,15 +534,16 @@ If the accepted Hermes version does not provide sufficient evidence to classify 
 
 ## Next bounded action
 
-When the Windows machine is available for immediate execution:
+P3-04 implementation and acceptance are complete on draft PR #13.
 
-1. preflight exact main/feature refs and clean-off state;
-2. implement the expected six-file P3-04 scope;
-3. run focused P3-04 tests;
-4. run the full HUD suite;
-5. commit/push only after both suites pass and file scope is exact;
-6. perform bounded live visual smoke before merge.
+Next:
 
-Until the PC is available, avoid committing unexecuted HUD code merely to advance the branch. Source and test discovery are now complete enough to begin implementation directly when testing is available.
+1. commit/push this documentation-only acceptance record;
+2. update PR #13 description to reflect the implemented and accepted state;
+3. keep PR #13 **draft and unmerged** until separate explicit merge authorization;
+4. before any later merge, revalidate exact PR head/base/draft state and confirm no unexpected branch drift;
+5. begin any later Phase 3 slice only under a separately defined scope.
+
+No P3-04 synthetic or live-smoke rerun is required for this documentation-only closure unless application source changes.
 
 Core Intent Preservation: **PRESERVED**.
