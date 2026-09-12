@@ -906,3 +906,210 @@ textarea:focus { border-color: var(--line-strong); box-shadow: 0 0 0 1px rgba(87
   font-size: 9px;
   line-height: 1.5;
 }
+
+/* P3-05A composition convergence */
+.top-status {
+  min-width: 0;
+  gap: 14px;
+}
+
+.top-status-group {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.infrastructure-status {
+  padding-right: 11px;
+  border-right: 1px solid rgba(87, 231, 255, 0.12);
+}
+
+.provenance-status {
+  gap: 6px;
+}
+
+.provenance-status .status-chip {
+  min-height: 24px;
+  padding: 3px 7px;
+  background: rgba(111, 158, 170, 0.025);
+}
+
+.hud-grid {
+  grid-template-columns:
+    minmax(195px, 235px)
+    minmax(560px, 1fr)
+    minmax(215px, 265px);
+  gap: 18px;
+  padding: 14px 16px;
+}
+
+.peripheral-panel,
+.secondary-panel {
+  border-color: rgba(87, 231, 255, 0.12);
+  background: rgba(3, 19, 34, 0.52);
+}
+
+.session-panel,
+.activity-panel {
+  border-color: rgba(87, 231, 255, 0.28);
+}
+
+.right-rail .approval-panel {
+  opacity: 1;
+}
+
+.center-stage {
+  background:
+    radial-gradient(
+      circle at 50% 20%,
+      rgba(87, 231, 255, 0.035),
+      transparent 32%
+    );
+}
+
+.workspace-shell {
+  grid-template-rows:
+    minmax(230px, 38vh)
+    minmax(0, 1fr);
+}
+
+.workspace-shell[data-workspace="system"],
+.workspace-shell[data-workspace="memory"] {
+  grid-template-rows:
+    minmax(160px, 22vh)
+    minmax(0, 1fr);
+}
+
+.halo-a {
+  width: 280px;
+  height: 280px;
+}
+
+.halo-b {
+  width: 220px;
+  height: 220px;
+}
+
+.core-ring {
+  width: 160px;
+  height: 160px;
+  font-size: 12px;
+}
+
+.core-mask {
+  top: 47px;
+  width: 86px;
+}
+
+.core-eye {
+  width: 29px;
+  height: 8px;
+}
+
+#coreState {
+  margin-top: 44px;
+}
+
+.transcript {
+  padding: 22px clamp(22px, 6vw, 76px) 26px;
+}
+
+.message {
+  max-width: min(82%, 760px);
+  padding: 12px 14px;
+  background: rgba(5, 25, 41, 0.38);
+}
+
+.message.user {
+  background: rgba(40, 35, 79, 0.16);
+}
+
+.composer {
+  width: calc(100% - clamp(28px, 7vw, 92px));
+  margin: 0 auto 14px;
+  padding: 10px;
+  border: 1px solid rgba(87, 231, 255, 0.26);
+  background: rgba(2, 12, 21, 0.86);
+}
+
+@media (max-width: 1050px) {
+  .hud-grid {
+    grid-template-columns: 205px minmax(440px, 1fr);
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .provenance-status #sourceStatus,
+  .provenance-status #memoryUseStatus {
+    display: none;
+  }
+
+  .composer {
+    width: calc(100% - 32px);
+  }
+}
+
+@media (max-width: 760px) {
+  .top-status {
+    gap: 6px;
+  }
+
+  #bridgeStatus,
+  #sourceStatus,
+  #memoryUseStatus {
+    display: none;
+  }
+
+  #hermesStatus,
+  #originStatus,
+  #authorityStatus {
+    display: inline-flex;
+  }
+
+  .workspace-shell,
+  .workspace-shell[data-workspace="system"],
+  .workspace-shell[data-workspace="memory"] {
+    grid-template-rows:
+      minmax(165px, 26vh)
+      minmax(0, 1fr);
+  }
+
+  .halo-a {
+    width: 220px;
+    height: 220px;
+  }
+
+  .halo-b {
+    width: 180px;
+    height: 180px;
+  }
+
+  .core-ring {
+    width: 135px;
+    height: 135px;
+  }
+
+  .core-mask {
+    top: 39px;
+    width: 72px;
+  }
+
+  .core-eye {
+    width: 25px;
+    height: 7px;
+  }
+
+  #coreState {
+    margin-top: 37px;
+  }
+
+  .transcript {
+    padding: 16px 12px 20px;
+  }
+
+  .composer {
+    width: calc(100% - 16px);
+    margin-bottom: 8px;
+  }
+}
