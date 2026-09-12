@@ -10,22 +10,26 @@
   <header class="topbar">
     <div class="brand">
       <span class="brand-mark">ORION</span>
-      <span class="brand-sub">COMPANION INTERFACE // ADAPTIVE WORKSPACE</span>
+      <span class="brand-sub">PRIVATE COMPANION // OBSERVATORY</span>
     </div>
     <div class="top-status">
-      <span id="bridgeStatus" class="status-chip"><i></i> BRIDGE</span>
-      <span id="hermesStatus" class="status-chip offline"><i></i> HERMES OFFLINE</span>
-      <span id="originStatus" class="status-chip provenance-chip" data-provenance-origin="UNOBSERVED">ORIGIN &#183; UNOBSERVED</span>
-      <span id="sourceStatus" class="status-chip provenance-chip">SOURCE &#183; UNOBSERVED</span>
-      <span id="memoryUseStatus" class="status-chip provenance-chip">MEMORY USE &#183; UNOBSERVED</span>
-      <span id="authorityStatus" class="status-chip authority-chip" data-authority-state="OBSERVE">AUTHORITY &#183; OBSERVE</span>
+      <div class="top-status-group infrastructure-status" aria-label="Runtime link status">
+        <span id="bridgeStatus" class="status-chip"><i></i> BRIDGE</span>
+        <span id="hermesStatus" class="status-chip offline"><i></i> HERMES OFFLINE</span>
+      </div>
+      <div class="top-status-group provenance-status" aria-label="Response provenance and authority">
+        <span id="originStatus" class="status-chip provenance-chip" data-provenance-origin="UNOBSERVED">ORIGIN &#183; UNOBSERVED</span>
+        <span id="sourceStatus" class="status-chip provenance-chip">SOURCE &#183; UNOBSERVED</span>
+        <span id="memoryUseStatus" class="status-chip provenance-chip">MEMORY USE &#183; UNOBSERVED</span>
+        <span id="authorityStatus" class="status-chip authority-chip" data-authority-state="OBSERVE">AUTHORITY &#183; OBSERVE</span>
+      </div>
       <time id="clock" aria-label="local time">--:--:--</time>
     </div>
   </header>
 
   <main class="hud-grid">
     <aside class="rail left-rail" aria-label="Orion status and session controls">
-      <section class="panel">
+      <section class="panel peripheral-panel system-link-panel">
         <div class="panel-title"><span>SYSTEM LINK</span><b>01</b></div>
         <dl class="status-list">
           <div><dt>Bridge</dt><dd id="bridgeValue">online</dd></div>
@@ -35,7 +39,7 @@
         </dl>
       </section>
 
-      <section class="panel">
+      <section class="panel session-panel">
         <div class="panel-title"><span>SESSION</span><b>02</b></div>
         <label class="field-label" for="sessionSelect">Hermes conversation</label>
         <select id="sessionSelect" class="select-control" aria-label="Hermes session">
@@ -45,7 +49,7 @@
         <div id="sessionMeta" class="muted-line">Hermes SessionDB is authoritative.</div>
       </section>
 
-      <section class="panel">
+      <section class="panel peripheral-panel memory-link-panel">
         <div class="panel-title"><span>MEMORY</span><b>03</b></div>
         <dl class="status-list">
           <div><dt>Authority</dt><dd>iai</dd></div>
@@ -384,7 +388,7 @@
         <div id="approvalActions" class="approval-actions"></div>
       </section>
 
-      <section class="panel">
+      <section class="panel secondary-panel">
         <div class="panel-title"><span>CAPABILITIES</span><b>05</b></div>
         <dl class="status-list">
           <div><dt>Sessions</dt><dd id="capSessions">—</dd></div>
@@ -394,7 +398,7 @@
         </dl>
       </section>
 
-      <section class="panel split-panel">
+      <section class="panel split-panel secondary-panel">
         <div>
           <div class="mini-title">SKILLS</div>
           <div id="skillCount" class="big-number">—</div>
@@ -405,7 +409,7 @@
         </div>
       </section>
 
-      <section class="panel boundary-panel">
+      <section class="panel boundary-panel secondary-panel">
         <div class="panel-title"><span>BOUNDARY</span><b>06</b></div>
         <p>HUD is a client only. It cannot start, stop, supervise, install, or update Hermes, Ollama, or iai.</p>
       </section>
@@ -413,7 +417,7 @@
   </main>
 
   <footer class="footer-line">
-    <span>ORION PHASE 3 // ADAPTIVE WORKSPACE // LOCAL LOOPBACK</span>
+    <span>ORION PHASE 3 // ADAPTIVE WORKSPACE // LOOPBACK TRANSPORT</span>
     <span id="footerSession">NO SESSION</span>
   </footer>
 
