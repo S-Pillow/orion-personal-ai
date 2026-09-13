@@ -95,7 +95,7 @@ Latest merged Phase 3 composition commit:
 
 ### Phase 4 — native Hermes voice/wake evaluation active
 
-PRD Phase 4 is now the active experimental workstream. Orion continues to use the accepted Hermes native voice/wake architecture; no separate Orion hotword service or duplicate STT/TTS stack has been authorized.
+PRD Phase 4 is the active experimental workstream. Orion continues to use the accepted Hermes native voice/wake architecture; no separate Orion hotword service or duplicate STT/TTS stack has been authorized.
 
 Current wake evaluation record:
 
@@ -110,11 +110,13 @@ Current evidence includes:
 - a real `best_val_fp` feedback defect identified and corrected;
 - v1 retained as a defective-run artifact rather than a legitimate alternative weight schedule;
 - v2 established as the first measured feedback-driven run;
-- v2 final recall `37.75%`, insufficient by itself to claim wake viability;
-- the two-iteration custom-training budget exhausted; **no v3 is currently authorized**;
-- v2 preserved immutably with model SHA-256 `990567d4a2320e540e9dbf93d66a126498d14c3275010899a027b23732428dcd`.
+- both v1 and v2 preserved/hash-verified as immutable experiment artifacts;
+- v1 live screening recovered `19/39 = 48.7%` detections, with no durable attempt-40 result; even a hypothetical hit on #40 would cap v1 at `50%`;
+- v2 live screening completed at `14/40 = 35%` detections;
+- both custom models failed the working `>=95%` initial live-detection gate and are **not accepted** for Orion runtime use;
+- the two-iteration custom-training budget is exhausted; **no v3 is currently authorized**.
 
-Neither v1 nor v2 is an accepted Orion wake model yet. The next gate is real JLab/MME comparison evidence, not additional training.
+The custom `Hey Orion` v1/v2 path is therefore rejected under the current experiment. Phase 4 remains active because the final wake strategy still requires an owner disposition and the remaining native voice requirements are not closed.
 
 ## Accepted manual-off lifecycle
 
@@ -215,16 +217,14 @@ Reference/code-donor fork. Reuse only proven patterns that still close a current
 
 ## Resume point
 
-Resume with **PRD Phase 4 / P4-03 native Hermes wake evaluation**.
+Resume with **PRD Phase 4 / P4-03 wake-strategy owner disposition**.
 
 Immediate sequence:
 
-1. verify the existing v1 artifact has immutable/hash-verified preservation equivalent to v2; do not retrain v1;
-2. compare preserved v1 and v2 through the fixed Windows JLab/MME Hermes/openWakeWord path at sensitivity `0.5` and confirmation frames `3`;
-3. use at least 40 genuinely counted intended `Hey Orion` attempts per model with identical setup and no per-model threshold tuning;
-4. record hits, misses, duplicate/unintended fires, and material latency/runtime anomalies;
-5. advance only a credibly viable model to the larger intended-wake and ambient false-wake gate;
-6. if neither model is viable, record rejection and return wake strategy to owner review — do not automatically launch v3;
-7. after the wake disposition is clear, continue the remaining PRD Phase 4 native voice requirements: shared typed/voice conversation continuity, spoken streaming, visible voice-privacy modes, bounded follow-up, and barge-in.
+1. treat custom `Hey Orion` v1/v2 as rejected experimental artifacts; do not load them into the Orion runtime;
+2. do not launch v3 automatically and do not lower the acceptance gate to make v1/v2 pass;
+3. choose the next supported wake strategy using the existing evidence — for example an already-performing Hermes/openWakeWord stock phrase/model, a separately approved future `Hey Orion` data/model redesign, or push-to-talk/another supported fallback;
+4. if an alternate wake model/phrase is selected, run a bounded JLab/MME acceptance protocol before runtime acceptance;
+5. after the wake-strategy disposition is clear, continue the remaining PRD Phase 4 native voice requirements: shared typed/voice conversation continuity, spoken streaming, visible voice-privacy modes, bounded follow-up, and barge-in.
 
 Preserve the accepted Hermes/iai/manual-off boundaries throughout.
