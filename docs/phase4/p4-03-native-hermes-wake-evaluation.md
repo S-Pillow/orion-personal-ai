@@ -138,7 +138,7 @@ Despite restoring the intended feedback behavior, final recall increased only fr
 
 One additional observed result matters for that interpretation: v2's final combined-model FP/hour (`0.7965`) was worse than v1's (`0.442`) even though v2's measured sequence-level FP/hour values included substantially better intermediate results (`0.2655` for sequence 1 and `0.0885` for sequence 2). The final model is produced by merging selected saved checkpoints, so this divergence is evidence that later training/checkpoint selection and the final merge may add variability on top of any corpus or model-capacity ceiling. That is a plausible contributor, not a proven causal diagnosis; the record should retain corpus quality/coverage, the small 32-unit DNN, stochastic training behavior, and checkpoint-merging behavior as unresolved contributors rather than collapsing the outcome to a single cause.
 
-V2 completed successfully with:
+V2 completed successfully with metrics parsed from the preserved source log:
 
 - final accuracy: `0.687749981880188`
 - final recall: `0.3774999976158142`
@@ -146,24 +146,50 @@ V2 completed successfully with:
 - sequence 1 best validation FP/hour: `0.2654867172241211`
 - sequence 2 best validation FP/hour: `0.08849557489156723`
 - sequence 3 best validation FP/hour: `0.7079645991325378`
-- training sequence steps: `50000`, `5000`, `5000`
-- negative-weight maxima by sequence: `1500`, `3000`, `3000`
+- observed negative-weight escalation events: `1`
 - training start: `2026-09-13T03:18:09-04:00`
 - training end: `2026-09-13T03:32:03-04:00`
 - exit code: `0`
 - ONNX export: successful
 - TFLite conversion: intentionally skipped
 
-V2 artifact preservation/hash confirmation remains a required local checkpoint before evaluation evidence is treated as final. Do not invent or infer a model SHA-256 from the training log; record the preservation manifest/hash only after the owner-side preservation script reports `V2 PRESERVATION PASS`.
+## V2 immutable artifact preservation
+
+V2 preservation completed successfully on 2026-09-13 using a fail-closed preservation script that parses measured results from the training log, refuses to overwrite an existing `models/v2` record, copies the model/log/config/derived trainer, and verifies source and destination SHA-256 values after each copy.
+
+Preserved directory:
+
+`D:\Orion\training\hey-orion\models\v2`
+
+WSL view:
+
+`/mnt/d/Orion/training/hey-orion/models/v2`
+
+Preserved artifacts:
+
+| Artifact | Preserved file | SHA-256 |
+| --- | --- | --- |
+| model | `hey_orion_v2.onnx` | `990567d4a2320e540e9dbf93d66a126498d14c3275010899a027b23732428dcd` |
+| training log | `train-v2-20260913-031809.log` | `e3a9a92b2e69b15afab15179f804cad42d1e607a6648be032d1557b63338e384` |
+| derived config | `hey_orion_v2_ext4.yml` | `a7acb66de27b7ce1220e8437f930447900e7d40165d00dcb59765b128957f530` |
+| derived trainer | `train_onnx_only_v2.py` | `121ad3ec890a4c1cee0b45fb7653485e679cb3cfb5e91f369c1d3fbf34aa7de5` |
+
+Manifest:
+
+`/mnt/d/Orion/training/hey-orion/models/v2/hey_orion_v2_manifest.json`
+
+Preservation result: **`V2 PRESERVATION PASS`**.
+
+The v2 model SHA-256 above is now the immutable artifact identity for subsequent comparison. Do not replace, retrain in place, or silently regenerate this artifact.
 
 ## Current work
 
-Synthetic corpus generation, augmentation inputs, feature-data acquisition, two substantive training iterations, and ONNX export are complete. The `best_val_fp` feedback defect has been corrected and bounded by the two-run evidence above. No further custom-model training is currently authorized.
+Synthetic corpus generation, augmentation inputs, feature-data acquisition, two substantive training iterations, ONNX export, and v2 artifact preservation are complete. The `best_val_fp` feedback defect has been corrected and bounded by the two-run evidence above. No further custom-model training is currently authorized.
 
 The next work is evaluation, not training:
 
-1. preserve/hash v2 and retain v1/v2 as immutable experiment artifacts;
-2. evaluate both models through the fixed Windows JLab/MME Hermes/openWakeWord path without threshold tuning between models;
+1. confirm the existing v1 preservation record has equivalent immutable/hash-verified rigor before using it as the comparison artifact;
+2. evaluate v1 and v2 through the fixed Windows JLab/MME Hermes/openWakeWord path without threshold tuning between models;
 3. use real counted intended-wake denominators;
 4. decide whether either custom model is viable enough to proceed to larger intended-wake and ambient false-wake acceptance.
 
@@ -186,7 +212,7 @@ If neither v1 nor v2 is viable, record both as not accepted and return the wake 
 
 ## Open items
 
-1. Run the owner-side v2 preservation script and record `V2 PRESERVATION PASS`, preserved paths, manifest, and SHA-256.
+1. Verify the existing v1 preserved artifact/manifest and model SHA-256 before comparison; formalize the existing artifact without retraining if its preservation record is weaker than v2's.
 2. Run the fixed v1/v2 JLab/MME screening comparison with real counted denominators.
 3. Record intended detections, misses, duplicate/unintended fires, and any material latency/runtime anomalies for each model.
 4. Advance only a credible model to the larger intended-wake and ambient false-wake gate; otherwise record custom-model rejection and return strategy to owner review.
