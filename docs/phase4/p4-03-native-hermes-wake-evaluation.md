@@ -107,9 +107,21 @@ A separate 200-sample Piper sanity corpus also passed `200/200` structural valid
 
 MIT environmental room impulse response acquisition has completed successfully for augmentation.
 
+## Precomputed negative-feature datasets
+
+The required openWakeWord precomputed feature datasets were downloaded to the isolated training workspace and SHA-256 verified against their expected published values:
+
+- `openwakeword_features_ACAV100M_2000_hrs_16bit.npy`
+  - size: `17280000128` bytes
+  - SHA-256: `721a66d0682c65a1b5c1da0aa109409cede1d20e28b15235c344b000cbb7654f`
+- `validation_set_features.npy`
+  - SHA-256: `a56a8a0f8e0efb91900acc6de4c0cdf4c564842e8475a7d49b36c039e17a690f`
+
+Feature-data acquisition is therefore accepted for iteration 1. These local arrays are training inputs only and are not committed to the Orion repository.
+
 ## Current work
 
-The required precomputed generic-negative and false-positive validation feature files are being acquired and verified. Augmentation, feature extraction, model training, ONNX export, Hermes loading, and live `Hey Orion` acceptance testing remain pending.
+Synthetic corpus generation, RIR acquisition, and required precomputed generic-negative / false-positive validation feature acquisition are complete. Background/noise augmentation data, augmentation/feature extraction, model training, ONNX export, Hermes loading, and live `Hey Orion` acceptance testing remain pending.
 
 Do not mark P4-03 closed until a produced `hey_orion_v1.onnx` (or explicitly accepted successor iteration) is provenance-recorded and passes live testing on the accepted Windows/JLab runtime.
 
@@ -128,14 +140,13 @@ If iteration 1 is weak, change the training corpus/negative data first. Do not p
 
 ## Open items
 
-1. Finish and hash-verify required precomputed feature datasets.
-2. Complete background/noise acquisition and augmentation inputs.
-3. Generate openWakeWord features from the synthetic corpus.
-4. Train and export `hey_orion_v1.onnx`.
-5. Record model SHA-256 and exact training manifest.
-6. Load the custom model through Hermes' supported openWakeWord path without modifying accepted Hermes source.
-7. Run controlled live detection and ambient false-wake acceptance.
-8. Continue Phase 4 voice work for shared conversation, spoken streaming, visible privacy modes, bounded follow-up, and barge-in after the wake gate is credible.
+1. Complete background/noise acquisition and augmentation inputs.
+2. Generate openWakeWord features from the synthetic corpus.
+3. Train and export `hey_orion_v1.onnx`.
+4. Record model SHA-256 and exact training manifest.
+5. Load the custom model through Hermes' supported openWakeWord path without modifying accepted Hermes source.
+6. Run controlled live detection and ambient false-wake acceptance.
+7. Continue Phase 4 voice work for shared conversation, spoken streaming, visible privacy modes, bounded follow-up, and barge-in after the wake gate is credible.
 
 ## Safety / non-regression boundary
 
