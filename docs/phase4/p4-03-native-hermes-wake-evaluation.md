@@ -121,7 +121,7 @@ Feature-data acquisition is accepted for this custom-model experiment. These loc
 
 ## Two-iteration training result and interpretation
 
-Two substantive custom-model training iterations have now completed. This exhausts the pre-authorized two-iteration training budget; do not launch a third custom-model training run without a new owner decision.
+Two substantive custom-model training iterations completed. This exhausts the pre-authorized two-iteration training budget; do not launch a third custom-model training run without a new owner decision.
 
 V1 and v2 are **not** two deliberately selected negative-weight schedules. In v1, `best_val_fp` remained frozen at its initialization value of `1000`, which was always above the `0.2 FP/hour` target. Both negative-weight escalation checks therefore fired regardless of measured validation performance, and the resulting `1500 -> 3000 -> 6000` schedule was an artifact of the defect rather than an evidence-driven training choice.
 
@@ -153,6 +153,22 @@ V2 completed successfully with metrics parsed from the preserved source log:
 - ONNX export: successful
 - TFLite conversion: intentionally skipped
 
+## V1 immutable artifact integrity
+
+The existing v1 preservation record was checked read-only before the live comparison. Every manifest-listed artifact matched its preserved on-disk SHA-256. No v1 artifact was modified or retrained.
+
+Verified v1 artifacts:
+
+| Artifact | Preserved file | SHA-256 |
+| --- | --- | --- |
+| model | `hey_orion_v1.onnx` | `ead8248c37cccb82e66cc17ba023e879381000c2116aa9518168afde985f4e89` |
+| training log | `train-20260913-021421.log` | `e6e0b40896198413564bbc0e2715957cbebe95ecf3a59046ba8e8a9291f5ab0f` |
+| canonical config | `hey_orion_v1.yml` | `e24ed3b2110aca4a3a7daeb8effc93e4b824787aa8e13ae1bfe1c20e56f4be91` |
+| derived config | `hey_orion_v1_ext4.yml` | `85fcdfa89cc47aeec4ec19068500543cf88813d87b128b9f1e6afb0e71f75bfa` |
+| derived trainer | `train_onnx_only.py` | `a02549d00f76ca13c4f3af97c9ef656ea28b6f5ac58c25011f6f944862d0475f` |
+
+Integrity result: **`V1 PRESERVATION INTEGRITY PASS`**.
+
 ## V2 immutable artifact preservation
 
 V2 preservation completed successfully on 2026-09-13 using a fail-closed preservation script that parses measured results from the training log, refuses to overwrite an existing `models/v2` record, copies the model/log/config/derived trainer, and verifies source and destination SHA-256 values after each copy.
@@ -182,42 +198,64 @@ Preservation result: **`V2 PRESERVATION PASS`**.
 
 The v2 model SHA-256 above is now the immutable artifact identity for subsequent comparison. Do not replace, retrain in place, or silently regenerate this artifact.
 
+## Live JLab/MME custom-model screening
+
+The immutable v1 and v2 models were screened on the accepted Windows/JLab microphone path using Hermes/openWakeWord with the same fixed runtime settings for both models:
+
+- JLab headset microphone through MME
+- local capture
+- sensitivity `0.5`
+- confirmation frames `3`
+- phrase `Hey Orion`
+- no per-model threshold tuning
+- `start_new_session: false` for the screening run only, to avoid creating one Hermes session per successful wake
+
+Working screening gate: at least 40 controlled intended attempts per model and `>=95%` intended detection (`>=38/40`).
+
+Recovered results:
+
+| Model | Recorded attempts | Hits | Misses | Recorded detection rate | Gate disposition |
+| --- | ---: | ---: | ---: | ---: | --- |
+| v1 | `39` | `19` | `20` | `48.7%` | FAIL |
+| v2 | `40` | `14` | `26` | `35.0%` | FAIL |
+
+The recovered v1 tally file ends at attempt 39. No attempt-40 result is present in the durable tally, so this record does not invent one. Even if the missing 40th attempt had been a hit, v1 could have reached at most `20/40 = 50%`, still far below the `95%` screening gate. Therefore the incomplete final v1 line does not affect the accept/reject decision.
+
+V2 completed all 40 planned attempts and produced `14/40 = 35%` detection. V2 was therefore worse than v1 in this live microphone screen despite being the first training run with corrected FP-driven escalation logic.
+
+**Custom-model disposition: NOT ACCEPTED.** Neither v1 nor v2 is credible enough to proceed to the larger `>=95/100` intended-wake and six-hour ambient false-wake gate. The current two-iteration custom `Hey Orion` training path is rejected for Orion runtime use.
+
+This live result reinforces the earlier training-side conclusion that fixing the `best_val_fp` defect did not solve the main recall problem. It does not, by itself, identify one root cause. Corpus/acoustic mismatch, model capacity, stochastic training behavior, checkpoint selection, and merge behavior remain unresolved contributors.
+
 ## Current work
 
-Synthetic corpus generation, augmentation inputs, feature-data acquisition, two substantive training iterations, ONNX export, and v2 artifact preservation are complete. The `best_val_fp` feedback defect has been corrected and bounded by the two-run evidence above. No further custom-model training is currently authorized.
+The two authorized custom-model training iterations, artifact preservation/integrity checks, and fixed live JLab/MME screening are complete. The custom v1/v2 `Hey Orion` path is **not accepted** and should not be loaded into the Orion runtime.
 
-The next work is evaluation, not training:
+No v3 training run is authorized automatically. The next wake-word step is an owner strategy decision using the already-collected evidence. Reasonable options include retaining Hermes/openWakeWord with an already-performing stock phrase/model, revisiting `Hey Orion` only under a separately approved data/model redesign, or using push-to-talk/another supported fallback while the rest of Phase 4 proceeds.
 
-1. confirm the existing v1 preservation record has equivalent immutable/hash-verified rigor before using it as the comparison artifact;
-2. evaluate v1 and v2 through the fixed Windows JLab/MME Hermes/openWakeWord path without threshold tuning between models;
-3. use real counted intended-wake denominators;
-4. decide whether either custom model is viable enough to proceed to larger intended-wake and ambient false-wake acceptance.
-
-Neither v1 nor v2 is an accepted Orion wake model yet. P4-03 remains open until the custom-model path receives an evidence-backed accept/reject disposition on the real Windows/JLab runtime and the broader Phase 4 voice requirements are handled in their authorized sequence.
+P4-03 remains **IN PROGRESS** because the final Orion wake strategy has not yet received an owner disposition and the broader Phase 4 voice requirements remain open.
 
 ## Acceptance direction
 
-Initial live screening target for each custom model under comparison:
+The custom-model branch has failed its initial screening gate and will not proceed to extended acceptance testing.
 
-- at least 40 controlled intended wake attempts
-- intended detection rate `>=95%`
-- accepted runtime baseline remains sensitivity `0.5`, confirmation frames `3`, default JLab/MME input
-- identical physical/setup procedure between v1 and v2
-- no per-model threshold tuning merely to improve the apparent result
-- no architecture change based only on the Hermes silence-warning banner
+Any future `Hey Orion` custom-model work requires a new explicit owner decision and should not simply repeat v1/v2 with more training steps. A future redesign should begin from the observed failure mode and justify what materially changes in data coverage, model architecture/capacity, training/selection procedure, or evaluation design.
 
-Only a model that remains credibly viable after the controlled screen should proceed to a larger intended-wake run and ambient false-wake observation. The working final target remains `>=95/100` intended detections and zero false wakes during at least six hours of mixed ambient exposure before closing the wake-phrase gate.
+Until then:
 
-If neither v1 nor v2 is viable, record both as not accepted and return the wake strategy to owner review. Do not launch v3 automatically and do not patch accepted Hermes wake logic merely to rescue an underperforming custom model.
+- do not launch v3 automatically;
+- do not patch accepted Hermes wake logic to rescue these models;
+- do not lower the acceptance gate merely to make v1/v2 pass;
+- keep the accepted JLab/MME capture path and Hermes runtime boundaries intact;
+- preserve v1/v2 as immutable experimental evidence.
 
 ## Open items
 
-1. Verify the existing v1 preserved artifact/manifest and model SHA-256 before comparison; formalize the existing artifact without retraining if its preservation record is weaker than v2's.
-2. Run the fixed v1/v2 JLab/MME screening comparison with real counted denominators.
-3. Record intended detections, misses, duplicate/unintended fires, and any material latency/runtime anomalies for each model.
-4. Advance only a credible model to the larger intended-wake and ambient false-wake gate; otherwise record custom-model rejection and return strategy to owner review.
-5. Update the durable P4-03 record with the live acceptance/rejection evidence and selected artifact SHA if one is accepted.
-6. Continue Phase 4 voice work for shared conversation, spoken streaming, visible privacy modes, bounded follow-up, and barge-in after the wake disposition is clear.
+1. Owner disposition on the Phase 4 wake strategy after rejection of custom `Hey Orion` v1/v2.
+2. If an alternate supported Hermes/openWakeWord phrase/model is selected, run a bounded acceptance protocol on the same JLab/MME path before runtime acceptance.
+3. If `Hey Orion` is revisited later, authorize it as a new data/model-design effort rather than an automatic v3 continuation.
+4. Continue Phase 4 voice work for shared conversation, spoken streaming, visible privacy modes, bounded follow-up, and barge-in without introducing a parallel voice stack.
+5. Close P4-03 only after the final wake strategy receives an evidence-backed owner disposition.
 
 ## Safety / non-regression boundary
 
