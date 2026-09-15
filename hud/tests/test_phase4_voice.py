@@ -162,6 +162,13 @@ class Phase4VoiceIntegrationTests(unittest.TestCase):
         data = response.read()
         return response.status, response.getheaders(), data
 
+    def test_phase4_csp_allows_returned_tts_data_audio(self):
+        status, headers, data = self.request("GET", "/", origin=False, cookie=False)
+        self.assertEqual(status, 200)
+        csp = dict(headers).get("Content-Security-Policy", "")
+        self.assertIn("media-src 'self' data:", csp)
+        self.assertIn(b'/phase4-voice.js', data)
+
     def test_voice_status_uses_gateway_capability_only(self):
         status, _, data = self.request("GET", "/api/orion/voice/status", origin=False)
         self.assertEqual(status, 200)
