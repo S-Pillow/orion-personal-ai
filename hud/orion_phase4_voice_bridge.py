@@ -3,8 +3,9 @@
 
 This module adds a narrow, reversible voice surface without changing Hermes
 voice ownership. Browser microphone audio is forwarded only to Hermes'
-allowlisted transcription endpoint; TTS requests are likewise synthesized by
-Hermes. The Hermes API credential remains server-side in orion_hud_bridge.
+authenticated gateway when that gateway explicitly advertises audio API
+support. TTS requests follow the same rule. The Hermes API credential remains
+server-side in orion_hud_bridge.
 
 Wake listening is intentionally not enabled here. The accepted P4-03 custom
 `Hey Orion` models were rejected, so this slice is push-to-talk only.
@@ -22,14 +23,14 @@ from urllib.parse import urlparse
 
 import orion_hud_bridge as base
 
-VOICE_WRAPPER_VERSION = "p4-04-0.1"
+VOICE_WRAPPER_VERSION = "p4-04-0.2"
 MAX_VOICE_REQUEST_BYTES = 6 * 1024 * 1024
 MAX_TTS_TEXT_CHARS = 4000
 DATA_URL_RE = re.compile(r"^data:(audio/[^;,]+|video/webm)(?:;[^,]*)?;base64,", re.IGNORECASE)
 
 
 def _redact_voice_config(value: Any) -> Any:
-    """Remove credential-shaped fields before anything reaches the browser."""
+    """Defensive helper retained for tests/future metadata; never expose secrets."""
     if isinstance(value, dict):
         safe: dict[str, Any] = {}
         for key, item in value.items():
@@ -69,88 +70,68 @@ class Phase4VoiceHandler(base.OrionHandler):
             return None
         return body
 
-    def _send_voice_status(self) -> None:
+    def _audio_capability(self) -> tuple[bool, str]:
+        """Return whether the accepted Hermes gateway advertises audio_api."""
         try:
             status, content_type, data = self.hermes.request(
-                "GET", "/api/audio/voice-config", timeout=5.0
+                "GET", "/v1/capabilities", timeout=5.0
             )
-        except base.BridgeConfigError as exc:
-            self._send_json(
-                503,
-                {
-                    "voice": {
-                        "activation": "push_to_talk",
-                        "wake": "disabled",
-                        "ready": False,
-                        "reason": "hermes_credentials_unavailable",
-                    },
-                    "message": str(exc),
-                },
-            )
-            return
-        except (OSError, http.client.HTTPException, RuntimeError) as exc:
-            self._send_json(
-                502,
-                {
-                    "voice": {
-                        "activation": "push_to_talk",
-                        "wake": "disabled",
-                        "ready": False,
-                        "reason": "hermes_unavailable",
-                    },
-                    "message": type(exc).__name__,
-                },
-            )
-            return
+        except base.BridgeConfigError:
+            return False, "hermes_credentials_unavailable"
+        except (OSError, http.client.HTTPException, RuntimeError):
+            return False, "hermes_unavailable"
 
         if not (200 <= status < 300) or "json" not in content_type.lower():
-            self._send_json(
-                200,
-                {
-                    "voice": {
-                        "activation": "push_to_talk",
-                        "wake": "disabled",
-                        "ready": False,
-                        "reason": f"voice_config_http_{status}",
-                    }
-                },
-            )
-            return
-
+            return False, f"capabilities_http_{status}"
         try:
             payload = json.loads(data.decode("utf-8"))
         except (UnicodeError, json.JSONDecodeError):
-            self._send_json(
-                200,
-                {
-                    "voice": {
-                        "activation": "push_to_talk",
-                        "wake": "disabled",
-                        "ready": False,
-                        "reason": "invalid_voice_config",
-                    }
-                },
-            )
-            return
+            return False, "invalid_capabilities"
+        if not isinstance(payload, dict):
+            return False, "invalid_capabilities"
 
-        safe = _redact_voice_config(payload)
+        features = payload.get("features")
+        if not isinstance(features, dict) or features.get("audio_api") is not True:
+            return False, "hermes_gateway_audio_api_unavailable"
+        return True, "ready"
+
+    def _require_audio_capability(self) -> bool:
+        ready, reason = self._audio_capability()
+        if ready:
+            return True
+        self._send_json(
+            503,
+            {
+                "error": "voice_unavailable",
+                "reason": reason,
+                "typed_fallback": True,
+                "wake": "disabled",
+            },
+        )
+        return False
+
+    def _send_voice_status(self) -> None:
+        ready, reason = self._audio_capability()
         self._send_json(
             200,
             {
                 "voice": {
                     "activation": "push_to_talk",
                     "wake": "disabled",
-                    "ready": True,
-                    "transport": "hermes_audio_relay",
+                    "ready": ready,
+                    "reason": None if ready else reason,
+                    "transport": "hermes_gateway_audio_api" if ready else None,
                     "follow_up": "manual_push_to_talk",
                     "barge_in": "push_to_talk_interrupt",
+                    "typed_fallback": True,
                 },
-                "hermes_voice": safe,
                 "wrapper_version": VOICE_WRAPPER_VERSION,
             },
         )
 
     def _handle_transcribe(self, body: dict[str, Any]) -> None:
+        if not self._require_audio_capability():
+            return
         data_url = str(body.get("data_url") or "").strip()
         mime_type = str(body.get("mime_type") or "").strip()
         if not data_url or not DATA_URL_RE.match(data_url):
@@ -166,6 +147,8 @@ class Phase4VoiceHandler(base.OrionHandler):
         )
 
     def _handle_speak(self, body: dict[str, Any]) -> None:
+        if not self._require_audio_capability():
+            return
         text = str(body.get("text") or "").strip()
         if not text:
             self._send_json(400, {"error": "tts_text_required"})
@@ -207,8 +190,6 @@ class Phase4VoiceHandler(base.OrionHandler):
             self._send_voice_status()
             return
 
-        # The base handler repeats the host guard. Keeping that duplicated
-        # check is deliberate: it preserves all accepted Phase 2 behavior.
         super().do_GET()
 
     def do_POST(self) -> None:  # noqa: N802
@@ -238,8 +219,6 @@ def main(argv: list[str] | None = None) -> int:
     base.STATIC_FILES["/phase4-voice.css"] = ("phase4-voice.css", "text/css; charset=utf-8")
     base.OrionHandler = Phase4VoiceHandler
 
-    # Keep the accepted bridge main/build_state/lifecycle path intact. The
-    # static root remains owned by the base bridge and is not replaced here.
     if not static_root.is_dir():
         print("[orion-voice] static asset directory missing", file=sys.stderr)
         return 2
