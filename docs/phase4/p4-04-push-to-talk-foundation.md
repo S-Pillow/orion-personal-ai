@@ -1,6 +1,6 @@
 # P4-04 / P4-05 — Push-to-talk voice foundation
 
-**Status:** IMPLEMENTED / LIVE VALIDATION REQUIRED  
+**Status:** ORION IMPLEMENTED / HERMES GATEWAY AUDIO GAP CONFIRMED / LIVE VALIDATION BLOCKED  
 **Date:** 2026-09-15  
 **Controlling PRD:** ORION Master PRD v2.8  
 **Depends on:** accepted native Hermes `v2026.8.27` / `0.20.6` / `5fc308a70719a83cccdbba4c0e39c23f5a8239d5`
@@ -9,94 +9,96 @@
 
 The failed P4-03 custom `Hey Orion` v1/v2 models do not block the rest of Phase 4. Orion proceeds with **push-to-talk** as the interim activation method while wake remains disabled. No third custom wake-model run is authorized by this slice.
 
-Hermes remains the speech authority. Orion does not add an STT engine, TTS engine, always-on microphone service, hotword service, voice gateway, lifecycle supervisor, or second conversation authority.
+Hermes remains the speech authority. Orion does not add an STT engine, TTS engine, always-on microphone service, hotword service, second agent gateway, lifecycle supervisor, or second conversation authority.
 
-## Pinned-Hermes capability basis
+## Pinned-Hermes capability finding
 
-The accepted Hermes release already provides the voice primitives this slice needs:
+Source review against the **accepted Hermes commit**, not upstream `main`, found an important interface boundary:
 
-- `POST /api/audio/transcribe` accepts a base64 audio data URL and returns a transcript using Hermes' configured transcription provider and hallucination filtering;
-- `POST /api/audio/speak` synthesizes text through Hermes' configured TTS provider and returns audio as a data URL;
-- `GET /api/audio/voice-config` resolves the active profile's STT/TTS path;
-- native Hermes voice behavior also defines silence handling, streaming TTS, continuous follow-up, stop phrases, and barge-in.
+- Hermes already contains the native STT/TTS implementations needed by Orion;
+- the Hermes dashboard server exposes `POST /api/audio/transcribe` and `POST /api/audio/speak` and uses the existing Hermes transcription/TTS implementations;
+- Orion's accepted bridge, however, talks to the authenticated Hermes **gateway API server on `127.0.0.1:8642`**;
+- `gateway/platforms/api_server.py` at accepted commit `5fc308a...` does **not** register `/api/audio/*` routes;
+- its `GET /v1/capabilities` response explicitly advertises `audio_api: false` and `realtime_voice: false`;
+- current upstream source still keeps the dashboard audio routes separate, so a routine dependency upgrade is not an evidence-backed solution to this gap.
 
-Orion therefore integrates with these supported primitives rather than duplicating them.
+Therefore the original direct-relay assumption was rejected before live Windows testing. We will not run a second always-on Hermes dashboard server merely to obtain the audio routes, and we will not bypass Hermes with browser/provider speech APIs.
 
-## Implementation
+## Orion-side implementation
 
 This slice adds a reversible Phase 4 wrapper instead of mutating the accepted Phase 2/3 bridge directly:
 
 - `hud/orion_phase4_voice_bridge.py`
   - reuses `orion_hud_bridge` and its loopback-only target, server-side API credential, same-origin cookie guard, session/run allowlist, and manual-off lifecycle boundary;
   - adds only `/api/orion/voice/status`, `/api/orion/voice/transcribe`, and `/api/orion/voice/speak`;
-  - never returns Hermes voice credentials to the browser; `GET /api/audio/voice-config` is redacted before presentation;
-  - caps browser audio request size at 6 MiB and TTS chunks at 4,000 characters;
+  - checks authenticated `GET /v1/capabilities` and enables voice only when Hermes explicitly advertises `features.audio_api == true`;
+  - with the accepted unpatched Hermes gateway, voice **fails closed** as `hermes_gateway_audio_api_unavailable` while typed fallback remains available;
+  - never exposes Hermes or provider credentials to the browser;
+  - caps browser audio request size at 6 MiB and TTS text at 4,000 characters;
   - does not start, stop, install, update, patch, or supervise Hermes, Ollama, iai, or any Windows task/service;
-  - injects the Phase 4 voice module only when this wrapper is launched, so reverting to the accepted bridge is simply launching `orion_hud_bridge.py` again.
+  - injects the Phase 4 voice module only when this wrapper is launched, so rollback is launching `orion_hud_bridge.py` again.
 
 - `hud/static/phase4-voice.js`
   - adds Push to Talk and Speak Replies controls to the existing Conversation composer;
-  - uses browser `MediaRecorder` only for microphone capture; recognition is performed by Hermes;
+  - uses browser `MediaRecorder` only for microphone capture; recognition remains Hermes-owned;
   - imposes a 20-second recording safety cap;
-  - sends the returned transcript through the existing composer, so typed and spoken input use the **same selected persisted Hermes session**;
-  - speaks assistant output in sentence-sized chunks through Hermes TTS as text appears;
-  - pressing Push to Talk stops current browser playback and invokes the existing HUD STOP control if a run is active;
+  - sends a returned transcript through the existing composer, so typed and spoken input use the **same selected persisted Hermes session**;
+  - queues visible assistant output for Hermes TTS as sentences become available;
+  - Push to Talk stops current browser playback and invokes the existing HUD STOP control if a run is active;
+  - Speak Replies OFF stops speech playback without cancelling the agent run;
   - wake is shown as OFF and is never silently enabled.
 
-- `hud/static/phase4-voice.css`
-  - contains only presentation styling for the Phase 4 controls/status line.
-
 - `hud/tests/test_phase4_voice.py`
-  - verifies credential redaction, same-origin enforcement, narrow STT/TTS allowlisting, server-side Hermes authorization, invalid-audio rejection, and absence of new shell/runtime authority.
+  - covers the gateway capability gate, same-origin enforcement, narrow STT/TTS allowlisting, server-side Hermes authorization, invalid-audio rejection, credential redaction, typed-fallback truthfulness, and absence of new shell/runtime authority.
 
-## Truthful state model for this slice
+## Required Hermes-side closure
 
-- idle: `VOICE · PUSH TO TALK · WAKE OFF`
-- microphone recording: `VOICE · CONVERSATION · LISTENING · WAKE OFF`
-- after capture: `VOICE · CONVERSATION · TRANSCRIBING · WAKE OFF`
-- unsupported/unavailable: `VOICE · OFF · <reason>`
+Before live PTT validation, the accepted Hermes gateway needs a **narrow, reversible, source-controlled compatibility patch** that:
 
-The state describes observed client behavior. It does not grant permission or imply wake listening.
+1. registers authenticated `POST /api/audio/transcribe` and `POST /api/audio/speak` on the existing gateway listener;
+2. reuses Hermes' existing `transcribe_recording()` and `text_to_speech_tool()` implementations instead of creating new speech semantics;
+3. respects the gateway's existing profile scope, API-key authentication, request limits, and multiplex routing;
+4. changes only `features.audio_api` to `true` when those routes are actually present; `realtime_voice` remains `false` because this slice is bounded PTT, not a new realtime websocket implementation;
+5. returns only transcript/audio result data, never resolved provider credentials;
+6. is hash-pinned to the accepted Hermes source and independently testable/reversible.
 
-## What this closes if live validation passes
+This compatibility patch is the next implementation ticket. It is preferable to requiring a second always-running dashboard server because it preserves the accepted single authenticated gateway boundary.
 
-This slice is intended to close the implementation portion of:
+## Truthful state model
 
-- **P4-04:** owner wake-strategy disposition for the current phase — Push to Talk accepted as the interim activation mode; wake remains a separate future decision;
-- **P4-05:** voice input enters the same selected Hermes session as typed HUD chat;
-- a substantial portion of **P4-06:** Hermes-owned STT plus sentence-progressive Hermes TTS with typed fallback preserved.
+- accepted Hermes today: `VOICE · OFF · HERMES_GATEWAY_AUDIO_API_UNAVAILABLE`
+- after a qualified gateway patch, idle: `VOICE · PUSH TO TALK · WAKE OFF`
+- recording: `VOICE · CONVERSATION · LISTENING · WAKE OFF`
+- transcription: `VOICE · CONVERSATION · TRANSCRIBING · WAKE OFF`
+- failure: `VOICE · OFF · <reason>` with typed chat still available
 
-## Still required before Phase 4 can close
+## What this can close after gateway + live validation
 
-Live Windows/JLab validation must prove:
+- **P4-04:** Push to Talk accepted as the interim activation mode; wake remains a separate future decision.
+- **P4-05:** spoken input enters the same selected persisted Hermes session as typed HUD chat.
+- a substantial portion of **P4-06:** Hermes-owned STT plus progressive Hermes TTS with typed fallback preserved.
+
+## Live acceptance still required
+
+After the gateway patch is qualified on native Windows/JLab:
 
 1. browser microphone permission and recording work through the Phase 4 wrapper;
-2. Hermes returns usable transcription through the configured COMPANION voice provider;
-3. the spoken transcript appears as a user turn in the same selected Hermes session;
-4. the assistant response remains visible as the normal streamed HUD response while Hermes TTS speaks it;
-5. Push to Talk can interrupt browser speech and an active run without leaving the HUD stuck;
-6. disabling Speak Replies leaves typed behavior unchanged;
+2. Hermes returns usable transcription through the configured COMPANION speech path;
+3. the transcript appears as a user turn in the same selected Hermes session;
+4. the normal streamed HUD reply stays visible while Hermes TTS speaks it;
+5. Push to Talk interrupts playback and an active run cleanly;
+6. Speak Replies OFF leaves typed behavior unchanged;
 7. Hermes unavailable / microphone denied / STT failure / TTS failure degrade visibly without blocking typed chat.
 
-P4-07 through P4-09 still need explicit acceptance evidence for privacy modes, bounded follow-up, and interruption semantics. This wrapper intentionally does not claim that a click-to-interrupt automatically proves Hermes' native acoustic barge-in behavior or that a stopped partial reply is semantically annotated as interrupted.
-
-## Local validation command
-
-Run the same Python test discovery used by the HUD project, including the new Phase 4 test:
-
-```powershell
-python -m unittest discover -s hud\tests -p "test_*.py" -v
-```
-
-For live validation, launch the Phase 4 wrapper in place of the base HUD bridge using the same accepted loopback/Hermes arguments used for `orion_hud_bridge.py`.
+P4-07 through P4-09 still need explicit acceptance evidence for privacy modes, bounded follow-up, and interruption semantics. A click-to-interrupt path does not by itself prove native acoustic barge-in or truthful interrupted-response semantics.
 
 ## Non-regression boundary
 
 - wake remains disabled;
 - no custom-model v3;
-- no Hermes source patch;
-- no Hermes dependency upgrade;
-- no browser access to `API_SERVER_KEY` or voice provider credentials;
+- no routine Hermes upgrade as a substitute for the demonstrated interface gap;
+- no second always-running Hermes dashboard server;
+- no browser access to `API_SERVER_KEY` or speech-provider credentials;
 - no parallel STT/TTS implementation;
 - no new always-on microphone process;
 - no lifecycle authority added to Orion;
