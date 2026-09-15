@@ -18,6 +18,7 @@ import orion_phase4_voice_bridge as voice
 class FakeVoiceHermesHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     calls: list[dict] = []
+    audio_api = True
 
     def log_message(self, fmt, *args):
         return
@@ -42,24 +43,8 @@ class FakeVoiceHermesHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):  # noqa: N802
         self._record()
-        if self.path == "/api/audio/voice-config":
-            self._send(
-                200,
-                {
-                    "ok": True,
-                    "stt": {
-                        "mode": "direct",
-                        "provider": "openai",
-                        "model": "whisper-1",
-                        "api_key": "must-not-reach-browser",
-                    },
-                    "tts": {
-                        "mode": "relay",
-                        "provider": "edge",
-                        "reason": "local provider",
-                    },
-                },
-            )
+        if self.path == "/v1/capabilities":
+            self._send(200, {"features": {"audio_api": self.__class__.audio_api}})
         else:
             self._send(404, {"error": "not_found"})
 
@@ -84,8 +69,9 @@ class FakeVoiceHermesHandler(BaseHTTPRequestHandler):
 
 
 class VoiceFixture:
-    def __init__(self):
+    def __init__(self, *, audio_api=True):
         FakeVoiceHermesHandler.calls = []
+        FakeVoiceHermesHandler.audio_api = audio_api
         self.hermes = ThreadingHTTPServer(("127.0.0.1", 0), FakeVoiceHermesHandler)
         target = bridge.HermesTarget("127.0.0.1", self.hermes.server_port)
         static_root = HUD_ROOT / "static"
@@ -176,15 +162,17 @@ class Phase4VoiceIntegrationTests(unittest.TestCase):
         data = response.read()
         return response.status, response.getheaders(), data
 
-    def test_voice_status_redacts_hermes_key(self):
+    def test_voice_status_uses_gateway_capability_only(self):
         status, _, data = self.request("GET", "/api/orion/voice/status", origin=False)
         self.assertEqual(status, 200)
         payload = json.loads(data)
         self.assertTrue(payload["voice"]["ready"])
         self.assertEqual(payload["voice"]["wake"], "disabled")
-        self.assertNotIn(b"must-not-reach-browser", data)
-        call = next(c for c in FakeVoiceHermesHandler.calls if c["path"] == "/api/audio/voice-config")
+        self.assertNotIn(b"api_key", data)
+        self.assertNotIn(b"provider", data)
+        call = next(c for c in FakeVoiceHermesHandler.calls if c["path"] == "/v1/capabilities")
         self.assertEqual(call["authorization"], "Bearer test-secret")
+        self.assertFalse(any(c["path"] == "/api/audio/voice-config" for c in FakeVoiceHermesHandler.calls))
 
     def test_transcription_is_allowlisted_and_server_authenticated(self):
         body = {
@@ -207,7 +195,9 @@ class Phase4VoiceIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(status, 400)
         self.assertIn(b"invalid_audio_payload", data)
-        self.assertEqual(len(FakeVoiceHermesHandler.calls), before)
+        # Capability check occurs only after the same-origin/API guard but before
+        # audio proxying; invalid payload must never reach the audio endpoint.
+        self.assertFalse(any(c["path"] == "/api/audio/transcribe" for c in FakeVoiceHermesHandler.calls[before:]))
 
     def test_tts_is_allowlisted_and_server_authenticated(self):
         status, _, data = self.request("POST", "/api/orion/voice/speak", {"text": "Hello there."})
@@ -225,6 +215,43 @@ class Phase4VoiceIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(status, 403)
         self.assertIn(b"same_origin_required", data)
+
+
+class Phase4VoiceCapabilityGateTests(unittest.TestCase):
+    def test_audio_api_false_fails_closed_and_preserves_typed_fallback(self):
+        fixture = VoiceFixture(audio_api=False)
+        conn = http.client.HTTPConnection("127.0.0.1", fixture.orion.server_port, timeout=5)
+        try:
+            headers = {"Cookie": "orion_ui=test-cookie"}
+            conn.request("GET", "/api/orion/voice/status", headers=headers)
+            response = conn.getresponse()
+            payload = json.loads(response.read())
+            self.assertEqual(response.status, 200)
+            self.assertFalse(payload["voice"]["ready"])
+            self.assertEqual(payload["voice"]["reason"], "hermes_gateway_audio_api_unavailable")
+            self.assertTrue(payload["voice"]["typed_fallback"])
+
+            body = json.dumps({"text": "Hello"}).encode("utf-8")
+            conn.request(
+                "POST",
+                "/api/orion/voice/speak",
+                body=body,
+                headers={
+                    "Cookie": "orion_ui=test-cookie",
+                    "Origin": fixture.origin,
+                    "Content-Type": "application/json",
+                    "Content-Length": str(len(body)),
+                },
+            )
+            response = conn.getresponse()
+            payload = json.loads(response.read())
+            self.assertEqual(response.status, 503)
+            self.assertEqual(payload["reason"], "hermes_gateway_audio_api_unavailable")
+            self.assertTrue(payload["typed_fallback"])
+            self.assertFalse(any(c["path"] == "/api/audio/speak" for c in FakeVoiceHermesHandler.calls))
+        finally:
+            conn.close()
+            fixture.close()
 
 
 if __name__ == "__main__":
