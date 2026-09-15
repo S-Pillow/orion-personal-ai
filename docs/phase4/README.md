@@ -7,11 +7,22 @@ This directory contains two kinds of Phase 4 records:
 
 ## Current PRD v2.8 Phase 4
 
-Active current-phase record:
+Current-phase records:
 
-- `p4-03-native-hermes-wake-evaluation.md` — IN PROGRESS. Native Hermes wake-engine evaluation and custom `Hey Orion` openWakeWord model work under OR-VOICE-006.
+- `p4-03-native-hermes-wake-evaluation.md` — custom `Hey Orion` v1/v2 path evaluated and **NOT ACCEPTED** on the Windows/JLab/MME screen. No v3 is automatically authorized; wake remains disabled while strategy returns to owner review.
+- `p4-04a-hermes-audio-gateway.md` — **RUNTIME ACCEPTED / READY TO MERGE**. The fail-closed compatibility patch now exposes bounded authenticated Hermes STT/TTS routes on the accepted gateway and passed Windows COMPANION TTS-to-STT qualification.
+- PR #16 — Orion-side Push to Talk foundation. P4-04A no longer blocks its native Windows/JLab validation.
 
-The current Phase 4 gate is defined by ORION Master PRD v2.8: reuse the installed Hermes voice path, keep typed fallback, validate streaming speech and full-duplex barge-in, expose visible privacy modes, bound hands-free continuation, and implement the preferred `Hey Orion` phrase through a supported local Hermes wake engine. No separate STT/TTS/hotword service is introduced absent a demonstrated approved gap.
+The current Phase 4 gate is defined by ORION Master PRD v2.8: reuse the installed Hermes voice path, keep typed fallback, validate spoken streaming and interruption behavior, expose visible privacy modes, bound hands-free continuation, and preserve the preferred `Hey Orion` requirement as a separate wake-strategy decision. No separate STT/TTS/hotword service is introduced absent a demonstrated approved gap.
+
+The immediate acceptance sequence is:
+
+1. merge the runtime-accepted P4-04A compatibility bridge;
+2. live-validate PR #16 Push to Talk on native Windows with the JLab microphone;
+3. prove spoken input lands in the same persisted Hermes session as typed HUD chat;
+4. prove Hermes-owned TTS can speak the normal streamed HUD response without blocking typed fallback;
+5. close truthful privacy-state, bounded follow-up, and interruption semantics before declaring Phase 4 complete;
+6. keep wake disabled unless a separately accepted wake strategy is selected.
 
 ## Historical Phase 4 archive
 
