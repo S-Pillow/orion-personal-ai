@@ -68,6 +68,8 @@ The source-controlled patcher makes five deterministic changes:
 - returns only `ok`, `transcript`, and `no_speech`;
 - redacts exception text through the gateway's existing redaction helper.
 
+The gateway validates the declared/requested MIME contract, encoding, and decoded-size bound, but it does not independently inspect container magic bytes before handing the temporary file to Hermes. A corrupted or mislabeled payload therefore fails inside `transcribe_recording()` and is surfaced as a bounded `502`. This is an accepted local-relay tradeoff for P4-04A rather than an additional media-sniffing layer.
+
 ### Speech handler
 
 - requires the existing gateway Bearer authentication;
@@ -91,6 +93,8 @@ The Python patcher:
 - refuses an ambiguous second apply;
 - rolls back only when the manifest and backup match this patch ID and the accepted pre-patch blob;
 - verifies the restored Git blob after rollback and removes its patch sidecars.
+
+A leftover backup or manifest is deliberately treated as an ambiguous state. Any later `Apply` refuses to continue until those sidecars are reconciled manually. This includes the case where an interrupted or failed rollback leaves a sidecar behind. Operators must diagnose that state rather than delete the files reflexively; the stop is a fail-closed recovery boundary, not an apply bug.
 
 The PowerShell wrapper `scripts/phase4/p4-04a-hermes-audio-gateway.ps1` can discover the installed Hermes module through the Hermes Python environment. It refuses `Apply` or `Rollback` while something is listening on port 8642 and never starts or restarts Hermes automatically.
 
