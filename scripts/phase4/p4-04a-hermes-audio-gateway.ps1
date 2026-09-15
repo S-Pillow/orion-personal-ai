@@ -14,30 +14,58 @@ if (-not (Test-Path -LiteralPath $PatchScript -PathType Leaf)) {
     throw "P4-04A patcher not found: $PatchScript"
 }
 
+function Test-HermesPythonCandidate {
+    param([string]$Candidate)
+
+    if (-not $Candidate -or -not (Test-Path -LiteralPath $Candidate -PathType Leaf)) {
+        return $false
+    }
+
+    try {
+        & $Candidate -c "import importlib.util; s=importlib.util.find_spec('gateway.platforms.api_server'); raise SystemExit(0 if s and s.origin else 3)" 2>$null | Out-Null
+        return ($LASTEXITCODE -eq 0)
+    }
+    catch {
+        return $false
+    }
+}
+
 function Resolve-HermesPython {
     param([string]$ExplicitPython)
 
+    $candidates = New-Object System.Collections.Generic.List[string]
+
     if ($ExplicitPython) {
         $resolved = (Resolve-Path -LiteralPath $ExplicitPython -ErrorAction Stop).Path
-        return $resolved
+        $candidates.Add($resolved)
     }
 
-    $hermes = Get-Command hermes -ErrorAction SilentlyContinue
-    if ($hermes -and $hermes.Source) {
+    if ($env:LOCALAPPDATA) {
+        $candidates.Add((Join-Path $env:LOCALAPPDATA "hermes\hermes-agent\venv\Scripts\python.exe"))
+    }
+
+    $hermesCommands = Get-Command hermes -All -ErrorAction SilentlyContinue
+    foreach ($hermes in @($hermesCommands)) {
+        if (-not $hermes.Source) { continue }
         $scriptsDir = Split-Path -Parent $hermes.Source
         $venvRoot = Split-Path -Parent $scriptsDir
-        $candidate = Join-Path $venvRoot "python.exe"
-        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
-            return $candidate
+        $candidates.Add((Join-Path $venvRoot "python.exe"))
+    }
+
+    $pythonCommands = Get-Command python -All -ErrorAction SilentlyContinue
+    foreach ($python in @($pythonCommands)) {
+        if (-not $python.Source) { continue }
+        if ($python.Source -match "\\WindowsApps\\python(?:3)?\.exe$") { continue }
+        $candidates.Add($python.Source)
+    }
+
+    foreach ($candidate in ($candidates | Select-Object -Unique)) {
+        if (Test-HermesPythonCandidate -Candidate $candidate) {
+            return (Resolve-Path -LiteralPath $candidate).Path
         }
     }
 
-    $python = Get-Command python -ErrorAction SilentlyContinue
-    if ($python -and $python.Source) {
-        return $python.Source
-    }
-
-    throw "Could not resolve the Hermes Python interpreter. Pass -HermesPython explicitly."
+    throw "Could not resolve a Python interpreter that can locate gateway.platforms.api_server. Expected native Hermes candidate: %LOCALAPPDATA%\hermes\hermes-agent\venv\Scripts\python.exe. Pass -HermesPython explicitly only if the accepted Hermes installation uses a different verified interpreter."
 }
 
 $PythonExe = Resolve-HermesPython -ExplicitPython $HermesPython
@@ -48,7 +76,7 @@ if ($Action -eq "SelfTest") {
 }
 
 if (-not $Target) {
-    $resolvedTarget = & $PythonExe -c "import pathlib; import gateway.platforms.api_server as m; print(pathlib.Path(m.__file__).resolve())"
+    $resolvedTarget = & $PythonExe -c "import importlib.util, pathlib; s=importlib.util.find_spec('gateway.platforms.api_server'); print(pathlib.Path(s.origin).resolve() if s and s.origin else '')"
     if ($LASTEXITCODE -ne 0 -or -not $resolvedTarget) {
         throw "Could not resolve gateway/platforms/api_server.py from the selected Hermes Python."
     }
