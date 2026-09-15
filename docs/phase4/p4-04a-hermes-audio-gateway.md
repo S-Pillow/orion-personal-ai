@@ -1,16 +1,16 @@
 # P4-04A — Bounded Hermes gateway audio compatibility patch
 
-**Status:** IMPLEMENTED IN SOURCE CONTROL / NOT APPLIED TO RUNTIME  
+**Status:** RUNTIME ACCEPTED / READY TO MERGE  
 **Date:** 2026-09-15  
 **Issue:** #17  
-**Blocked consumer:** draft PR #16 (`feature/orion-phase4-p4-04-push-to-talk`)  
+**Consumer:** PR #16 (`feature/orion-phase4-p4-04-push-to-talk`)  
 **Accepted Hermes:** `v2026.8.27` / package `0.20.6` / commit `5fc308a70719a83cccdbba4c0e39c23f5a8239d5`
 
 ## Why this ticket exists
 
 P4-04/P4-05 needs browser microphone audio to be transcribed by Hermes and normal Hermes replies to be synthesized by Hermes TTS. Orion already talks to the authenticated Hermes API server on loopback port 8642.
 
-The accepted Hermes gateway exposes session, streaming, run-control, model, skill, and toolset APIs, but its capabilities contract explicitly reports:
+The accepted Hermes gateway exposes session, streaming, run-control, model, skill, and toolset APIs, but its baseline capabilities contract reports:
 
 - `audio_api: false`
 - `realtime_voice: false`
@@ -96,35 +96,30 @@ The Python patcher:
 
 A leftover backup or manifest is deliberately treated as an ambiguous state. Any later `Apply` refuses to continue until those sidecars are reconciled manually. This includes the case where an interrupted or failed rollback leaves a sidecar behind. The first diagnostic is to compare the manifest's `pre_git_blob_sha1` with the live target's current Git blob. If the live file still matches `pre_git_blob_sha1`, the patch did not land and the sidecars are residual pre-replace state that may be cleared after confirming the manifest/backup belong to this patch. If the live file matches the expected patched content, treat the installation as patched and reconcile the sidecars accordingly. If the live file matches neither the pre-patch blob nor the expected patched content, stop and investigate before touching any sidecar because the target may have been modified outside this tool's control. The stop is a fail-closed recovery boundary, not an apply bug.
 
-The PowerShell wrapper `scripts/phase4/p4-04a-hermes-audio-gateway.ps1` can discover the installed Hermes module through the Hermes Python environment. It refuses `Apply` or `Rollback` while something is listening on port 8642 and never starts or restarts Hermes automatically.
+The PowerShell wrapper `scripts/phase4/p4-04a-hermes-audio-gateway.ps1` resolves the accepted native Windows Hermes interpreter at `%LOCALAPPDATA%\hermes\hermes-agent\venv\Scripts\python.exe`, rejects the Windows Store Python alias, and only accepts an interpreter that can locate `gateway.platforms.api_server`. It refuses `Apply` or `Rollback` while something is listening on port 8642 and never starts or restarts Hermes automatically.
 
-## Source-control validation completed
+## Runtime acceptance completed
 
-- Python patcher built-in self-test: PASS
-- synthetic patched module compile check: PASS
-- accepted upstream route/capability anchors reviewed at the pinned commit
-- no runtime file has been modified
-- no service has been restarted
-- no microphone/STT/TTS request has been sent
+Windows qualification completed on 2026-09-15 against the accepted COMPANION Hermes installation.
 
-PowerShell syntax must be parse-checked on Windows before first execution, per Orion operator procedure.
+- PowerShell wrapper parse-check: PASS
+- patcher self-test: PASS
+- installed pre-patch target Git blob: `980659c9343d2975040f304e05bf97fa95f6a046` — PASS
+- controlled stop through `scripts/operator/Stop-Orion.ps1`: PASS; port 8642 confirmed not listening
+- `Apply`: PASS
+- pre-patch SHA-256: `8d87036dd488cb811dbabb7048102d0c28fbf54e0e658c464683000118537ec3`
+- post-patch SHA-256: `ecfd6dd53610c24a81f078650a0b2b3e129478a50fdb5f353313fff6e12e3888`
+- post-Apply `Verify`: PASS with exact post SHA-256
+- normal restart through `scripts/operator/Start-Orion.ps1`: PASS; COMPANION gateway healthy
+- authenticated read-only smoke: PASS; `audio_api: true`, `realtime_voice: false`, both audio endpoint contracts present
+- bounded TTS smoke: PASS; `audio/mpeg`, 21,600 bytes
+- bounded STT smoke: PASS with non-empty transcript
+- TTS-to-STT round trip: PASS
+- no credential material appeared in the operator/client output
 
-## Runtime acceptance sequence
+The synthesized phrase transcribed imperfectly (`or IN Gateway Audio Compatibility Check.`), but that is not a P4-04A acceptance failure. The compatibility route successfully carried valid synthesized audio through Hermes STT and returned a non-empty transcript. Any real-microphone transcription-quality issue belongs to the consuming Push-to-Talk validation.
 
-Runtime application is a separate operator-controlled step. Before P4-04A can close:
-
-1. stop Orion/Hermes so port 8642 is not listening;
-2. parse-check the PowerShell wrapper;
-3. run `SelfTest`;
-4. run `Verify` and confirm the installed source matches the expected accepted Git blob;
-5. run `Apply`;
-6. restart through the normal Orion lifecycle only;
-7. verify authenticated `/v1/capabilities` reports `audio_api: true` and `realtime_voice: false`;
-8. run focused authenticated TTS and STT smoke using the COMPANION profile;
-9. confirm no secret value is returned or logged;
-10. return to draft PR #16 for JLab push-to-talk, same-session, progressive speech, privacy-state, fallback, and interruption validation.
-
-If any post-apply gate fails, stop Hermes and use the wrapper's `Rollback` action before further diagnosis.
+P4-04A therefore unblocks PR #16. If any later gateway regression appears, stop Hermes before using the wrapper's guarded rollback path.
 
 ## Explicitly out of scope
 
@@ -137,4 +132,4 @@ If any post-apply gate fails, stop Hermes and use the wrapper's `Rollback` actio
 - lifecycle changes
 - iai changes
 
-P4-04A is a compatibility bridge for the accepted dependency, not a claim that Hermes upstream now natively exposes realtime voice on the API server.
+P4-04A is a compatibility bridge for the accepted dependency, not a claim that Hermes upstream natively exposes realtime voice on the API server.
