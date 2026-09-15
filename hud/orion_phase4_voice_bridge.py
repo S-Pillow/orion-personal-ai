@@ -23,7 +23,7 @@ from urllib.parse import urlparse
 
 import orion_hud_bridge as base
 
-VOICE_WRAPPER_VERSION = "p4-04-0.2"
+VOICE_WRAPPER_VERSION = "p4-04-0.3"
 MAX_VOICE_REQUEST_BYTES = 6 * 1024 * 1024
 MAX_TTS_TEXT_CHARS = 4000
 DATA_URL_RE = re.compile(r"^data:(audio/[^;,]+|video/webm)(?:;[^,]*)?;base64,", re.IGNORECASE)
@@ -48,6 +48,18 @@ class Phase4VoiceHandler(base.OrionHandler):
     """Add only the Phase 4 voice endpoints to the existing allowlist."""
 
     server_version = "OrionHUD/P4"
+
+    def _security_headers(self) -> None:
+        """Preserve the accepted HUD policy while allowing returned TTS data audio."""
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header(
+            "Content-Security-Policy",
+            "default-src 'self'; connect-src 'self'; img-src 'self' data:; "
+            "media-src 'self' data:; style-src 'self'; script-src 'self'; "
+            "frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+        )
 
     def _read_voice_json(self) -> dict[str, Any] | None:
         raw_length = self.headers.get("Content-Length", "")
