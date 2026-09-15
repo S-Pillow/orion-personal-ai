@@ -52,6 +52,8 @@ if (composer && messageInput && sendButton && stopButton && sessionSelect && tra
   let stopTimer = null;
   let speakReplies = true;
   let activeAudio = null;
+  let activeAudioResolve = null;
+  let speechEpoch = 0;
   let speechQueue = Promise.resolve();
   let voiceTurn = null;
 
@@ -95,13 +97,22 @@ if (composer && messageInput && sendButton && stopButton && sessionSelect && tra
     voiceButton.setAttribute("aria-pressed", "false");
   }
 
-  function interruptSpeechAndRun() {
+  function stopSpeechPlayback() {
+    speechEpoch += 1;
     if (activeAudio) {
       activeAudio.pause();
       activeAudio.src = "";
       activeAudio = null;
     }
+    if (activeAudioResolve) {
+      activeAudioResolve();
+      activeAudioResolve = null;
+    }
     speechQueue = Promise.resolve();
+  }
+
+  function interruptSpeechAndRun() {
+    stopSpeechPlayback();
     if (!stopButton.disabled) stopButton.click();
   }
 
@@ -204,12 +215,15 @@ if (composer && messageInput && sendButton && stopButton && sessionSelect && tra
     await new Promise((resolve, reject) => {
       const audio = new Audio(payload.data_url);
       activeAudio = audio;
+      activeAudioResolve = resolve;
       audio.addEventListener("ended", () => {
         if (activeAudio === audio) activeAudio = null;
+        if (activeAudioResolve === resolve) activeAudioResolve = null;
         resolve();
       }, { once: true });
       audio.addEventListener("error", () => {
         if (activeAudio === audio) activeAudio = null;
+        if (activeAudioResolve === resolve) activeAudioResolve = null;
         reject(new Error("audio_playback_failed"));
       }, { once: true });
       audio.play().catch(reject);
@@ -219,8 +233,12 @@ if (composer && messageInput && sendButton && stopButton && sessionSelect && tra
   function enqueueSpeech(text) {
     const clean = String(text || "").trim();
     if (!clean || !speakReplies) return;
+    const epoch = speechEpoch;
     speechQueue = speechQueue
-      .then(() => playSpeech(clean))
+      .then(() => {
+        if (!speakReplies || epoch !== speechEpoch) return undefined;
+        return playSpeech(clean);
+      })
       .catch((error) => setStatus("PUSH TO TALK", `TTS FAILED · ${error.message}`));
   }
 
@@ -281,13 +299,13 @@ if (composer && messageInput && sendButton && stopButton && sessionSelect && tra
     speakReplies = !speakReplies;
     speakButton.setAttribute("aria-pressed", String(speakReplies));
     speakButton.textContent = `SPEAK REPLIES: ${speakReplies ? "ON" : "OFF"}`;
-    if (!speakReplies) interruptSpeechAndRun();
+    if (!speakReplies) stopSpeechPlayback();
   });
 
   window.addEventListener("beforeunload", () => {
     if (recorder && recorder.state !== "inactive") recorder.stop();
     releaseMicrophone();
-    if (activeAudio) activeAudio.pause();
+    stopSpeechPlayback();
   });
 
   jsonApi("/api/orion/voice/status")
