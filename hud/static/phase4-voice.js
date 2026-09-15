@@ -1,7 +1,6 @@
 "use strict";
 
 const MAX_RECORDING_MS = 20000;
-const MIN_SPEECH_CHARS = 20;
 const MIME_CANDIDATES = [
   "audio/webm;codecs=opus",
   "audio/webm",
@@ -265,7 +264,7 @@ if (composer && messageInput && sendButton && stopButton && sessionSelect && tra
     for (const match of remainder.matchAll(sentencePattern)) {
       const chunk = match[0].trim();
       consumed = (match.index || 0) + match[0].length;
-      if (chunk.length >= MIN_SPEECH_CHARS) enqueueSpeech(chunk);
+      if (chunk) enqueueSpeech(chunk);
     }
     if (consumed) voiceTurn.queuedChars += consumed;
   }
