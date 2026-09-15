@@ -1,0 +1,25 @@
+.phase4-voice-button,
+.phase4-voice-toggle {
+  min-width: 8.5rem;
+  white-space: nowrap;
+}
+
+.phase4-voice-button[aria-pressed="true"] {
+  border-color: currentColor;
+  font-weight: 700;
+}
+
+.phase4-voice-status {
+  margin-top: 0.45rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.78;
+}
+
+@media (max-width: 900px) {
+  .phase4-voice-button,
+  .phase4-voice-toggle {
+    min-width: 0;
+  }
+}
