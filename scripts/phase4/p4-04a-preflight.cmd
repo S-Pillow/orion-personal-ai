@@ -9,7 +9,9 @@ if not exist "%P404A_PS1%" (
 )
 
 echo [1/3] Parse-checking PowerShell wrapper...
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$errors=$null; $tokens=$null; [System.Management.Automation.Language.Parser]::ParseFile($env:P404A_PS1,[ref]$tokens,[ref]$errors) ^> $null; if($errors.Count -gt 0){ $errors ^| ForEach-Object { Write-Error $_.Message }; exit 2 }; Write-Host 'P4-04A POWERSHELL PARSE PASS'"
+rem Keep the PowerShell command free of CMD redirection/pipeline metacharacters.
+rem The previous ^> and ^| escapes were passed literally when embedded here.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$errors=@(); $tokens=@(); $null=[System.Management.Automation.Language.Parser]::ParseFile($env:P404A_PS1,[ref]$tokens,[ref]$errors); if($errors.Count -gt 0){ foreach($parseError in $errors){ Write-Error $parseError.Message }; exit 2 }; Write-Host 'P4-04A POWERSHELL PARSE PASS'"
 if errorlevel 1 (
   echo P4-04A PREFLIGHT FAIL: PowerShell parse check failed.
   exit /b 2
