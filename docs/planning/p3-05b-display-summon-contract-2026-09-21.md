@@ -189,6 +189,23 @@ Isolated browser fixture:
 - fake Hermes SSE emits one `orion_display` call with literal HTML-looking text and one safe link;
 - operator confirms text remains literal, link is not auto-opened, panel is visible/focusable, and dismiss restores the prior workspace.
 
+## Prototype evidence
+
+A pure state/validation prototype is retained under `prototypes/p3-05b/` on this planning branch. It is deliberately not integrated into the production HUD.
+
+Independent Node 22 execution on 2026-09-21:
+
+- 7/7 tests passed;
+- literal `<script>` / `<b>` content stayed ordinary string data;
+- only HTTP(S) link URLs were accepted;
+- unknown kinds/schema versions and oversize fields failed closed;
+- text/evidence payloads could not smuggle a remote URL;
+- replacing an open summon preserved the original prior workspace;
+- invalid replacement left the existing state unchanged;
+- static authority scan found no fetch/XHR/WebSocket/storage/`innerHTML`/cookie/process API use.
+
+This proves only the pure payload/state contract. DOM integration, accessibility, Core gaze, real Hermes SSE dispatch, and browser visual acceptance remain future gates.
+
 ## Phase boundary
 
 P3-05B can close the **summonable-panel shell** with a synthetic display event.
