@@ -15,6 +15,12 @@ The current implementation exposes:
 
 The apply handler always returns `p5_01_mutation_not_authorized`. No protected filesystem mutation is implemented in P5-01.
 
+## P5-02A source candidate
+
+The source candidate on the P5-02A review branch is still non-mutating. Each preview now uses a fresh random nonce, so an identical second preview receives a distinct plan token and Hermes rule key. The bounded in-memory cache binds the exact proposed bytes and unified diff to the plan's hashes without adding replacement content to the public plan or apply-tool arguments. The approval hook includes the canonical target and exact diff and blocks missing, inconsistent, or oversized approval content. Internal hook errors return a block directive. The apply handler still always refuses mutation.
+
+This does not prove live approval safety. The pinned Hermes runtime can bypass approval under certain explicit modes and can omit a policy hook directive on callback/dispatch exceptions. See `docs/phase5/p5-02a-approval-integrity.md` before considering any mutating handler or live activation.
+
 ## Intended runtime location
 
 The accepted COMPANION Hermes home is:

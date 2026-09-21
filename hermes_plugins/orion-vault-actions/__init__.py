@@ -1,4 +1,4 @@
-"""Orion Phase 5 native vault-actions plugin, P5-01 source-only slice.
+"""Orion Phase 5 native vault-actions plugin, source-only candidate.
 
 P5-01 is intentionally non-mutating. It provides read-only preview tools plus a
 fail-closed placeholder apply tool so Hermes generic approval interception can
@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import stat
 import time
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -21,6 +22,7 @@ PLUGIN_VERSION = "p5-01-0.1"
 MAX_TEXT_CHARS = 100_000
 PREVIEW_TTL_SECONDS = 600.0
 PREVIEW_CACHE_LIMIT = 32
+MAX_APPROVAL_MESSAGE_CHARS = 16_000
 
 DEFAULT_VAULT_ROOT = r"C:\Personal\Me"
 DEFAULT_INBOX_ROOT = r"C:\Personal\Orion-Inbox"
@@ -431,7 +433,9 @@ def _recommend_destination_handler(ctx):
     return handle
 
 
-def _remember_preview(token: str, plan: Dict[str, Any]) -> None:
+def _remember_preview(
+    token: str, plan: Dict[str, Any], *, diff: str, proposed_bytes: bytes
+) -> None:
     now = time.monotonic()
 
     expired = [
@@ -448,7 +452,13 @@ def _remember_preview(token: str, plan: Dict[str, Any]) -> None:
         _PREVIEWS.pop(oldest, None)
         _PREVIEW_TIMES.pop(oldest, None)
 
-    _PREVIEWS[token] = dict(plan)
+    # Keep the exact approved bytes and diff private to the bounded cache.
+    # The public plan contains only identity and hashes, never replacement args.
+    _PREVIEWS[token] = {
+        **plan,
+        "_approval_diff": diff,
+        "_proposed_bytes": proposed_bytes,
+    }
     _PREVIEW_TIMES[token] = now
 
 
@@ -495,17 +505,22 @@ def preview_edit(params: Dict[str, Any], **_: Any) -> str:
     old_bytes, old_text = _read_utf8(target)
     old_sha = _sha_bytes(old_bytes)
     new_sha = _sha_text(new_text)
+    diff = _unified_diff(
+        old_text, new_text, f"vault/{target_rel}", f"vault/{target_rel}"
+    )
 
     plan = {
         "schema_version": 1,
+        "preview_nonce": secrets.token_hex(16),
         "action": "edit_note",
         "target_relative_path": target_rel,
         "target_canonical_path": str(target.resolve(strict=True)),
         "original_sha256": old_sha,
         "proposed_sha256": new_sha,
+        "diff_sha256": _sha_text(diff),
     }
     token = _plan_token(plan)
-    _remember_preview(token, plan)
+    _remember_preview(token, plan, diff=diff, proposed_bytes=new_text.encode("utf-8"))
 
     return _json(
         {
@@ -514,12 +529,7 @@ def preview_edit(params: Dict[str, Any], **_: Any) -> str:
             "changed": old_sha != new_sha,
             "plan_token": token,
             "plan": plan,
-            "diff": _unified_diff(
-                old_text,
-                new_text,
-                f"vault/{target_rel}",
-                f"vault/{target_rel}",
-            ),
+            "diff": diff,
             "mutation_performed": False,
         }
     )
@@ -551,6 +561,8 @@ def preview_move_draft(params: Dict[str, Any], **_: Any) -> str:
         )
 
     source_bytes, source_text = _read_utf8(source)
+    if len(source_text) > MAX_TEXT_CHARS:
+        return _json({"success": False, "error": "draft_too_large", "max_chars": MAX_TEXT_CHARS})
     if "orion_draft: true" not in source_text or "status: draft" not in source_text:
         return _json({"success": False, "error": "source_is_not_orion_draft"})
 
@@ -558,20 +570,24 @@ def preview_move_draft(params: Dict[str, Any], **_: Any) -> str:
     while not ancestor.exists() and ancestor != vault_root:
         ancestor = ancestor.parent
     target_parent_real = ancestor.resolve(strict=True)
+    diff = _unified_diff("", source_text, "/dev/null", f"vault/{target_rel}")
 
     plan = {
         "schema_version": 1,
+        "preview_nonce": secrets.token_hex(16),
         "action": "move_draft",
         "source_draft": source_rel,
         "source_canonical_path": str(source.resolve(strict=True)),
         "target_relative_path": target_rel,
         "target_candidate_path": str(target.absolute()),
+        "target_canonical_path": str(target.resolve(strict=False)),
         "target_existing_ancestor_canonical_path": str(target_parent_real),
         "source_sha256": _sha_bytes(source_bytes),
+        "diff_sha256": _sha_text(diff),
         "target_state": "absent",
     }
     token = _plan_token(plan)
-    _remember_preview(token, plan)
+    _remember_preview(token, plan, diff=diff, proposed_bytes=source_bytes)
 
     return _json(
         {
@@ -579,12 +595,7 @@ def preview_move_draft(params: Dict[str, Any], **_: Any) -> str:
             "mode": "preview",
             "plan_token": token,
             "plan": plan,
-            "diff": _unified_diff(
-                "",
-                source_text,
-                "/dev/null",
-                f"vault/{target_rel}",
-            ),
+            "diff": diff,
             "mutation_performed": False,
         }
     )
@@ -605,41 +616,60 @@ def apply_plan_placeholder(params: Dict[str, Any], **_: Any) -> str:
 
 def _approval_summary(plan: Dict[str, Any]) -> str:
     action = plan.get("action", "vault_action")
-    target = (
-        plan.get("target_canonical_path")
-        or plan.get("target_relative_path")
-        or "<unknown target>"
-    )
+    target = plan.get("target_canonical_path")
+    diff = plan.get("_approval_diff")
+    proposed_bytes = plan.get("_proposed_bytes")
+    if (not isinstance(target, str) or not target or not isinstance(diff, str)
+            or not isinstance(proposed_bytes, bytes)
+            or _sha_text(diff) != plan.get("diff_sha256")):
+        raise ValueError("approval_preview_incomplete")
 
     if action == "edit_note":
+        if _sha_bytes(proposed_bytes) != plan.get("proposed_sha256"):
+            raise ValueError("proposed_content_mismatch")
         return (
             "Approve Orion vault edit preview? "
             f"Target: {target}. "
             f"Original SHA-256: {plan.get('original_sha256')}. "
-            f"Proposed SHA-256: {plan.get('proposed_sha256')}. "
-            "P5-01 handler remains fail-closed and will not mutate."
+            f"Proposed SHA-256: {plan.get('proposed_sha256')}.\n"
+            f"Exact unified diff:\n{diff}\n"
+            "Current apply handler remains fail-closed and will not mutate."
         )
 
     if action == "move_draft":
+        if _sha_bytes(proposed_bytes) != plan.get("source_sha256"):
+            raise ValueError("source_content_mismatch")
         return (
             "Approve Orion draft move preview? "
             f"Source: {plan.get('source_canonical_path')}. "
-            f"Target: {plan.get('target_relative_path')}. "
-            f"Source SHA-256: {plan.get('source_sha256')}. "
-            "P5-01 handler remains fail-closed and will not mutate."
+            f"Target: {target}. "
+            f"Source SHA-256: {plan.get('source_sha256')}.\n"
+            f"Exact unified diff:\n{diff}\n"
+            "Current apply handler remains fail-closed and will not mutate."
         )
 
-    return "Approve Orion vault plan? P5-01 handler remains fail-closed and will not mutate."
+    raise ValueError("unknown_vault_action")
 
 
 def pre_tool_call(tool_name: str = "", args: Dict[str, Any] | None = None, **_: Any):
     if tool_name != APPLY_TOOL:
         return None
 
-    params = args if isinstance(args, dict) else {}
-    token = str(params.get("plan_token") or "").strip()
-    plan = _lookup_preview(token) if token else None
-
+    try:
+        params = args if isinstance(args, dict) else {}
+        token = str(params.get("plan_token") or "").strip()
+        plan = _lookup_preview(token) if token else None
+        if plan:
+            message = _approval_summary(plan)
+            if len(message.encode("utf-8")) > MAX_APPROVAL_MESSAGE_CHARS:
+                return {"action": "block", "message": "P5-02A blocked: exact approval diff is too large."}
+    except Exception:
+        # The installed Hermes hook registry logs callback exceptions and
+        # otherwise omits their directive. Never let our callback throw.
+        return {
+            "action": "block",
+            "message": "P5-02A blocked: vault approval preview could not be verified.",
+        }
     if not plan:
         return {
             "action": "block",
@@ -648,7 +678,7 @@ def pre_tool_call(tool_name: str = "", args: Dict[str, Any] | None = None, **_: 
 
     return {
         "action": "approve",
-        "message": _approval_summary(plan),
+        "message": message,
         "rule_key": f"orion_vault_plan:{token}",
     }
 
