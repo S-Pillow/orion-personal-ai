@@ -11,6 +11,7 @@ import json
 import os
 import sys
 import tempfile
+import subprocess
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -107,6 +108,43 @@ class DisposableMutationCandidateTests(unittest.TestCase):
                 with patch.dict(os.environ, env):
                     with self.assertRaisesRegex(RuntimeError, error):
                         plugin._candidate_disposable_roots()
+
+    def test_candidate_rechecks_resolved_parent_alias_against_protected_root(self):
+        protected_parent = self.root / "protected-parent"
+        protected_vault = protected_parent / "vault"
+        protected_parent.mkdir()
+        protected_vault.mkdir()
+        alias_parent = self.root / "alias-parent"
+
+        created = False
+        try:
+            os.symlink(protected_parent, alias_parent, target_is_directory=True)
+            created = True
+        except (OSError, NotImplementedError):
+            if os.name == "nt":
+                proc = subprocess.run(
+                    ["cmd.exe", "/d", "/c", "mklink", "/J",
+                     str(alias_parent), str(protected_parent)],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    check=False,
+                )
+                created = proc.returncode == 0
+        if not created:
+            self.skipTest("Platform did not permit a parent symlink/junction fixture")
+
+        with patch.object(plugin, "DEFAULT_VAULT_ROOT", str(protected_vault)):
+            with patch.dict(os.environ, {
+                "ORION_VAULT_ROOT": str(alias_parent / "vault"),
+                "ORION_INBOX_ROOT": str(self.inbox),
+                plugin.RECOVERY_ROOT_ENV: str(self.recovery),
+                plugin.DISPOSABLE_MUTATION_FLAG: "1",
+            }):
+                with self.assertRaisesRegex(
+                    RuntimeError, "resolved_live_vault_overlap_rejected"
+                ):
+                    plugin._candidate_disposable_roots()
 
     def test_candidate_requires_recovery_root_disjoint_from_data_roots(self):
         nested = self.vault / "recovery"
