@@ -83,8 +83,30 @@ class DisposableMutationCandidateTests(unittest.TestCase):
             plugin.RECOVERY_ROOT_ENV: str(self.recovery),
             plugin.DISPOSABLE_MUTATION_FLAG: "1",
         }):
-            with self.assertRaisesRegex(RuntimeError, "live_vault_root_rejected"):
+            with self.assertRaisesRegex(RuntimeError, "live_vault_root_overlap_rejected"):
                 plugin._candidate_disposable_roots()
+
+    def test_candidate_rejects_ancestor_descendant_overlap_with_live_roots(self):
+        cases = [
+            ("ORION_VAULT_ROOT", r"C:\\Personal", "live_vault_root_overlap_rejected"),
+            ("ORION_VAULT_ROOT", r"C:\\Personal\\Me\\fixture", "live_vault_root_overlap_rejected"),
+            ("ORION_INBOX_ROOT", r"C:\\Personal", "live_inbox_root_overlap_rejected"),
+            ("ORION_INBOX_ROOT", r"C:\\Personal\\Orion-Inbox\\fixture", "live_inbox_root_overlap_rejected"),
+            (plugin.RECOVERY_ROOT_ENV, r"C:\\Personal\\Me\\recovery", "live_recovery_root_overlap_rejected"),
+        ]
+        base = {
+            "ORION_VAULT_ROOT": str(self.vault),
+            "ORION_INBOX_ROOT": str(self.inbox),
+            plugin.RECOVERY_ROOT_ENV: str(self.recovery),
+            plugin.DISPOSABLE_MUTATION_FLAG: "1",
+        }
+        for key, value, error in cases:
+            with self.subTest(key=key, value=value):
+                env = dict(base)
+                env[key] = value
+                with patch.dict(os.environ, env):
+                    with self.assertRaisesRegex(RuntimeError, error):
+                        plugin._candidate_disposable_roots()
 
     def test_candidate_requires_recovery_root_disjoint_from_data_roots(self):
         nested = self.vault / "recovery"
