@@ -120,6 +120,13 @@ class Phase4VoiceUnitTests(unittest.TestCase):
         self.assertEqual(safe["stt"]["provider"], "openai")
         self.assertEqual(safe["tts"][0]["mode"], "relay")
 
+    def test_phase4_voice_controls_have_separate_layout_slots(self):
+        css = (HUD_ROOT / "static" / "phase4-voice.css").read_text(encoding="utf-8")
+        self.assertIn("minmax(9.5rem, auto)", css)
+        self.assertIn("minmax(11.25rem, auto)", css)
+        self.assertIn("column-gap: 0.75rem", css)
+        self.assertIn("grid-template-columns: repeat(4, minmax(0, 1fr))", css)
+
     def test_source_has_no_new_runtime_or_shell_authority(self):
         source = (HUD_ROOT / "orion_phase4_voice_bridge.py").read_text(encoding="utf-8")
         forbidden = (
