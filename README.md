@@ -148,7 +148,12 @@ Local Windows verification on 2026-09-21 passed:
 - P5-01 fixture suite: **10/10 tests passed in 0.115 s**;
 - Hermes `plugins doctor ... --ci`: runtime discovery, manifest parsing, import, and registration passed with **3 tools / 1 hook and no warnings**;
 - COMPANION user-plugin baseline: `[]` before any Orion plugin install;
-- COMPANION MCP inventory shows `iai-mcp` **enabled**, so destination recommendation should reuse the existing native iai authority rather than revive the historical Docker recommender.
+- COMPANION MCP inventory shows `iai-mcp` **enabled**;
+- a fourth source-only tool, `orion_vault_recommend_destination`, now uses native iai `memory_recall` ordering and `memory_temporal_recall` document tags to derive advisory destination candidates;
+- because iai's `doc:` tag is intentionally lossy, Orion accepts a candidate only when that tag maps to exactly one current contained Markdown file; missing or ambiguous mappings are omitted rather than guessed;
+- no direct iai store access or second semantic ranker is introduced.
+
+The recommendation candidate still requires local regression + Hermes-doctor re-verification before P5-01 source acceptance.
 
 Important boundary: P5-01 is still **source-only**. No live COMPANION plugin install/enable, Hermes restart for this plugin, vault write, inbox write, move, edit, restore, or delete has been authorized or performed.
 
@@ -260,8 +265,8 @@ Resume with **PRD Phase 5 / P5-01 native vault-actions source contract** while k
 Immediate sequence:
 
 1. keep PR #16 unmerged until stable-connectivity voice acceptance is completed;
-2. finish P5-01 by defining and testing the read-only iai destination-recommendation seam against the already enabled COMPANION `iai-mcp`;
-3. keep destination recommendation advisory and reuse iai recall/search rather than introducing a second semantic ranker;
+2. verify the newly added read-only iai destination-recommendation seam against source tests and Hermes doctor;
+3. keep destination recommendation advisory and preserve native iai recall ordering rather than introducing a second semantic ranker;
 4. keep P5-01 source-only — do not install/enable the plugin or perform protected vault mutation;
 5. after P5-01 source acceptance, require a separately approved P5-02 before live plugin installation or any real move/edit/delete/restore behavior;
 6. preserve Hermes as the generic approval authority, iai as memory authority, Obsidian as the durable human-authored vault, and Orion as presentation/control.
