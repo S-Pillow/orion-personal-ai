@@ -14,6 +14,7 @@ import os
 import re
 import secrets
 import stat
+import threading
 import time
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Dict
@@ -23,6 +24,7 @@ MAX_TEXT_CHARS = 100_000
 PREVIEW_TTL_SECONDS = 600.0
 PREVIEW_CACHE_LIMIT = 32
 MAX_APPROVAL_MESSAGE_CHARS = 16_000
+APPROVAL_ATTEMPT_LIMIT = 32
 
 DEFAULT_VAULT_ROOT = r"C:\Personal\Me"
 DEFAULT_INBOX_ROOT = r"C:\Personal\Orion-Inbox"
@@ -38,6 +40,8 @@ IAI_TEMPORAL_RECALL_TOOL = "memory_temporal_recall"
 
 _PREVIEWS: Dict[str, Dict[str, Any]] = {}
 _PREVIEW_TIMES: Dict[str, float] = {}
+_APPROVAL_ATTEMPTS: Dict[str, Dict[str, Any]] = {}
+_APPROVAL_ATTEMPTS_LOCK = threading.Lock()
 
 
 class PathPolicyError(ValueError):
@@ -683,6 +687,80 @@ def pre_tool_call(tool_name: str = "", args: Dict[str, Any] | None = None, **_: 
     }
 
 
+def post_approval_response(
+    pattern_key: str = "",
+    description: str = "",
+    choice: str = "",
+    surface: str = "",
+    coalesced: bool = False,
+    **_: Any,
+) -> None:
+    """Observe a fresh one-time response for an internal apply attempt.
+
+    This is not authorization by itself. The same handler that requested the
+    approval must also receive an approved gate result and consume this mark.
+    """
+    if choice != "once" or surface not in ("cli", "gateway") or coalesced:
+        return
+    with _APPROVAL_ATTEMPTS_LOCK:
+        pending = _APPROVAL_ATTEMPTS.get(pattern_key)
+        if (pending is not None and pending["description"] == description
+                and time.monotonic() - pending["created"] <= PREVIEW_TTL_SECONDS):
+            pending["once"] = True
+
+
+def _probe_fresh_once_approval(
+    plan_token: str, *, approval_request=None, redact=None
+) -> bool:
+    """Source-only handler-side approval candidate; never writes a file.
+
+    An isolated test-only tool may call this to exercise Hermes dispatch. The
+    registered apply handler remains a fail-closed placeholder. A future
+    mutator would need separate final state checks, one-use plan consumption,
+    atomic recovery, and qualified exact-diff display before any write.
+    """
+    try:
+        plan = _lookup_preview(plan_token)
+        if plan is None:
+            return False
+        message = _approval_summary(plan)
+        if len(message.encode("utf-8")) > MAX_APPROVAL_MESSAGE_CHARS:
+            return False
+        if redact is None:
+            from agent.redact import redact_sensitive_text
+
+            redact = redact_sensitive_text
+        if redact(message) != message:
+            return False
+        if approval_request is None:
+            from tools.approval import request_tool_approval
+
+            approval_request = request_tool_approval
+    except Exception:
+        return False
+
+    # The random key is private to this invocation; a grant for the public
+    # plan token or an earlier attempt cannot satisfy a fresh human response.
+    rule_key = f"orion_vault_attempt:{plan_token}:{secrets.token_hex(16)}"
+    pattern_key = f"plugin_rule:{rule_key}"
+    with _APPROVAL_ATTEMPTS_LOCK:
+        if len(_APPROVAL_ATTEMPTS) >= APPROVAL_ATTEMPT_LIMIT:
+            return False
+        _APPROVAL_ATTEMPTS[pattern_key] = {
+            "description": message, "created": time.monotonic(), "once": False
+        }
+    try:
+        result = approval_request(APPLY_TOOL, message, rule_key=rule_key)
+        with _APPROVAL_ATTEMPTS_LOCK:
+            observed = bool(_APPROVAL_ATTEMPTS[pattern_key]["once"])
+        return bool(isinstance(result, dict) and result.get("approved") is True and observed)
+    except Exception:
+        return False
+    finally:
+        with _APPROVAL_ATTEMPTS_LOCK:
+            _APPROVAL_ATTEMPTS.pop(pattern_key, None)
+
+
 def register(ctx):
     preview_edit_schema = {
         "name": PREVIEW_EDIT_TOOL,
@@ -779,3 +857,4 @@ def register(ctx):
         handler=apply_plan_placeholder,
     )
     ctx.register_hook("pre_tool_call", pre_tool_call)
+    ctx.register_hook("post_approval_response", post_approval_response)

@@ -36,6 +36,12 @@ If the plugin-only candidate cannot establish all these invariants, the alternat
 
 Local source tests use disposable roots. The existing P5-01 suite passed 16/16 and the new plan tests passed 4/4 in the scratch environment. On Windows, the owner ran `unittest discover -p "test_p5*.py" -v` against the checked-out P5-02A branch and reported 20/20 passing in 0.166 s. The pinned COMPANION Hermes `plugins doctor <source-dir> --ci` reported PASS for discovery, manifest parsing, import, and registration, with 4 tools and 1 hook. This is source-only verification; there is no live approval smoke.
 
+## Dispatcher candidate (source only)
+
+The source candidate now also registers a `post_approval_response` observer and contains an internal `_probe_fresh_once_approval` helper. The helper checks the cached plan/diff and redaction parity, creates a private per-invocation key, calls the generic Hermes approval gate, then requires both its approved result and an exactly matching human `once` observer event. Its attempt cache is bounded and cleared after every outcome. The registered `orion_vault_apply_plan` handler is **unchanged** and always refuses; the helper is test-only and performs no filesystem mutation. The existing pre-tool approval remains in place for that placeholder, so a future implementation must replace its valid-plan escalation before using the in-handler gate to avoid double prompts.
+
+The local disposable-root suite now passes 23/23 (16 P5-01 plus 7 P5-02A). The new `tests/probe_hermes_dispatch.py` registers a synthetic tool only in its isolated process and uses the real Hermes `model_tools.handle_function_call` dispatcher and registry while routing the plugin hooks and supplying a simulated CLI answer. It checks fresh `once`, session, yolo, missing observer, and simulated pre-dispatch exception with no write. It has not yet run on Windows; the earlier 20/20 Windows source test and 4-tool/1-hook doctor evidence predates this additional observer. Rerun source tests and doctor for the new 4-tool/2-hook candidate. A passing dispatcher probe would still not prove actual UI rendering, end-to-end concurrent dispatch, or safe real mutation.
+
 ## Blockers before a mutating handler
 
 1. Qualify the in-handler, one-time approval candidate against the pinned runtime so a pre-hook/dispatch exception, missing observer event, concurrency, or late callback cannot authorize a write. If it fails, design and separately qualify a fail-closed Hermes core change.

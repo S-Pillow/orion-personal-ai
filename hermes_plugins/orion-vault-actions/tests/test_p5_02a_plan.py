@@ -24,6 +24,7 @@ class PlanBindingTests(unittest.TestCase):
     def setUp(self):
         plugin._PREVIEWS.clear()
         plugin._PREVIEW_TIMES.clear()
+        plugin._APPROVAL_ATTEMPTS.clear()
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
         self.vault = self.root / "vault"
@@ -66,6 +67,23 @@ class PlanBindingTests(unittest.TestCase):
         self.assertEqual(note.read_bytes(), b"old")
         self.assertFalse(json.loads(plugin.apply_plan_placeholder(
             {"plan_token": first["plan_token"]}))["mutation_performed"])
+
+    def test_response_observer_is_registered_without_a_mutating_handler(self):
+        class Context:
+            def __init__(self):
+                self.tools = {}
+                self.hooks = {}
+
+            def register_tool(self, *, name, handler, **_kwargs):
+                self.tools[name] = handler
+
+            def register_hook(self, name, callback):
+                self.hooks[name] = callback
+
+        ctx = Context()
+        plugin.register(ctx)
+        self.assertEqual(set(ctx.hooks), {"pre_tool_call", "post_approval_response"})
+        self.assertIs(ctx.tools[plugin.APPLY_TOOL], plugin.apply_plan_placeholder)
 
     def test_move_approval_shows_canonical_target_and_bound_source_bytes(self):
         draft = self.inbox / "draft.md"
@@ -112,6 +130,55 @@ class PlanBindingTests(unittest.TestCase):
         self.assertEqual(plugin.pre_tool_call(plugin.APPLY_TOOL, {"plan_token": token})["action"], "block")
         result = json.loads(plugin.apply_plan_placeholder({"plan_token": token}))
         self.assertEqual(result["error"], "p5_01_mutation_not_authorized")
+        self.assertEqual(note.read_bytes(), b"old\n")
+
+    def test_internal_attempt_requires_matching_once_and_gate_result(self):
+        note = self.vault / "note.md"
+        note.write_bytes(b"old\n")
+        token = json.loads(plugin.preview_edit({
+            "target_relative_path": "note.md", "new_content": "new\n",
+        }))["plan_token"]
+
+        def gate_with(choice, approved=True, *, mismatch=False):
+            def request(tool_name, description, *, rule_key):
+                self.assertEqual(tool_name, plugin.APPLY_TOOL)
+                plugin.post_approval_response(
+                    pattern_key=f"plugin_rule:{rule_key}",
+                    description=description + ("x" if mismatch else ""),
+                    choice=choice,
+                    surface="cli",
+                )
+                return {"approved": approved}
+            return request
+
+        self.assertTrue(plugin._probe_fresh_once_approval(
+            token, approval_request=gate_with("once"), redact=lambda text: text,
+        ))
+        for request in (gate_with("session"), gate_with("always"),
+                        gate_with("once", approved=False), gate_with("once", mismatch=True),
+                        lambda *_args, **_kw: {"approved": True}):
+            self.assertFalse(plugin._probe_fresh_once_approval(
+                token, approval_request=request, redact=lambda text: text,
+            ))
+        self.assertFalse(plugin._APPROVAL_ATTEMPTS)
+        self.assertEqual(note.read_bytes(), b"old\n")
+
+    def test_internal_attempt_fails_closed_on_redaction_and_gate_error(self):
+        note = self.vault / "note.md"
+        note.write_bytes(b"old\n")
+        token = json.loads(plugin.preview_edit({
+            "target_relative_path": "note.md", "new_content": "new\n",
+        }))["plan_token"]
+        self.assertFalse(plugin._probe_fresh_once_approval(
+            token, approval_request=lambda *_args, **_kw: {"approved": True},
+            redact=lambda text: text.replace("new", "[REDACTED]"),
+        ))
+        def fail(*_args, **_kw):
+            raise RuntimeError("approval unavailable")
+        self.assertFalse(plugin._probe_fresh_once_approval(
+            token, approval_request=fail, redact=lambda text: text,
+        ))
+        self.assertFalse(plugin._APPROVAL_ATTEMPTS)
         self.assertEqual(note.read_bytes(), b"old\n")
 
 

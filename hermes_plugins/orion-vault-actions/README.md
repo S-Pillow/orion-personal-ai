@@ -25,6 +25,8 @@ P5-02A Windows source verification passed: 20/20 tests on disposable roots (0.16
 
 The separate Windows Hermes approval-signal probe passed 3/3 in 0.025 s. It confirmed that a fresh `once` response differs from bypass, cached, and automatic approval paths under mocked prompt/observer delivery. Full plugin dispatch and actual approval-screen rendering remain unverified; the apply handler still refuses mutation.
 
+A later source-only candidate adds the `post_approval_response` observer and an internal no-write approval probe helper. The registered apply tool is still the refusing placeholder. Local disposable-root tests now pass 23/23; the new test-only Hermes dispatcher probe and 4-tool/2-hook doctor check await Windows verification. See the P5-02A document for the exact boundary.
+
 ## Intended runtime location
 
 The accepted COMPANION Hermes home is:
