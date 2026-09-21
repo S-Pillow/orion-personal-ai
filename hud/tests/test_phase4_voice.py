@@ -5,6 +5,7 @@ import json
 import sys
 import threading
 import unittest
+from unittest import mock
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -127,6 +128,13 @@ class Phase4VoiceUnitTests(unittest.TestCase):
         self.assertIn("column-gap: 0.75rem", css)
         self.assertIn("grid-template-columns: repeat(4, minmax(0, 1fr))", css)
 
+    def test_voice_turn_ignores_previous_assistant_and_aborts_inflight_tts(self):
+        source = (HUD_ROOT / "static" / "phase4-voice.js").read_text(encoding="utf-8")
+        self.assertIn("previousBody: latestAssistantBody()", source)
+        self.assertIn("body === voiceTurn.previousBody", source)
+        self.assertIn("activeSpeechController.abort()", source)
+        self.assertIn('error?.name === "AbortError"', source)
+
     def test_source_has_no_new_runtime_or_shell_authority(self):
         source = (HUD_ROOT / "orion_phase4_voice_bridge.py").read_text(encoding="utf-8")
         forbidden = (
@@ -219,6 +227,43 @@ class Phase4VoiceIntegrationTests(unittest.TestCase):
         self.assertIn(b"data:audio/wav;base64", data)
         call = next(c for c in FakeVoiceHermesHandler.calls if c["path"] == "/api/audio/speak")
         self.assertEqual(call["authorization"], "Bearer test-secret")
+
+    def test_voice_routes_use_bounded_extended_timeouts(self):
+        seen: dict[str, float | None] = {}
+        original = bridge.HermesClient.request
+
+        def wrapped(client, method, path, **kwargs):
+            if path in {"/api/audio/transcribe", "/api/audio/speak"}:
+                seen[path] = kwargs.get("timeout")
+            return original(client, method, path, **kwargs)
+
+        with mock.patch.object(bridge.HermesClient, "request", new=wrapped):
+            status, _, _ = self.request(
+                "POST",
+                "/api/orion/voice/transcribe",
+                {
+                    "data_url": "data:audio/webm;base64,AAAA",
+                    "mime_type": "audio/webm",
+                },
+            )
+            self.assertEqual(status, 200)
+            status, _, _ = self.request(
+                "POST",
+                "/api/orion/voice/speak",
+                {"text": "Hello there."},
+            )
+            self.assertEqual(status, 200)
+
+        self.assertEqual(
+            seen["/api/audio/transcribe"],
+            voice.VOICE_STT_TIMEOUT_SECONDS,
+        )
+        self.assertEqual(
+            seen["/api/audio/speak"],
+            voice.VOICE_TTS_TIMEOUT_SECONDS,
+        )
+        self.assertGreater(voice.VOICE_STT_TIMEOUT_SECONDS, 15.0)
+        self.assertGreater(voice.VOICE_TTS_TIMEOUT_SECONDS, 15.0)
 
     def test_voice_mutation_requires_same_origin(self):
         status, _, data = self.request(
