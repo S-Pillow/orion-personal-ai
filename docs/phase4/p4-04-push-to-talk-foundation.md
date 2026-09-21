@@ -1,6 +1,6 @@
 # P4-04 / P4-05 — Push-to-talk voice foundation
 
-**Status:** ORION IMPLEMENTED / HERMES GATEWAY AUDIO GAP CONFIRMED / LIVE VALIDATION BLOCKED  
+**Status:** ORION IMPLEMENTED / P4-04A AUDIO GATEWAY ACCEPTED / FINAL LIVE TTS + INTERRUPTION ACCEPTANCE DEFERRED  
 **Date:** 2026-09-15  
 **Controlling PRD:** ORION Master PRD v2.8  
 **Depends on:** accepted native Hermes `v2026.8.27` / `0.20.6` / `5fc308a70719a83cccdbba4c0e39c23f5a8239d5`
@@ -51,18 +51,11 @@ This slice adds a reversible Phase 4 wrapper instead of mutating the accepted Ph
 - `hud/tests/test_phase4_voice.py`
   - covers the gateway capability gate, same-origin enforcement, narrow STT/TTS allowlisting, server-side Hermes authorization, invalid-audio rejection, credential redaction, typed-fallback truthfulness, and absence of new shell/runtime authority.
 
-## Required Hermes-side closure
+## P4-04A dependency closure
 
-Before live PTT validation, the accepted Hermes gateway needs a **narrow, reversible, source-controlled compatibility patch** that:
+The Hermes-side gateway gap described by the original design is now **closed** by the accepted P4-04A compatibility layer merged through PR #18. Native Windows qualification proved the exact installed source identity, controlled patch/verify behavior, COMPANION restart health, `audio_api=true` / `realtime_voice=false`, and a bounded TTS-to-STT round trip.
 
-1. registers authenticated `POST /api/audio/transcribe` and `POST /api/audio/speak` on the existing gateway listener;
-2. reuses Hermes' existing `transcribe_recording()` and `text_to_speech_tool()` implementations instead of creating new speech semantics;
-3. respects the gateway's existing profile scope, API-key authentication, request limits, and multiplex routing;
-4. changes only `features.audio_api` to `true` when those routes are actually present; `realtime_voice` remains `false` because this slice is bounded PTT, not a new realtime websocket implementation;
-5. returns only transcript/audio result data, never resolved provider credentials;
-6. is hash-pinned to the accepted Hermes source and independently testable/reversible.
-
-This compatibility patch is the next implementation ticket. It is preferable to requiring a second always-running dashboard server because it preserves the accepted single authenticated gateway boundary.
+A later 2026-09-21 connectivity incident caused Edge TTS timeouts while the ISP/provider path was unstable. Without an Orion/Hermes code change, direct `edge_tts` later recovered and the accepted direct P4-04A audio smoke again passed with an `audio/mpeg` result and non-empty STT transcript. This makes the remaining blocker a **final live client acceptance gate under usable connectivity**, tracked by issue #19, not a reason to create another gateway patch.
 
 ## Truthful state model
 
@@ -78,19 +71,22 @@ This compatibility patch is the next implementation ticket. It is preferable to 
 - **P4-05:** spoken input enters the same selected persisted Hermes session as typed HUD chat.
 - a substantial portion of **P4-06:** Hermes-owned STT plus progressive Hermes TTS with typed fallback preserved.
 
-## Live acceptance still required
+## Final live acceptance still required
 
-After the gateway patch is qualified on native Windows/JLab:
+Substantial PTT behavior has already been observed: microphone capture -> Hermes STT -> same selected persisted session -> visible response, and PTT has stopped an active run. Issue #19 now owns the remaining human-visible/audible gate:
 
-1. browser microphone permission and recording work through the Phase 4 wrapper;
-2. Hermes returns usable transcription through the configured COMPANION speech path;
-3. the transcript appears as a user turn in the same selected Hermes session;
-4. the normal streamed HUD reply stays visible while Hermes TTS speaks it;
-5. Push to Talk interrupts playback and an active run cleanly;
-6. Speak Replies OFF leaves typed behavior unchanged;
-7. Hermes unavailable / microphone denied / STT failure / TTS failure degrade visibly without blocking typed chat.
+1. direct provider control is responsive enough to make the test meaningful;
+2. P4-04A audio smoke remains healthy;
+3. normal PTT produces a visible response and Hermes TTS is audibly played;
+4. **Speak Replies OFF** leaves the response visible and typed/PTT behavior intact while producing no reply audio;
+5. with speech enabled, pressing PTT during audible playback stops the current audio, aborts any in-flight TTS request/queued stale chunks, and invokes the existing HUD STOP path when a Hermes run is active;
+6. no stale remainder resumes after the interruption;
+7. microphone denied, STT failure, TTS/provider failure, and Hermes loss remain visible while typed chat stays usable;
+8. privacy state remains truthful: PUSH TO TALK / CONVERSATION / OFF with WAKE OFF.
 
-P4-07 through P4-09 still need explicit acceptance evidence for privacy modes, bounded follow-up, and interruption semantics. A click-to-interrupt path does not by itself prove native acoustic barge-in or truthful interrupted-response semantics.
+The browser implementation already increments a speech epoch, aborts the active TTS fetch, pauses/clears active audio, resolves the playback waiter, resets the speech queue, and invokes STOP on interruption. The live gate should therefore measure/verify those behaviors before changing code. If a direct Edge/provider control fails at the same time, classify the event as provider-path unavailable rather than patching Orion speculatively.
+
+P4-07 through P4-09 still require closure evidence for privacy modes, bounded follow-up, and interruption semantics. In PTT mode the automatic follow-up cap is effectively zero: another spoken turn requires another explicit press. Wake remains a separate owner disposition.
 
 ## Non-regression boundary
 
