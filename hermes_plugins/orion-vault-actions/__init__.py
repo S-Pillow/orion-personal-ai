@@ -25,6 +25,8 @@ PREVIEW_TTL_SECONDS = 600.0
 PREVIEW_CACHE_LIMIT = 32
 MAX_APPROVAL_MESSAGE_CHARS = 16_000
 APPROVAL_ATTEMPT_LIMIT = 32
+DISPOSABLE_MUTATION_FLAG = "ORION_P5_ALLOW_DISPOSABLE_MUTATION"
+RECOVERY_ROOT_ENV = "ORION_P5_RECOVERY_ROOT"
 
 DEFAULT_VAULT_ROOT = r"C:\Personal\Me"
 DEFAULT_INBOX_ROOT = r"C:\Personal\Orion-Inbox"
@@ -42,6 +44,8 @@ _PREVIEWS: Dict[str, Dict[str, Any]] = {}
 _PREVIEW_TIMES: Dict[str, float] = {}
 _APPROVAL_ATTEMPTS: Dict[str, Dict[str, Any]] = {}
 _APPROVAL_ATTEMPTS_LOCK = threading.Lock()
+_CANDIDATE_CONSUMED_PLANS: set[str] = set()
+_CANDIDATE_CONSUMED_LOCK = threading.Lock()
 
 
 class PathPolicyError(ValueError):
@@ -759,6 +763,362 @@ def _probe_fresh_once_approval(
     finally:
         with _APPROVAL_ATTEMPTS_LOCK:
             _APPROVAL_ATTEMPTS.pop(pattern_key, None)
+
+
+
+def _candidate_result(
+    *,
+    success: bool,
+    error: str | None = None,
+    mutation_performed: bool = False,
+    recovery_required: bool = False,
+    **extra: Any,
+) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {
+        "success": success,
+        "mutation_performed": mutation_performed,
+        "recovery_required": recovery_required,
+    }
+    if error:
+        payload["error"] = error
+    payload.update(extra)
+    return payload
+
+
+def _candidate_disposable_roots() -> tuple[Path, Path, Path]:
+    """Return explicitly opted-in disposable roots for P5-02B source tests.
+
+    This helper deliberately refuses the live default roots even when the
+    opt-in flag is set. It is not a production authorization mechanism; it is
+    a hard guard around the unregistered source candidate.
+    """
+    if os.environ.get(DISPOSABLE_MUTATION_FLAG) != "1":
+        raise RuntimeError("disposable_mutation_not_enabled")
+
+    raw_vault = os.environ.get("ORION_VAULT_ROOT")
+    raw_inbox = os.environ.get("ORION_INBOX_ROOT")
+    raw_recovery = os.environ.get(RECOVERY_ROOT_ENV)
+    if not raw_vault or not raw_inbox or not raw_recovery:
+        raise RuntimeError("disposable_roots_not_explicit")
+
+    if raw_vault.casefold() == DEFAULT_VAULT_ROOT.casefold():
+        raise RuntimeError("live_vault_root_rejected")
+    if raw_inbox.casefold() == DEFAULT_INBOX_ROOT.casefold():
+        raise RuntimeError("live_inbox_root_rejected")
+
+    vault = Path(raw_vault)
+    inbox = Path(raw_inbox)
+    recovery = Path(raw_recovery)
+    for root in (vault, inbox, recovery):
+        if not root.is_dir():
+            raise RuntimeError("disposable_root_missing")
+        if _is_reparse_point(root):
+            raise RuntimeError("disposable_root_reparse_rejected")
+
+    vault_real = vault.resolve(strict=True)
+    inbox_real = inbox.resolve(strict=True)
+    recovery_real = recovery.resolve(strict=True)
+    if len({str(vault_real), str(inbox_real), str(recovery_real)}) != 3:
+        raise RuntimeError("disposable_roots_must_be_distinct")
+    return vault, inbox, recovery
+
+
+def _durable_write_exclusive(path: Path, data: bytes) -> None:
+    with path.open("xb") as handle:
+        handle.write(data)
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+def _write_candidate_manifest(path: Path, payload: Dict[str, Any]) -> None:
+    data = json.dumps(
+        payload, ensure_ascii=False, sort_keys=True, indent=2
+    ).encode("utf-8")
+    temporary = path.with_name(path.name + ".tmp-" + secrets.token_hex(6))
+    try:
+        _durable_write_exclusive(temporary, data)
+        os.replace(temporary, path)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+
+
+def _candidate_replace_file(target: Path, replacement: Path) -> None:
+    """Replace one existing file; use native ReplaceFileW on Windows."""
+    if os.name != "nt":
+        os.replace(replacement, target)
+        return
+
+    import ctypes
+
+    replace_file = ctypes.WinDLL("kernel32", use_last_error=True).ReplaceFileW
+    replace_file.argtypes = [
+        ctypes.c_wchar_p,
+        ctypes.c_wchar_p,
+        ctypes.c_wchar_p,
+        ctypes.c_uint32,
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+    ]
+    replace_file.restype = ctypes.c_int
+    if not replace_file(str(target), str(replacement), None, 0, None, None):
+        code = ctypes.get_last_error()
+        raise OSError(code, "ReplaceFileW failed")
+
+
+def _candidate_checkpoint(name: str, failure_hook=None) -> None:
+    if failure_hook is not None:
+        failure_hook(name)
+
+
+def _candidate_mark_consumed(token: str) -> bool:
+    with _CANDIDATE_CONSUMED_LOCK:
+        if token in _CANDIDATE_CONSUMED_PLANS:
+            return False
+        _CANDIDATE_CONSUMED_PLANS.add(token)
+        return True
+
+
+def _candidate_recovery_dir(recovery_root: Path, token: str) -> Path:
+    path = recovery_root / token
+    path.mkdir(mode=0o700)
+    return path
+
+
+def _execute_disposable_plan_candidate(
+    plan_token: str, *, failure_hook=None
+) -> Dict[str, Any]:
+    """P5-02B unregistered mutation prototype for disposable roots only.
+
+    The public APPLY_TOOL does not call this function. It exists so edit/move
+    durability, stale-state, recovery, and race behavior can be exercised
+    before any live mutation handler is authorized.
+    """
+    try:
+        vault_root, inbox_root, recovery_root = _candidate_disposable_roots()
+        plan = _lookup_preview(plan_token)
+        if plan is None:
+            return _candidate_result(success=False, error="unknown_or_expired_plan")
+        _approval_summary(plan)  # validates exact cached diff/proposed bytes.
+        with _CANDIDATE_CONSUMED_LOCK:
+            if plan_token in _CANDIDATE_CONSUMED_PLANS:
+                return _candidate_result(success=False, error="plan_already_consumed")
+    except Exception as exc:
+        return _candidate_result(success=False, error=str(exc))
+
+    action = plan.get("action")
+    recovery_dir: Path | None = None
+    mutation_started = False
+
+    try:
+        if action == "edit_note":
+            target, target_rel = _resolve_under_root(
+                vault_root, plan.get("target_relative_path"), must_exist=True
+            )
+            if str(target.resolve(strict=True)) != plan.get("target_canonical_path"):
+                return _candidate_result(success=False, error="target_identity_changed")
+            old_bytes, _ = _read_utf8(target)
+            if _sha_bytes(old_bytes) != plan.get("original_sha256"):
+                return _candidate_result(success=False, error="stale_original_hash")
+            proposed = plan.get("_proposed_bytes")
+            if not isinstance(proposed, bytes):
+                return _candidate_result(success=False, error="proposed_bytes_missing")
+            if _sha_bytes(proposed) != plan.get("proposed_sha256"):
+                return _candidate_result(success=False, error="proposed_hash_mismatch")
+
+            recovery_dir = _candidate_recovery_dir(recovery_root, plan_token)
+            backup = recovery_dir / "original.bin"
+            manifest = recovery_dir / "manifest.json"
+            _durable_write_exclusive(backup, old_bytes)
+            _write_candidate_manifest(manifest, {
+                "schema_version": 1,
+                "state": "prepared",
+                "action": action,
+                "plan_token": plan_token,
+                "target_relative_path": target_rel,
+                "before_sha256": plan.get("original_sha256"),
+                "after_sha256": plan.get("proposed_sha256"),
+                "backup_file": "original.bin",
+            })
+            _candidate_checkpoint("edit_after_recovery", failure_hook)
+
+            temporary = target.with_name(
+                f".{target.name}.orion-{plan_token[:12]}-{secrets.token_hex(4)}.tmp"
+            )
+            try:
+                _durable_write_exclusive(temporary, proposed)
+                _candidate_checkpoint("edit_before_replace", failure_hook)
+                if not _candidate_mark_consumed(plan_token):
+                    return _candidate_result(
+                        success=False, error="plan_already_consumed",
+                        recovery_dir=str(recovery_dir),
+                    )
+                mutation_started = True
+                _candidate_replace_file(target, temporary)
+                _candidate_checkpoint("edit_after_replace", failure_hook)
+            finally:
+                if temporary.exists():
+                    temporary.unlink()
+
+            current = target.read_bytes()
+            if _sha_bytes(current) != plan.get("proposed_sha256"):
+                return _candidate_result(
+                    success=False,
+                    error="post_write_hash_mismatch",
+                    mutation_performed=True,
+                    recovery_required=True,
+                    recovery_dir=str(recovery_dir),
+                )
+            _write_candidate_manifest(manifest, {
+                "schema_version": 1,
+                "state": "committed",
+                "action": action,
+                "plan_token": plan_token,
+                "target_relative_path": target_rel,
+                "before_sha256": plan.get("original_sha256"),
+                "after_sha256": plan.get("proposed_sha256"),
+                "backup_file": "original.bin",
+            })
+            return _candidate_result(
+                success=True,
+                mutation_performed=True,
+                recovery_dir=str(recovery_dir),
+                target_relative_path=target_rel,
+                after_sha256=plan.get("proposed_sha256"),
+            )
+
+        if action == "move_draft":
+            source, source_rel = _resolve_under_root(
+                inbox_root, plan.get("source_draft"), must_exist=True
+            )
+            target, target_rel = _resolve_under_root(
+                vault_root, plan.get("target_relative_path"), allow_missing_leaf=True
+            )
+            if str(source.resolve(strict=True)) != plan.get("source_canonical_path"):
+                return _candidate_result(success=False, error="source_identity_changed")
+            if str(target.resolve(strict=False)) != plan.get("target_canonical_path"):
+                return _candidate_result(success=False, error="target_identity_changed")
+            if not target.parent.is_dir():
+                return _candidate_result(success=False, error="target_parent_missing")
+            if _is_reparse_point(target.parent):
+                return _candidate_result(success=False, error="target_parent_reparse_rejected")
+            if target.exists() or os.path.lexists(target):
+                return _candidate_result(success=False, error="target_already_exists")
+
+            source_bytes, source_text = _read_utf8(source)
+            if _sha_bytes(source_bytes) != plan.get("source_sha256"):
+                return _candidate_result(success=False, error="stale_source_hash")
+            if "orion_draft: true" not in source_text or "status: draft" not in source_text:
+                return _candidate_result(success=False, error="source_is_not_orion_draft")
+
+            recovery_dir = _candidate_recovery_dir(recovery_root, plan_token)
+            backup = recovery_dir / "source.bin"
+            manifest = recovery_dir / "manifest.json"
+            _durable_write_exclusive(backup, source_bytes)
+            _write_candidate_manifest(manifest, {
+                "schema_version": 1,
+                "state": "prepared",
+                "action": action,
+                "plan_token": plan_token,
+                "source_draft": source_rel,
+                "target_relative_path": target_rel,
+                "source_sha256": plan.get("source_sha256"),
+                "backup_file": "source.bin",
+            })
+            _candidate_checkpoint("move_after_recovery", failure_hook)
+
+            if not _candidate_mark_consumed(plan_token):
+                return _candidate_result(
+                    success=False, error="plan_already_consumed",
+                    recovery_dir=str(recovery_dir),
+                )
+            mutation_started = True
+            _durable_write_exclusive(target, source_bytes)
+            _candidate_checkpoint("move_after_target_create", failure_hook)
+
+            if _sha_bytes(target.read_bytes()) != plan.get("source_sha256"):
+                return _candidate_result(
+                    success=False,
+                    error="target_hash_mismatch",
+                    mutation_performed=True,
+                    recovery_required=True,
+                    recovery_dir=str(recovery_dir),
+                )
+
+            latest_source = source.read_bytes()
+            if _sha_bytes(latest_source) != plan.get("source_sha256"):
+                cleanup_ok = False
+                try:
+                    if (_sha_bytes(target.read_bytes()) == plan.get("source_sha256")):
+                        target.unlink()
+                        cleanup_ok = True
+                except OSError:
+                    cleanup_ok = False
+                return _candidate_result(
+                    success=False,
+                    error="source_changed_before_delete",
+                    mutation_performed=True,
+                    recovery_required=not cleanup_ok,
+                    recovery_dir=str(recovery_dir),
+                )
+
+            _candidate_checkpoint("move_before_source_delete", failure_hook)
+            source.unlink()
+            _candidate_checkpoint("move_after_source_delete", failure_hook)
+
+            if source.exists() or not target.is_file():
+                return _candidate_result(
+                    success=False,
+                    error="move_postcondition_failed",
+                    mutation_performed=True,
+                    recovery_required=True,
+                    recovery_dir=str(recovery_dir),
+                )
+            if _sha_bytes(target.read_bytes()) != plan.get("source_sha256"):
+                return _candidate_result(
+                    success=False,
+                    error="move_post_hash_mismatch",
+                    mutation_performed=True,
+                    recovery_required=True,
+                    recovery_dir=str(recovery_dir),
+                )
+
+            _write_candidate_manifest(manifest, {
+                "schema_version": 1,
+                "state": "committed",
+                "action": action,
+                "plan_token": plan_token,
+                "source_draft": source_rel,
+                "target_relative_path": target_rel,
+                "source_sha256": plan.get("source_sha256"),
+                "backup_file": "source.bin",
+            })
+            return _candidate_result(
+                success=True,
+                mutation_performed=True,
+                recovery_dir=str(recovery_dir),
+                source_draft=source_rel,
+                target_relative_path=target_rel,
+                after_sha256=plan.get("source_sha256"),
+            )
+
+        return _candidate_result(success=False, error="unsupported_action")
+    except FileExistsError:
+        return _candidate_result(
+            success=False,
+            error="exclusive_target_or_recovery_exists",
+            mutation_performed=mutation_started,
+            recovery_required=mutation_started,
+            recovery_dir=str(recovery_dir) if recovery_dir else None,
+        )
+    except Exception as exc:
+        return _candidate_result(
+            success=False,
+            error=f"candidate_failure:{type(exc).__name__}",
+            mutation_performed=mutation_started,
+            recovery_required=mutation_started,
+            recovery_dir=str(recovery_dir) if recovery_dir else None,
+        )
 
 
 def register(ctx):
