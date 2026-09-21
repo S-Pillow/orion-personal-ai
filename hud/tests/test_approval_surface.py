@@ -3,10 +3,26 @@ import http.client
 import json
 import unittest
 
-from probe_approval_surface import ApprovalSurfaceFixture, DESCRIPTION
+from probe_approval_surface import ApprovalSurfaceFixture, DESCRIPTION, serve_until_interrupted
 
 
 class ApprovalSurfaceTests(unittest.TestCase):
+    def test_ctrl_c_shutdown_always_closes_fixture(self):
+        class DummyFixture:
+            def __init__(self):
+                self.closed = False
+
+            def close(self):
+                self.closed = True
+
+        fixture = DummyFixture()
+
+        def interrupted_sleep(_seconds):
+            raise KeyboardInterrupt
+
+        serve_until_interrupted(fixture, sleeper=interrupted_sleep)
+        self.assertTrue(fixture.closed)
+
     def test_fixture_exposes_selectable_session(self):
         fixture = ApprovalSurfaceFixture()
         self.addCleanup(fixture.close)
