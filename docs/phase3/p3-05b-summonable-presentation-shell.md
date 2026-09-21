@@ -75,7 +75,7 @@ Remote webpages/video/image embedding are intentionally deferred until the conte
 
 ## Verification gate
 
-This source candidate has not been executed in the ChatGPT environment. Run on Windows after pulling the branch:
+A scratch Node 22 execution of the isolated presentation modules passed syntax plus literal-markup rendering, workspace preservation, approval-over-summon focus priority, dismiss restoration, and unsafe `javascript:` link rejection. That scratch run did not use the repository checkout or a browser, so full HUD/Windows verification remains pending. Run on Windows after pulling the branch:
 
 ```powershell
 & "C:\Users\spill\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe" `
