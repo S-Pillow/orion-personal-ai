@@ -7,6 +7,7 @@ import json
 import os
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -161,6 +162,97 @@ class PlanBindingTests(unittest.TestCase):
                 token, approval_request=request, redact=lambda text: text,
             ))
         self.assertFalse(plugin._APPROVAL_ATTEMPTS)
+        self.assertEqual(note.read_bytes(), b"old\n")
+
+    def test_concurrent_attempts_are_isolated_and_late_callback_is_ignored(self):
+        note = self.vault / "note.md"
+        note.write_bytes(b"old\n")
+        token = json.loads(plugin.preview_edit({
+            "target_relative_path": "note.md", "new_content": "new\n",
+        }))["plan_token"]
+
+        first_entered = threading.Event()
+        release_first = threading.Event()
+        first_details = {}
+        outcomes = {}
+
+        def first_gate(_tool_name, description, *, rule_key):
+            first_details["description"] = description
+            first_details["pattern_key"] = f"plugin_rule:{rule_key}"
+            first_entered.set()
+            self.assertTrue(release_first.wait(2.0))
+            return {"approved": True}
+
+        def run_first():
+            outcomes["first"] = plugin._probe_fresh_once_approval(
+                token, approval_request=first_gate, redact=lambda text: text,
+            )
+
+        worker = threading.Thread(target=run_first)
+        worker.start()
+        self.assertTrue(first_entered.wait(2.0))
+
+        def second_gate(_tool_name, description, *, rule_key):
+            second_key = f"plugin_rule:{rule_key}"
+            self.assertNotEqual(second_key, first_details["pattern_key"])
+            plugin.post_approval_response(
+                pattern_key=second_key,
+                description=description,
+                choice="once",
+                surface="gateway",
+            )
+            return {"approved": True}
+
+        self.assertTrue(plugin._probe_fresh_once_approval(
+            token, approval_request=second_gate, redact=lambda text: text,
+        ))
+
+        # A response for a different key cannot authorize the still-pending
+        # first attempt even when its description is otherwise identical.
+        plugin.post_approval_response(
+            pattern_key="plugin_rule:orion_vault_attempt:wrong",
+            description=first_details["description"],
+            choice="once",
+            surface="gateway",
+        )
+        release_first.set()
+        worker.join(2.0)
+        self.assertFalse(worker.is_alive())
+        self.assertFalse(outcomes["first"])
+
+        # Once the first attempt has been removed, a late matching callback is
+        # inert and cannot resurrect authorization.
+        plugin.post_approval_response(
+            pattern_key=first_details["pattern_key"],
+            description=first_details["description"],
+            choice="once",
+            surface="gateway",
+        )
+        self.assertFalse(plugin._APPROVAL_ATTEMPTS)
+        self.assertEqual(note.read_bytes(), b"old\n")
+
+    def test_attempt_limit_fails_closed_before_requesting_approval(self):
+        note = self.vault / "note.md"
+        note.write_bytes(b"old\n")
+        token = json.loads(plugin.preview_edit({
+            "target_relative_path": "note.md", "new_content": "new\n",
+        }))["plan_token"]
+        for index in range(plugin.APPROVAL_ATTEMPT_LIMIT):
+            plugin._APPROVAL_ATTEMPTS[f"held-{index}"] = {
+                "description": "held", "created": 0.0, "once": False,
+            }
+
+        called = False
+
+        def should_not_run(*_args, **_kwargs):
+            nonlocal called
+            called = True
+            return {"approved": True}
+
+        self.assertFalse(plugin._probe_fresh_once_approval(
+            token, approval_request=should_not_run, redact=lambda text: text,
+        ))
+        self.assertFalse(called)
         self.assertEqual(note.read_bytes(), b"old\n")
 
     def test_internal_attempt_fails_closed_on_redaction_and_gate_error(self):
