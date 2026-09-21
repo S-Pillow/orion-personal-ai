@@ -23,6 +23,8 @@ This does not prove live approval safety. The pinned Hermes runtime can bypass a
 
 P5-02A Windows source verification passed: 20/20 tests on disposable roots (0.166 s), and COMPANION Hermes `plugins doctor <source-dir> --ci` passed with 4 tools and 1 hook. This does not validate a live approval decision or authorize mutation.
 
+The separate Windows Hermes approval-signal probe passed 3/3 in 0.025 s. It confirmed that a fresh `once` response differs from bypass, cached, and automatic approval paths under mocked prompt/observer delivery. Full plugin dispatch and actual approval-screen rendering remain unverified; the apply handler still refuses mutation.
+
 ## Intended runtime location
 
 The accepted COMPANION Hermes home is:
