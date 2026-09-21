@@ -27,7 +27,9 @@ confirmed_findings:
   - Phase 4 P4-04A audio gateway compatibility is accepted; direct Edge/P4-04A audio recovered after intermittent connectivity failure.
   - PR #16 already aborts in-flight TTS, stops active Audio playback, invalidates queued speech with an epoch, and invokes HUD STOP when PTT interrupts.
   - Custom Hey Orion v1/v2 are rejected and no v3 is authorized under the same experiment.
-  - Current upstream Hermes documents a Sherpa open-vocabulary wake engine that accepts arbitrary phrases, but availability on the accepted v0.20.6 pin is unverified.
+  - The accepted Hermes v0.20.6 pin already contains Sherpa open-vocabulary KWS; no dependency upgrade is inherently required to test arbitrary phrases.
+  - Sherpa Hey Orion was already screened at roughly 6/10 at sensitivity 0.5 and 0.4, so Sherpa is not an unexplored cure; the remaining supported-engine question is whether threshold/boost tuning can materially improve recall without unacceptable false wakes.
+  - Pinned Hermes maps sensitivity to Sherpa keywords_threshold but does not expose Sherpa keywords_score, leaving a possible narrow source-only tuning seam if threshold-only testing fails.
   - P5-01 is merged at 33c39d4.
   - P5-02A has fresh nonce-bound plans, exact cached bytes/diffs, private per-attempt approval keys, a post-approval observer, installed-Hermes dispatcher probes, and exact HUD description rendering.
   - The isolated HUD fixture passed simulated DENY and ALLOW ONCE with mutation_performed=false and now exits cleanly on Ctrl+C.
@@ -48,7 +50,7 @@ genuine_blockers:
   - Human confirmation of the exact approval-card visual markers from the isolated HUD test.
   - A no-write installed-Hermes gateway-to-HUD approval run proving the private fresh-once handler gate on the real runtime path.
   - Stable-enough TTS/provider connectivity for final Phase 4 audible acceptance.
-  - Verification whether the accepted Hermes v0.20.6 pin has a supported open-vocabulary wake path equivalent to current Sherpa support.
+  - Bounded Windows/JLab qualification of the already-pinned Sherpa Hey Orion path beyond the previously tested 0.5/0.4 settings, with false-wake screening before any source patch.
 risks_to_resolve_before_live_write:
   - Production approval should use one authoritative fresh handler-side transaction gate, not two independently cacheable gates.
   - Final path/reparse checks are still path-based; define the local threat model and add the tightest practical pre-mutation revalidation against parent/target replacement races.
@@ -56,7 +58,7 @@ risks_to_resolve_before_live_write:
   - Recovery storage ACL/retention and restore behavior are not production-designed yet.
   - ReplaceFileW has documented partial-state error codes; production recovery must inspect actual post-error state rather than infer from return code alone.
 next_action: >-
-  On Windows, pull PR #23 head 84191ec, run the 37-test test_p5*.py discovery,
+  On Windows, pull PR #23 head 84191ec (or its current fast-forward successor), run the 37-test test_p5*.py discovery,
   then the 2-test installed-Hermes dispatcher probe, then plugin doctor. Do not
   start/install/enable the live plugin. If those pass, record the evidence and
   proceed to a no-write real gateway/HUD fresh-once approval probe.
