@@ -135,6 +135,8 @@ def _resolve_under_root(
     if candidate.exists():
         candidate_real = candidate.resolve(strict=True)
         _ensure_contained(root_real, candidate_real)
+        if must_exist and not candidate.is_file():
+            raise FileNotFoundError("path_not_found")
     else:
         if must_exist:
             raise FileNotFoundError("path_not_found")
@@ -288,14 +290,19 @@ def preview_move_draft(params: Dict[str, Any], **_: Any) -> str:
     if "orion_draft: true" not in source_text or "status: draft" not in source_text:
         return _json({"success": False, "error": "source_is_not_orion_draft"})
 
-    target_parent_real = target.parent.resolve(strict=True)
+    ancestor = target.parent
+    while not ancestor.exists() and ancestor != vault_root:
+        ancestor = ancestor.parent
+    target_parent_real = ancestor.resolve(strict=True)
+
     plan = {
         "schema_version": 1,
         "action": "move_draft",
         "source_draft": source_rel,
         "source_canonical_path": str(source.resolve(strict=True)),
         "target_relative_path": target_rel,
-        "target_parent_canonical_path": str(target_parent_real),
+        "target_candidate_path": str(target.absolute()),
+        "target_existing_ancestor_canonical_path": str(target_parent_real),
         "source_sha256": _sha_bytes(source_bytes),
         "target_state": "absent",
     }
