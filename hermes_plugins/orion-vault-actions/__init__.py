@@ -11,6 +11,7 @@ import difflib
 import hashlib
 import json
 import os
+import re
 import stat
 import time
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -26,7 +27,12 @@ DEFAULT_INBOX_ROOT = r"C:\Personal\Orion-Inbox"
 
 PREVIEW_EDIT_TOOL = "orion_vault_preview_edit"
 PREVIEW_MOVE_TOOL = "orion_vault_preview_move_draft"
+RECOMMEND_TOOL = "orion_vault_recommend_destination"
 APPLY_TOOL = "orion_vault_apply_plan"
+
+IAI_MCP_SERVER = "iai-mcp"
+IAI_RECALL_TOOL = "memory_recall"
+IAI_TEMPORAL_RECALL_TOOL = "memory_temporal_recall"
 
 _PREVIEWS: Dict[str, Dict[str, Any]] = {}
 _PREVIEW_TIMES: Dict[str, float] = {}
@@ -165,6 +171,248 @@ def _read_utf8(path: Path) -> tuple[bytes, str]:
     except UnicodeDecodeError as exc:
         raise PathPolicyError("utf8_required") from exc
     return data, text
+
+
+def _doc_tag(source_name: str) -> str:
+    slug = re.sub(r"[^a-z0-9._-]+", "-", source_name.lower()).strip("-")[:64]
+    return f"doc:{slug or 'inline'}"
+
+
+def _vault_doc_tag_index(vault_root: Path) -> Dict[str, list[str]]:
+    if not vault_root.is_dir():
+        raise PathPolicyError("root_missing")
+
+    root_real = vault_root.resolve(strict=True)
+    index: Dict[str, list[str]] = {}
+
+    for dirpath, dirnames, filenames in os.walk(vault_root, followlinks=False):
+        current = Path(dirpath)
+
+        safe_dirs = []
+        for name in dirnames:
+            child = current / name
+            if _is_reparse_point(child):
+                continue
+            try:
+                _ensure_contained(root_real, child.resolve(strict=True))
+            except (OSError, PathPolicyError):
+                continue
+            safe_dirs.append(name)
+        dirnames[:] = safe_dirs
+
+        for name in filenames:
+            if not name.lower().endswith(".md"):
+                continue
+
+            path = current / name
+            if _is_reparse_point(path):
+                continue
+            try:
+                resolved = path.resolve(strict=True)
+                _ensure_contained(root_real, resolved)
+                relative = path.relative_to(vault_root).as_posix()
+            except (OSError, ValueError, PathPolicyError):
+                continue
+
+            index.setdefault(_doc_tag(relative), []).append(relative)
+
+    return index
+
+
+def _mcp_result_payload(envelope: Any) -> Dict[str, Any] | None:
+    if not isinstance(envelope, dict) or envelope.get("ok") is not True:
+        return None
+
+    payload = envelope.get("result")
+    if isinstance(payload, dict):
+        return payload
+
+    if isinstance(payload, str):
+        try:
+            parsed = json.loads(payload)
+        except json.JSONDecodeError:
+            return None
+        return parsed if isinstance(parsed, dict) else None
+
+    return None
+
+
+def _safe_positive_int(value: Any, *, default: int, maximum: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = default
+    return max(1, min(parsed, maximum))
+
+
+def _recommend_destination_handler(ctx):
+    def handle(params: Dict[str, Any], **_: Any) -> str:
+        vault_root, inbox_root = _roots()
+
+        source, source_rel = _resolve_under_root(
+            inbox_root,
+            params.get("source_draft"),
+            must_exist=True,
+        )
+        _require_markdown(source_rel)
+
+        source_bytes, source_text = _read_utf8(source)
+        if len(source_text) > MAX_TEXT_CHARS:
+            return _json(
+                {
+                    "success": False,
+                    "error": "draft_too_large",
+                    "max_chars": MAX_TEXT_CHARS,
+                }
+            )
+        if "orion_draft: true" not in source_text or "status: draft" not in source_text:
+            return _json({"success": False, "error": "source_is_not_orion_draft"})
+
+        top = _safe_positive_int(params.get("top"), default=5, maximum=10)
+        cue = source_text[:4000]
+
+        try:
+            recall_envelope = ctx.call_mcp(
+                IAI_MCP_SERVER,
+                IAI_RECALL_TOOL,
+                {"cue": cue, "budget_tokens": 2000},
+                timeout=30,
+            )
+        except Exception:
+            return _json(
+                {
+                    "success": False,
+                    "error": "iai_recall_unavailable",
+                    "mutation_performed": False,
+                }
+            )
+
+        recall = _mcp_result_payload(recall_envelope)
+        if recall is None:
+            return _json(
+                {
+                    "success": False,
+                    "error": "iai_recall_invalid_response",
+                    "mutation_performed": False,
+                }
+            )
+
+        hits = [
+            hit for hit in (recall.get("hits") or [])
+            if isinstance(hit, dict) and str(hit.get("record_id") or "").strip()
+        ]
+        if not hits:
+            return _json(
+                {
+                    "success": True,
+                    "source_draft": source_rel,
+                    "source_sha256": _sha_bytes(source_bytes),
+                    "native_recall_hit_count": 0,
+                    "recommendation_count": 0,
+                    "recommendations": [],
+                    "mutation_performed": False,
+                }
+            )
+
+        metadata_limit = min(50, max(20, len(hits) * 4))
+        try:
+            metadata_envelope = ctx.call_mcp(
+                IAI_MCP_SERVER,
+                IAI_TEMPORAL_RECALL_TOOL,
+                {"cue": cue, "limit": metadata_limit},
+                timeout=30,
+            )
+        except Exception:
+            return _json(
+                {
+                    "success": False,
+                    "error": "iai_metadata_unavailable",
+                    "mutation_performed": False,
+                }
+            )
+
+        metadata = _mcp_result_payload(metadata_envelope)
+        if metadata is None:
+            return _json(
+                {
+                    "success": False,
+                    "error": "iai_metadata_invalid_response",
+                    "mutation_performed": False,
+                }
+            )
+
+        tags_by_id: Dict[str, list[str]] = {}
+        for item in metadata.get("hits") or []:
+            if not isinstance(item, dict):
+                continue
+            record_id = str(item.get("id") or "").strip()
+            tags = item.get("tags")
+            if record_id and isinstance(tags, list):
+                tags_by_id[record_id] = [
+                    str(tag) for tag in tags if isinstance(tag, str)
+                ]
+
+        tag_index = _vault_doc_tag_index(vault_root)
+        draft_name = PurePosixPath(source_rel).name
+        recommendations = []
+        seen_dirs = set()
+
+        for native_rank, hit in enumerate(hits, start=1):
+            record_id = str(hit.get("record_id") or "").strip()
+            doc_tags = [
+                tag for tag in tags_by_id.get(record_id, [])
+                if tag.startswith("doc:")
+            ]
+
+            matched_source = None
+            matched_tag = None
+            for tag in doc_tags:
+                paths = tag_index.get(tag, [])
+                if len(paths) == 1:
+                    matched_source = paths[0]
+                    matched_tag = tag
+                    break
+
+            if not matched_source:
+                continue
+
+            parent = PurePosixPath(matched_source).parent.as_posix()
+            if parent == ".":
+                parent = ""
+
+            directory_key = parent.casefold()
+            if directory_key in seen_dirs:
+                continue
+            seen_dirs.add(directory_key)
+
+            suggested = draft_name if not parent else f"{parent}/{draft_name}"
+            recommendations.append(
+                {
+                    "rank": len(recommendations) + 1,
+                    "directory": parent,
+                    "suggested_target_relative_path": suggested,
+                    "evidence_source_path": matched_source,
+                    "evidence_doc_tag": matched_tag,
+                    "record_id": record_id,
+                    "native_recall_rank": native_rank,
+                }
+            )
+            if len(recommendations) >= top:
+                break
+
+        return _json(
+            {
+                "success": True,
+                "source_draft": source_rel,
+                "source_sha256": _sha_bytes(source_bytes),
+                "native_recall_hit_count": len(hits),
+                "recommendation_count": len(recommendations),
+                "recommendations": recommendations,
+                "mutation_performed": False,
+            }
+        )
+
+    return handle
 
 
 def _remember_preview(token: str, plan: Dict[str, Any]) -> None:
@@ -422,6 +670,29 @@ def register(ctx):
         },
     }
 
+    recommend_schema = {
+        "name": RECOMMEND_TOOL,
+        "description": (
+            "Read-only Orion destination recommendation for an inbox draft. "
+            "Uses native iai memory_recall ordering and maps iai document tags "
+            "back to exactly one current contained Markdown source. Ambiguous "
+            "or missing mappings are omitted. Performs no vault/inbox mutation."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "source_draft": {"type": "string"},
+                "top": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10,
+                    "default": 5,
+                },
+            },
+            "required": ["source_draft"],
+        },
+    }
+
     apply_schema = {
         "name": APPLY_TOOL,
         "description": (
@@ -448,6 +719,12 @@ def register(ctx):
         toolset="orion_vault",
         schema=preview_move_schema,
         handler=preview_move_draft,
+    )
+    ctx.register_tool(
+        name=RECOMMEND_TOOL,
+        toolset="orion_vault",
+        schema=recommend_schema,
+        handler=_recommend_destination_handler(ctx),
     )
     ctx.register_tool(
         name=APPLY_TOOL,
