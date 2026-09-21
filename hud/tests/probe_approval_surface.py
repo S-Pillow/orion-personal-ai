@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import secrets
 import threading
+import time
 from http.server import ThreadingHTTPServer
 
 from test_bridge import FakeHermesHandler, HUD_ROOT, bridge
@@ -148,6 +149,17 @@ class ApprovalSurfaceFixture:
             thread.join(timeout=2)
 
 
+def serve_until_interrupted(fixture, sleeper=time.sleep):
+    """Keep the disposable fixture alive until Ctrl+C, then always close it."""
+    try:
+        while True:
+            sleeper(0.25)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        fixture.close()
+
+
 if __name__ == "__main__":
     fixture = ApprovalSurfaceFixture()
     print(f"ISOLATED HUD FIXTURE: {fixture.origin}", flush=True)
@@ -155,9 +167,4 @@ if __name__ == "__main__":
     print("Send 'probe'. Check the complete diff, then choose DENY.", flush=True)
     print("Send 'probe' again and choose ALLOW ONCE. Both decisions are simulated.", flush=True)
     print("No live Hermes/profile/vault access. Ctrl+C closes the fixture.", flush=True)
-    try:
-        threading.Event().wait()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        fixture.close()
+    serve_until_interrupted(fixture)
