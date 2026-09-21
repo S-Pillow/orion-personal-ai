@@ -67,11 +67,12 @@ The suite uses temporary directories only. It must not touch the live vault or i
 
 Current Windows verification evidence (2026-09-21):
 
-- `test_p5_01.py`: 10/10 passed in 0.115 s;
+- `test_p5_01.py`: 13/13 passed in 0.133 s;
 - Hermes `plugins doctor <source-dir> --ci`: PASS;
 - runtime discovery, manifest parsing, import, and registration passed;
-- doctor observed 3 tools and 1 hook with no warnings;
-- COMPANION user-plugin baseline was `[]`, so no pre-existing user plugin was displaced.
+- doctor observed 4 tools and 1 hook with no warnings;
+- COMPANION user-plugin baseline was `[]`, so no pre-existing user plugin was displaced;
+- destination recommendation coverage passed for native iai ordering, ambiguous lossy `doc:` tag omission, and fail-closed iai errors.
 
 ## iai destination-recommendation seam
 
