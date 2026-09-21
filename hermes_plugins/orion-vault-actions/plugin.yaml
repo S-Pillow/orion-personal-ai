@@ -6,4 +6,5 @@ provides_hooks:
 provides_tools:
   - orion_vault_preview_edit
   - orion_vault_preview_move_draft
+  - orion_vault_recommend_destination
   - orion_vault_apply_plan
