@@ -801,14 +801,17 @@ def _candidate_disposable_roots() -> tuple[Path, Path, Path]:
     if not raw_vault or not raw_inbox or not raw_recovery:
         raise RuntimeError("disposable_roots_not_explicit")
 
-    if raw_vault.casefold() == DEFAULT_VAULT_ROOT.casefold():
-        raise RuntimeError("live_vault_root_rejected")
-    if raw_inbox.casefold() == DEFAULT_INBOX_ROOT.casefold():
-        raise RuntimeError("live_inbox_root_rejected")
-
     vault = Path(raw_vault)
     inbox = Path(raw_inbox)
     recovery = Path(raw_recovery)
+
+    def normalized_identity(path: Path) -> str:
+        return os.path.normcase(os.path.abspath(str(path.resolve(strict=False))))
+
+    if normalized_identity(vault) == normalized_identity(Path(DEFAULT_VAULT_ROOT)):
+        raise RuntimeError("live_vault_root_rejected")
+    if normalized_identity(inbox) == normalized_identity(Path(DEFAULT_INBOX_ROOT)):
+        raise RuntimeError("live_inbox_root_rejected")
     for root in (vault, inbox, recovery):
         if not root.is_dir():
             raise RuntimeError("disposable_root_missing")
@@ -818,8 +821,26 @@ def _candidate_disposable_roots() -> tuple[Path, Path, Path]:
     vault_real = vault.resolve(strict=True)
     inbox_real = inbox.resolve(strict=True)
     recovery_real = recovery.resolve(strict=True)
-    if len({str(vault_real), str(inbox_real), str(recovery_real)}) != 3:
+    identities = {
+        normalized_identity(vault_real),
+        normalized_identity(inbox_real),
+        normalized_identity(recovery_real),
+    }
+    if len(identities) != 3:
         raise RuntimeError("disposable_roots_must_be_distinct")
+
+    def contains(parent: Path, child: Path) -> bool:
+        try:
+            child.relative_to(parent)
+            return True
+        except ValueError:
+            return False
+
+    if (contains(vault_real, recovery_real)
+            or contains(inbox_real, recovery_real)
+            or contains(recovery_real, vault_real)
+            or contains(recovery_real, inbox_real)):
+        raise RuntimeError("recovery_root_must_be_disjoint")
     return vault, inbox, recovery
 
 
