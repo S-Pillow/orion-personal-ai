@@ -35,6 +35,9 @@ confirmed_findings:
   - The isolated HUD fixture passed simulated DENY and ALLOW ONCE with mutation_performed=false and now exits cleanly on Ctrl+C.
   - The P5 branch contains an unregistered disposable mutation candidate with native ReplaceFileW for edit and exclusive-create/verify/delete sequencing for draft moves.
   - Disposable mutation guards now reject raw/resolved overlap with the live default roots and require a disjoint recovery root.
+  - The production move design still needs Windows handle-held source identity/deletion hardening to narrow the final read-to-unlink TOCTOU window; CreateFileW sharing modes and handle-based deletion provide a supported route.
+  - The pinned Hermes session SSE already carries tool.started arguments to the HUD, so the display/summon tool can use the existing authenticated stream instead of adding a second callback server/token.
+  - A bounded P3-05B summon-state prototype (text/evidence/link only, no iframe/network/storage authority) passed 7/7 independent Node tests.
   - OWASP transaction-authorization guidance aligns with the design: authorization must be transaction-bound, short-lived, unique, replay-resistant, sequential, and rechecked at execution.
 failed_methods:
   - method: Custom openWakeWord Hey Orion v1/v2
@@ -56,6 +59,7 @@ risks_to_resolve_before_live_write:
   - Final path/reparse checks are still path-based; define the local threat model and add the tightest practical pre-mutation revalidation against parent/target replacement races.
   - Recovery receipts should survive process restart and include plan hash, attempt id, decision, before/after hashes, final classification, and recovery artifact identity.
   - Recovery storage ACL/retention and restore behavior are not production-designed yet.
+  - Final draft deletion should be performed against a held Windows file identity, not only a path re-read, before real move mutation is enabled.
   - ReplaceFileW has documented partial-state error codes; production recovery must inspect actual post-error state rather than infer from return code alone.
 next_action: >-
   On Windows, pull PR #23 head 84191ec (or its current fast-forward successor), run the 37-test test_p5*.py discovery,
