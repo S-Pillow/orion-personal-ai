@@ -145,15 +145,15 @@ P5-01 currently establishes:
 
 Local Windows verification on 2026-09-21 passed:
 
-- P5-01 fixture suite: **10/10 tests passed in 0.115 s**;
-- Hermes `plugins doctor ... --ci`: runtime discovery, manifest parsing, import, and registration passed with **3 tools / 1 hook and no warnings**;
+- P5-01 fixture suite: **13/13 tests passed in 0.133 s**;
+- Hermes `plugins doctor ... --ci`: runtime discovery, manifest parsing, import, and registration passed with **4 tools / 1 hook and no warnings**;
 - COMPANION user-plugin baseline: `[]` before any Orion plugin install;
 - COMPANION MCP inventory shows `iai-mcp` **enabled**;
 - a fourth source-only tool, `orion_vault_recommend_destination`, now uses native iai `memory_recall` ordering and `memory_temporal_recall` document tags to derive advisory destination candidates;
 - because iai's `doc:` tag is intentionally lossy, Orion accepts a candidate only when that tag maps to exactly one current contained Markdown file; missing or ambiguous mappings are omitted rather than guessed;
 - no direct iai store access or second semantic ranker is introduced.
 
-The recommendation candidate still requires local regression + Hermes-doctor re-verification before P5-01 source acceptance.
+Fresh local regression and Hermes-doctor verification for the destination-recommendation seam now pass. P5-01 has reached source-only acceptance readiness; owner/operator acceptance of the source-only contract remains the final P5-01 checkpoint before any separately authorized P5-02 work.
 
 Important boundary: P5-01 is still **source-only**. No live COMPANION plugin install/enable, Hermes restart for this plugin, vault write, inbox write, move, edit, restore, or delete has been authorized or performed.
 
@@ -265,10 +265,10 @@ Resume with **PRD Phase 5 / P5-01 native vault-actions source contract** while k
 Immediate sequence:
 
 1. keep PR #16 unmerged until stable-connectivity voice acceptance is completed;
-2. verify the newly added read-only iai destination-recommendation seam against source tests and Hermes doctor;
+2. record P5-01 source-only acceptance after the fresh 13/13 test and 4-tool/1-hook Hermes-doctor pass;
 3. keep destination recommendation advisory and preserve native iai recall ordering rather than introducing a second semantic ranker;
 4. keep P5-01 source-only — do not install/enable the plugin or perform protected vault mutation;
-5. after P5-01 source acceptance, require a separately approved P5-02 before live plugin installation or any real move/edit/delete/restore behavior;
+5. require a separately approved P5-02 before live plugin installation or any real move/edit/delete/restore behavior;
 6. preserve Hermes as the generic approval authority, iai as memory authority, Obsidian as the durable human-authored vault, and Orion as presentation/control.
 
 The safe project-status shorthand is:
