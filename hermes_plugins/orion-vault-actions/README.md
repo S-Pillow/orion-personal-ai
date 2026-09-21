@@ -21,6 +21,8 @@ The source candidate on the P5-02A review branch is still non-mutating. Each pre
 
 This does not prove live approval safety. The pinned Hermes runtime can bypass approval under certain explicit modes and can omit a policy hook directive on callback/dispatch exceptions. See `docs/phase5/p5-02a-approval-integrity.md` before considering any mutating handler or live activation.
 
+P5-02A Windows source verification passed: 20/20 tests on disposable roots (0.166 s), and COMPANION Hermes `plugins doctor <source-dir> --ci` passed with 4 tools and 1 hook. This does not validate a live approval decision or authorize mutation.
+
 ## Intended runtime location
 
 The accepted COMPANION Hermes home is:
