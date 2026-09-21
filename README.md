@@ -153,7 +153,7 @@ Local Windows verification on 2026-09-21 passed:
 - because iai's `doc:` tag is intentionally lossy, Orion accepts a candidate only when that tag maps to exactly one current contained Markdown file; missing or ambiguous mappings are omitted rather than guessed;
 - no direct iai store access or second semantic ranker is introduced.
 
-The 13/13 Windows test and earlier Hermes-doctor results above apply to commit `835509f`. Review feedback after PR #21 became ready identified three preview issues: NTFS alternate data stream paths, significant leading whitespace in filenames, and diffs for text without a final newline. Source fixes and three new regression tests are on the PR branch. On Windows at `574c2a3`, Hermes doctor passed with 4 tools / 1 hook; 15/16 tests passed, with one failure caused by the new test fixture leaving a trailing CR from Windows CRLF. The fixture now uses explicit cross-platform CRLF bytes without a terminal newline, and 16/16 tests pass in a disposable non-Windows checkout. A fresh Windows run of the corrected suite is pending, followed by owner/operator source-only review. P5-02 remains a separate authorization gate.
+The 13/13 Windows test and earlier Hermes-doctor results above apply to commit `835509f`. Review feedback after PR #21 became ready identified three preview issues: NTFS alternate data stream paths, significant leading whitespace in filenames, and diffs for text without a final newline. Source fixes and three new regression tests are on the PR branch. On Windows at `574c2a3`, Hermes doctor passed with 4 tools / 1 hook; 15/16 tests passed, with one failure caused by the new test fixture leaving a trailing CR from Windows CRLF. The fixture now uses explicit cross-platform CRLF bytes without a terminal newline, and 16/16 tests pass in a disposable non-Windows checkout. The corrected suite passed 16/16 on Windows in 0.139 s at `25cb56b`. Hermes doctor had already passed on the unchanged plugin source at `574c2a3`. Owner/operator source-only review remains before P5-01 closure. P5-02 remains a separate authorization gate.
 
 Important boundary: P5-01 is still **source-only**. No live COMPANION plugin install/enable, Hermes restart for this plugin, vault write, inbox write, move, edit, restore, or delete has been authorized or performed.
 
@@ -265,7 +265,7 @@ Resume with **PRD Phase 5 / P5-01 native vault-actions source contract** while k
 Immediate sequence:
 
 1. keep PR #16 unmerged until stable-connectivity voice acceptance is completed;
-2. sync the PR #21 test-fixture correction, rerun the 16-test P5-01 suite on Windows, then complete owner/operator source-only review before recording acceptance; Hermes source doctor passed on the unchanged plugin code at `574c2a3`;
+2. complete owner/operator review of the source-only contract and record the P5-01 acceptance decision; Windows source tests passed 16/16 at `25cb56b` and Hermes doctor passed on the unchanged plugin code at `574c2a3`;
 3. keep destination recommendation advisory and preserve native iai recall ordering rather than introducing a second semantic ranker;
 4. keep P5-01 source-only — do not install/enable the plugin or perform protected vault mutation;
 5. require a separately approved P5-02 before live plugin installation or any real move/edit/delete/restore behavior;
