@@ -157,6 +157,54 @@ class P501VaultContractTests(unittest.TestCase):
         self.assertFalse((target_dir / "draft.md").exists())
         self.assertIn("+draft body", result["diff"])
 
+    def test_move_preview_does_not_create_missing_target_directories(self):
+        draft = self.inbox / "draft.md"
+        draft.write_text(
+            "---\norion_draft: true\nstatus: draft\n---\nbody\n",
+            encoding="utf-8",
+        )
+
+        result = json.loads(
+            plugin.preview_move_draft(
+                {
+                    "source_draft": "draft.md",
+                    "target_relative_path": "New/Deep/draft.md",
+                }
+            )
+        )
+
+        self.assertTrue(result["success"])
+        self.assertFalse(result["mutation_performed"])
+        self.assertFalse((self.vault / "New").exists())
+        self.assertTrue(draft.exists())
+        self.assertEqual(
+            result["plan"]["target_relative_path"],
+            "New/Deep/draft.md",
+        )
+
+    def test_expired_plan_fails_closed_before_approval(self):
+        note = self.vault / "note.md"
+        note.write_text("before\n", encoding="utf-8")
+        preview = json.loads(
+            plugin.preview_edit(
+                {
+                    "target_relative_path": "note.md",
+                    "new_content": "after\n",
+                }
+            )
+        )
+        token = preview["plan_token"]
+        plugin._PREVIEW_TIMES[token] -= plugin.PREVIEW_TTL_SECONDS + 1
+
+        directive = plugin.pre_tool_call(
+            plugin.APPLY_TOOL,
+            {"plan_token": token},
+        )
+
+        self.assertEqual(directive["action"], "block")
+        self.assertIn("expired", directive["message"])
+        self.assertEqual(note.read_text(encoding="utf-8"), "before\n")
+
     def test_unknown_plan_blocks_before_placeholder_handler(self):
         directive = plugin.pre_tool_call(
             plugin.APPLY_TOOL,
