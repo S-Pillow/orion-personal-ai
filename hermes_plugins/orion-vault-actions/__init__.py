@@ -808,10 +808,24 @@ def _candidate_disposable_roots() -> tuple[Path, Path, Path]:
     def normalized_identity(path: Path) -> str:
         return os.path.normcase(os.path.abspath(str(path.resolve(strict=False))))
 
-    if normalized_identity(vault) == normalized_identity(Path(DEFAULT_VAULT_ROOT)):
-        raise RuntimeError("live_vault_root_rejected")
-    if normalized_identity(inbox) == normalized_identity(Path(DEFAULT_INBOX_ROOT)):
-        raise RuntimeError("live_inbox_root_rejected")
+    def windows_paths_overlap(raw_path: str, protected_root: str) -> bool:
+        candidate = PureWindowsPath(raw_path)
+        protected = PureWindowsPath(protected_root)
+        for child, parent in ((candidate, protected), (protected, candidate)):
+            try:
+                child.relative_to(parent)
+                return True
+            except ValueError:
+                continue
+        return False
+
+    if windows_paths_overlap(raw_vault, DEFAULT_VAULT_ROOT):
+        raise RuntimeError("live_vault_root_overlap_rejected")
+    if windows_paths_overlap(raw_inbox, DEFAULT_INBOX_ROOT):
+        raise RuntimeError("live_inbox_root_overlap_rejected")
+    if (windows_paths_overlap(raw_recovery, DEFAULT_VAULT_ROOT)
+            or windows_paths_overlap(raw_recovery, DEFAULT_INBOX_ROOT)):
+        raise RuntimeError("live_recovery_root_overlap_rejected")
     for root in (vault, inbox, recovery):
         if not root.is_dir():
             raise RuntimeError("disposable_root_missing")
