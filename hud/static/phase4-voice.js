@@ -52,6 +52,7 @@ if (composer && messageInput && sendButton && stopButton && sessionSelect && tra
   let speakReplies = true;
   let activeAudio = null;
   let activeAudioResolve = null;
+  let activeSpeechController = null;
   let speechEpoch = 0;
   let speechQueue = Promise.resolve();
   let voiceTurn = null;
@@ -98,6 +99,10 @@ if (composer && messageInput && sendButton && stopButton && sessionSelect && tra
 
   function stopSpeechPlayback() {
     speechEpoch += 1;
+    if (activeSpeechController) {
+      activeSpeechController.abort();
+      activeSpeechController = null;
+    }
     if (activeAudio) {
       activeAudio.pause();
       activeAudio.src = "";
@@ -132,7 +137,12 @@ if (composer && messageInput && sendButton && stopButton && sessionSelect && tra
     }
     messageInput.value = clean;
     messageInput.dispatchEvent(new Event("input", { bubbles: true }));
-    voiceTurn = { body: null, queuedChars: 0, finalFlushed: false };
+    voiceTurn = {
+      body: null,
+      previousBody: latestAssistantBody(),
+      queuedChars: 0,
+      finalFlushed: false,
+    };
     composer.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     setStatus("CONVERSATION", "TRANSCRIPT SENT · WAKE OFF");
   }
@@ -206,27 +216,35 @@ if (composer && messageInput && sendButton && stopButton && sessionSelect && tra
   async function playSpeech(text) {
     const clean = String(text || "").trim();
     if (!speakReplies || !clean) return;
-    const payload = await jsonApi("/api/orion/voice/speak", {
-      method: "POST",
-      body: JSON.stringify({ text: clean }),
-    });
-    if (!payload.data_url) throw new Error("Hermes TTS returned no audio");
-    await new Promise((resolve, reject) => {
-      const audio = new Audio(payload.data_url);
-      activeAudio = audio;
-      activeAudioResolve = resolve;
-      audio.addEventListener("ended", () => {
-        if (activeAudio === audio) activeAudio = null;
-        if (activeAudioResolve === resolve) activeAudioResolve = null;
-        resolve();
-      }, { once: true });
-      audio.addEventListener("error", () => {
-        if (activeAudio === audio) activeAudio = null;
-        if (activeAudioResolve === resolve) activeAudioResolve = null;
-        reject(new Error("audio_playback_failed"));
-      }, { once: true });
-      audio.play().catch(reject);
-    });
+    const controller = new AbortController();
+    activeSpeechController = controller;
+    try {
+      const payload = await jsonApi("/api/orion/voice/speak", {
+        method: "POST",
+        body: JSON.stringify({ text: clean }),
+        signal: controller.signal,
+      });
+      if (!speakReplies || controller.signal.aborted) return;
+      if (!payload.data_url) throw new Error("Hermes TTS returned no audio");
+      await new Promise((resolve, reject) => {
+        const audio = new Audio(payload.data_url);
+        activeAudio = audio;
+        activeAudioResolve = resolve;
+        audio.addEventListener("ended", () => {
+          if (activeAudio === audio) activeAudio = null;
+          if (activeAudioResolve === resolve) activeAudioResolve = null;
+          resolve();
+        }, { once: true });
+        audio.addEventListener("error", () => {
+          if (activeAudio === audio) activeAudio = null;
+          if (activeAudioResolve === resolve) activeAudioResolve = null;
+          reject(new Error("audio_playback_failed"));
+        }, { once: true });
+        audio.play().catch(reject);
+      });
+    } finally {
+      if (activeSpeechController === controller) activeSpeechController = null;
+    }
   }
 
   function enqueueSpeech(text) {
@@ -238,7 +256,10 @@ if (composer && messageInput && sendButton && stopButton && sessionSelect && tra
         if (!speakReplies || epoch !== speechEpoch) return undefined;
         return playSpeech(clean);
       })
-      .catch((error) => setStatus("PUSH TO TALK", `TTS FAILED · ${error.message}`));
+      .catch((error) => {
+        if (epoch !== speechEpoch || error?.name === "AbortError") return;
+        setStatus("PUSH TO TALK", `TTS FAILED · ${error.message}`);
+      });
   }
 
   function latestAssistantBody() {
@@ -250,7 +271,12 @@ if (composer && messageInput && sendButton && stopButton && sessionSelect && tra
     if (!voiceTurn || !speakReplies) return;
     const body = latestAssistantBody();
     if (!body) return;
-    if (voiceTurn.body !== body) {
+    if (!voiceTurn.body) {
+      if (body === voiceTurn.previousBody) return;
+      voiceTurn.body = body;
+      voiceTurn.queuedChars = 0;
+      voiceTurn.finalFlushed = false;
+    } else if (voiceTurn.body !== body) {
       voiceTurn.body = body;
       voiceTurn.queuedChars = 0;
       voiceTurn.finalFlushed = false;
@@ -271,8 +297,19 @@ if (composer && messageInput && sendButton && stopButton && sessionSelect && tra
 
   function flushFinalSpeech() {
     if (!voiceTurn || voiceTurn.finalFlushed) return;
-    const body = voiceTurn.body || latestAssistantBody();
-    if (!body) return;
+    let body = voiceTurn.body;
+    if (!body) {
+      const latest = latestAssistantBody();
+      if (!latest || latest === voiceTurn.previousBody) {
+        voiceTurn.finalFlushed = true;
+        voiceTurn = null;
+        setStatus("PUSH TO TALK", "WAKE OFF");
+        return;
+      }
+      body = latest;
+      voiceTurn.body = body;
+      voiceTurn.queuedChars = 0;
+    }
     const text = String(body.textContent || "");
     const remainder = text.slice(voiceTurn.queuedChars).trim();
     if (remainder) enqueueSpeech(remainder);
