@@ -85,12 +85,12 @@ This is the preferred Phase 5 destination-recommendation seam. P5-01 must reuse 
 
 Windows source verification on 2026-09-21 passed:
 
-- `test_p5_01.py`: 10/10 tests passed in 0.115 s;
+- `test_p5_01.py`: 13/13 tests passed in 0.133 s;
 - Hermes `plugins doctor <source-dir> --ci`: runtime discovery, manifest parsing, import, and registration passed;
-- doctor reported 3 registered tools and 1 `pre_tool_call` hook with no warnings after the manifest declaration was corrected to `provides_hooks`;
+- doctor reported 4 registered tools and 1 `pre_tool_call` hook with no warnings;
 - verification used the source tree only and did not install or enable the plugin.
 
-The tested behaviors include side-effect-free edit and move previews, no creation of missing target directories during preview, absolute/traversal-path rejection, Markdown-only enforcement, symlink/junction/reparse escape rejection, expired/unknown plan blocking, plan-scoped approval rule keys, and a known-plan apply placeholder that still refuses mutation.
+The tested behaviors include side-effect-free edit and move previews, no creation of missing target directories during preview, absolute/traversal-path rejection, Markdown-only enforcement, symlink/junction/reparse escape rejection, expired/unknown plan blocking, plan-scoped approval rule keys, a known-plan apply placeholder that still refuses mutation, native iai recall-order preservation, ambiguous lossy `doc:` tag rejection, and fail-closed handling of iai errors.
 
 ## iai destination-recommendation seam
 
@@ -113,7 +113,7 @@ The current P5-01 source now implements this as `orion_vault_recommend_destinati
 - recommendation order follows `memory_recall`; Orion adds no semantic reranking;
 - no direct iai store access is used.
 
-This implementation is pending a fresh local source-test and Hermes-doctor gate before P5-01 acceptance.
+Fresh local verification on 2026-09-21 passed for this implementation: the source suite passed 13/13 in 0.133 s and Hermes doctor passed with 4 tools / 1 hook. The remaining P5-01 boundary is owner/operator acceptance of this source-only contract; no live install, MCP grant, restart for activation, or protected filesystem mutation is authorized by these checks.
 
 Hermes plugins have no MCP access by default. A later owner-approved live install would also require the COMPANION plugin entry to grant only `mcp_allowlist: ["iai-mcp"]`. P5-01 does not make that config change.
 
