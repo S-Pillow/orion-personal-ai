@@ -60,7 +60,7 @@ git -C "D:\Orion\orion-personal-ai" pull --ff-only
   "D:\Orion\orion-personal-ai\hud\tests\probe_approval_surface.py"
 ```
 
-Open the loopback URL printed as `ISOLATED HUD FIXTURE`, and send `probe` in the HUD composer. Check that the card shows `orion_vault_apply_plan`, the fictional canonical target, line 100, literal `<b>` tags, `END-OF-DIFF-100`, and the final no-newline marker. Scroll inside the details, then choose **DENY**. Send `probe` again and choose **ALLOW ONCE**. The terminal should report `SIMULATED result: deny; mutation_performed=false` followed by the corresponding `once` result. Each request expires after 120 seconds; send `probe` again if needed. Press Ctrl+C to close the fixture.
+Open the loopback URL printed as `ISOLATED HUD FIXTURE`. Under **SESSION**, change `No session selected` to **`orion-hud-main`**, then send `probe` in the HUD composer. The normal HUD requires a selected session before Send works. Check that the card shows `orion_vault_apply_plan`, the fictional canonical target, line 100, literal `<b>` tags, `END-OF-DIFF-100`, and the final no-newline marker. Scroll inside the details, then choose **DENY**. Send `probe` again and choose **ALLOW ONCE**. The terminal should report `SIMULATED result: deny; mutation_performed=false` followed by the corresponding `once` result. Each request expires after 120 seconds; send `probe` again if needed. Press Ctrl+C to close the fixture.
 
 The fixture serves the real HUD and bridge against an in-memory fake Hermes API on two automatically assigned loopback ports. It directly constructs bridge state with a dummy credential; it never imports Hermes, reads COMPANION credentials, connects to the accepted Hermes port, or reads/writes the vault. It creates no durable server-side session or document. The browser may retain ordinary HUD UI preferences for that temporary origin. All decisions are simulated, including session/always. This proves only the HUD fixture surface, not a real Hermes decision, installed plugin lifecycle, concurrent approval safety, gateway privacy, or mutation authorization. Do not start the live bridge or install the plugin for this check.
 
@@ -72,4 +72,3 @@ The fixture serves the real HUD and bridge against an in-memory fake Hermes API 
 4. Implement and test atomic, recoverable edit/move execution with final containment and stale-state revalidation against disposable Windows roots. Run end-to-end denial, timeout, exception, replay, and approval tests in an isolated runtime before requesting live activation.
 
 P5-02A source work may continue on this branch. No live plugin install, configuration grant, lifecycle restart, or real vault/inbox mutation follows from this candidate.
-

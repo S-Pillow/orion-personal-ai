@@ -44,7 +44,7 @@ class ApprovalFixtureHandler(FakeHermesHandler):
         elif self.path == "/api/sessions/session_1/messages":
             self._send(200, {"messages": [{
                 "role": "assistant",
-                "content": "ISOLATED DISPLAY FIXTURE. Send 'probe' to show a simulated approval. "
+                "content": "ISOLATED DISPLAY FIXTURE. Select the orion-hud-main session, then send 'probe' to show a simulated approval. "
                            "Check the target, line 100, END-OF-DIFF-100 and literal <b> tags. "
                            "Choose DENY first, then send 'probe' again and choose ALLOW ONCE. "
                            "All choices are simulated; no files change.",
@@ -151,7 +151,8 @@ class ApprovalSurfaceFixture:
 if __name__ == "__main__":
     fixture = ApprovalSurfaceFixture()
     print(f"ISOLATED HUD FIXTURE: {fixture.origin}", flush=True)
-    print("Open that URL and send 'probe'. Check the complete diff, then choose DENY.", flush=True)
+    print("Open that URL. Select orion-hud-main under SESSION before using Send.", flush=True)
+    print("Send 'probe'. Check the complete diff, then choose DENY.", flush=True)
     print("Send 'probe' again and choose ALLOW ONCE. Both decisions are simulated.", flush=True)
     print("No live Hermes/profile/vault access. Ctrl+C closes the fixture.", flush=True)
     try:

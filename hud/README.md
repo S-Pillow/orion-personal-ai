@@ -128,7 +128,6 @@ Local verification passes 74/74 Python HUD tests and 3/3 executable renderer tes
 node --test hud/tests/test_approval_rendering.cjs
 ```
 
-For the next Windows browser check, run `hud/tests/probe_approval_surface.py` with the existing Hermes venv's Python. It serves this HUD and bridge against a disposable in-memory fake API, using random loopback ports and a dummy credential. It does not load Hermes, read the COMPANION profile, or access the vault. Open the printed URL, send `probe`, inspect the complete diff through `END-OF-DIFF-100`, and choose DENY. Repeat with ALLOW ONCE, then close with Ctrl+C. All results are simulated.
+For the next Windows browser check, run `hud/tests/probe_approval_surface.py` with the existing Hermes venv's Python. It serves this HUD and bridge against a disposable in-memory fake API, using random loopback ports and a dummy credential. It does not load Hermes, read the COMPANION profile, or access the vault. Open the printed URL, **select `orion-hud-main` under SESSION**, then send `probe`. Inspect the complete diff through `END-OF-DIFF-100`, and choose DENY. Repeat with ALLOW ONCE, then close with Ctrl+C. The normal HUD requires a selected session before Send works. All results are simulated.
 
 Full instructions and evidence limits: [P5-02A approval integrity](../docs/phase5/p5-02a-approval-integrity.md#next-operator-check-isolated-hud-fixture). Windows browser confirmation remains pending. The fixture does not prove a real Hermes approval or safe file mutation.
-

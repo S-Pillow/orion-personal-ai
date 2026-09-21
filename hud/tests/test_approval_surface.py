@@ -7,6 +7,18 @@ from probe_approval_surface import ApprovalSurfaceFixture, DESCRIPTION
 
 
 class ApprovalSurfaceTests(unittest.TestCase):
+    def test_fixture_exposes_selectable_session(self):
+        fixture = ApprovalSurfaceFixture()
+        self.addCleanup(fixture.close)
+        conn = http.client.HTTPConnection("127.0.0.1", fixture.orion.server_port, timeout=5)
+        self.addCleanup(conn.close)
+        conn.request("GET", "/api/orion/sessions", headers={"Cookie": f"orion_ui={fixture.cookie}"})
+        response = conn.getresponse()
+        self.assertEqual(response.status, 200)
+        self.assertEqual(json.loads(response.read()), {"sessions": [{
+            "id": "session_1", "title": "orion-hud-main",
+        }]})
+
     def test_long_exact_event_and_simulated_once_deny_round_trip(self):
         fixture = ApprovalSurfaceFixture()
         self.addCleanup(fixture.close)
