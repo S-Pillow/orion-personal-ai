@@ -23,9 +23,11 @@ from urllib.parse import urlparse
 
 import orion_hud_bridge as base
 
-VOICE_WRAPPER_VERSION = "p4-04-0.3"
+VOICE_WRAPPER_VERSION = "p4-04-0.4"
 MAX_VOICE_REQUEST_BYTES = 6 * 1024 * 1024
 MAX_TTS_TEXT_CHARS = 4000
+VOICE_STT_TIMEOUT_SECONDS = 30.0
+VOICE_TTS_TIMEOUT_SECONDS = 45.0
 DATA_URL_RE = re.compile(r"^data:(audio/[^;,]+|video/webm)(?:;[^,]*)?;base64,", re.IGNORECASE)
 
 
@@ -141,6 +143,34 @@ class Phase4VoiceHandler(base.OrionHandler):
             },
         )
 
+    def _proxy_voice_json(
+        self,
+        path: str,
+        *,
+        body: dict[str, Any],
+        timeout: float,
+    ) -> None:
+        try:
+            status, content_type, data = self.hermes.request(
+                "POST",
+                path,
+                body=body,
+                timeout=timeout,
+            )
+        except base.BridgeConfigError as exc:
+            self._send_json(
+                503,
+                {"error": "hermes_credentials_unavailable", "message": str(exc)},
+            )
+            return
+        except (OSError, http.client.HTTPException, RuntimeError) as exc:
+            self._send_json(
+                502,
+                {"error": "hermes_unavailable", "message": type(exc).__name__},
+            )
+            return
+        self._send_bytes(status, data, content_type)
+
     def _handle_transcribe(self, body: dict[str, Any]) -> None:
         if not self._require_audio_capability():
             return
@@ -152,10 +182,10 @@ class Phase4VoiceHandler(base.OrionHandler):
         if mime_type and not (mime_type.lower().startswith("audio/") or mime_type.lower() == "video/webm"):
             self._send_json(400, {"error": "invalid_audio_mime_type"})
             return
-        self._proxy_json(
-            "POST",
+        self._proxy_voice_json(
             "/api/audio/transcribe",
             body={"data_url": data_url, "mime_type": mime_type or None},
+            timeout=VOICE_STT_TIMEOUT_SECONDS,
         )
 
     def _handle_speak(self, body: dict[str, Any]) -> None:
@@ -168,7 +198,11 @@ class Phase4VoiceHandler(base.OrionHandler):
         if len(text) > MAX_TTS_TEXT_CHARS:
             self._send_json(413, {"error": "tts_text_too_large"})
             return
-        self._proxy_json("POST", "/api/audio/speak", body={"text": text})
+        self._proxy_voice_json(
+            "/api/audio/speak",
+            body={"text": text},
+            timeout=VOICE_TTS_TIMEOUT_SECONDS,
+        )
 
     def do_GET(self) -> None:  # noqa: N802
         if not self._request_host_guard():
