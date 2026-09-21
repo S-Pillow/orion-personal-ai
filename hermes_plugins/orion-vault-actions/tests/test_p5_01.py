@@ -453,8 +453,9 @@ class P501VaultContractTests(unittest.TestCase):
         self.assertIn("-old\n\\ No newline at end of file\n+new\n\\ No newline at end of file\n", preview["diff"])
         self.assertEqual(note.read_bytes(), b"old")
 
-        draft = self._write_orion_draft(body="body")
-        draft.write_bytes(draft.read_bytes().removesuffix(b"\n"))
+        draft = self.inbox / "draft.md"
+        # Use explicit CRLF bytes with no final terminator on every platform.
+        draft.write_bytes(b"---\r\norion_draft: true\r\nstatus: draft\r\n---\r\nbody")
         move = json.loads(plugin.preview_move_draft({
             "source_draft": "draft.md", "target_relative_path": "draft.md",
         }))

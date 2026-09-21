@@ -74,7 +74,7 @@ Current Windows verification evidence (2026-09-21):
 - COMPANION user-plugin baseline was `[]`, so no pre-existing user plugin was displaced;
 - destination recommendation coverage passed for native iai ordering, ambiguous lossy `doc:` tag omission, and fail-closed iai errors.
 
-These Windows results apply to commit `835509f`. Review feedback on the ready PR led to source-only fixes for NTFS alternate data stream and invalid Windows component paths, leading-space path identity, and unambiguous diffs for files without final newlines. The updated suite passed 16/16 in a disposable non-Windows checkout. Run the source suite and Hermes doctor again on Windows after syncing the updated branch; do not treat the prior Windows result as verification of the new source.
+The 13/13 Windows result above applies to commit `835509f`. Review feedback on the ready PR led to source-only fixes for NTFS alternate data stream and invalid Windows component paths, leading-space path identity, and unambiguous diffs for files without final newlines. On Windows at `574c2a3`, Hermes doctor passed with 4 tools / 1 hook; the suite passed 15/16 with one failure caused by a CRLF-sensitive test fixture. The corrected fixture now uses explicit CRLF bytes without a final terminator and the updated suite passes 16/16 in a disposable non-Windows checkout. Rerun the suite on Windows after syncing the correction; the previous Windows test result does not validate it.
 
 ## iai destination-recommendation seam
 
