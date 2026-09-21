@@ -40,7 +40,29 @@ Local source tests use disposable roots. The existing P5-01 suite passed 16/16 a
 
 The source candidate now also registers a `post_approval_response` observer and contains an internal `_probe_fresh_once_approval` helper. The helper checks the cached plan/diff and redaction parity, creates a private per-invocation key, calls the generic Hermes approval gate, then requires both its approved result and an exactly matching human `once` observer event. Its attempt cache is bounded and cleared after every outcome. The registered `orion_vault_apply_plan` handler is **unchanged** and always refuses; the helper is test-only and performs no filesystem mutation. The existing pre-tool approval remains in place for that placeholder, so a future implementation must replace its valid-plan escalation before using the in-handler gate to avoid double prompts.
 
-The local disposable-root suite now passes 23/23 (16 P5-01 plus 7 P5-02A). The new `tests/probe_hermes_dispatch.py` registers a synthetic tool only in its isolated process and uses the real Hermes `model_tools.handle_function_call` dispatcher and registry while routing the plugin hooks and supplying a simulated CLI answer. It checks fresh `once`, session, yolo, missing observer, and simulated pre-dispatch exception with no write. Owner-run Windows verification at `57a3ee3`: the source suite passed **23/23 in 0.158 s**, and the isolated Hermes dispatcher probe passed **2/2 in 0.080 s**. Hermes doctor imported and registered 4 tools / 2 hooks but warned that `post_approval_response` was not listed in the manifest. The source manifest has now been corrected; a final Windows doctor rerun on this manifest-only fix is pending. The dispatcher probe emitted a separate SQLite version warning from `async_delegation`; no Hermes runtime change is part of this ticket. These probes do not prove actual UI rendering, end-to-end concurrent dispatch, or safe real mutation.
+The local disposable-root suite now passes 23/23 (16 P5-01 plus 7 P5-02A). The new `tests/probe_hermes_dispatch.py` registers a synthetic tool only in its isolated process and uses the real Hermes `model_tools.handle_function_call` dispatcher and registry while routing the plugin hooks and supplying a simulated CLI answer. It checks fresh `once`, session, yolo, missing observer, and simulated pre-dispatch exception with no write. Owner-run Windows verification at `57a3ee3`: the source suite passed **23/23 in 0.158 s**, and the isolated Hermes dispatcher probe passed **2/2 in 0.080 s**. Hermes doctor imported and registered 4 tools / 2 hooks but warned that `post_approval_response` was not listed in the manifest. Owner-run Windows doctor at `ea4e138` passed discovery, manifest parsing, import, and registration with **4 tools / 2 hooks and no warnings**, resolving the declaration warning. Python plugin source was unchanged by that manifest fix. The dispatcher probe emitted a separate SQLite version warning from `async_delegation`; no Hermes runtime change is part of this ticket. These probes do not prove actual UI rendering, end-to-end concurrent dispatch, or safe real mutation.
+
+## HUD approval display candidate (source only)
+
+Review of the actual Orion HUD found two exact-display blockers: `showApproval` preferred `command` over `description`, hiding the diff when both arrived, and truncated the selected text to 1,000 characters. The [pinned Hermes API event producer](https://github.com/NousResearch/hermes-agent/blob/5fc308a70719a83cccdbba4c0e39c23f5a8239d5/gateway/platforms/api_server.py#L7744-L7763) preserves separate command and description fields and advertises canonical choices. A standalone CLI prompt check would not satisfy the PRD's HUD approval-card requirement.
+
+The HUD source now renders both fields completely using `textContent`, preserves whitespace and literal markup, and places long details in a keyboard-focusable scroll region. Existing Hermes-advertised choices and decision routing are retained. This does not make session/always acceptable for the vault helper; it still requires a fresh `once` marker.
+
+Local verification: **3/3 executable JavaScript renderer tests** passed, including a long exact diff, CRLF, Unicode, literal HTML, command-only/description-only events, and choice filtering. The complete Python HUD suite passed **74/74**, including a new real-bridge test that forwards the full simulated approval description through SSE and posts simulated `deny` and `once` decisions. These are source/transport tests; actual browser rendering on Windows and full installed-Hermes dispatch remain unverified.
+
+### Next operator check: isolated HUD fixture
+
+Run from any PowerShell directory after pulling this branch:
+
+```powershell
+git -C "D:\Orion\orion-personal-ai" pull --ff-only
+& "C:\Users\spill\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe" `
+  "D:\Orion\orion-personal-ai\hud\tests\probe_approval_surface.py"
+```
+
+Open the loopback URL printed as `ISOLATED HUD FIXTURE`, and send `probe` in the HUD composer. Check that the card shows `orion_vault_apply_plan`, the fictional canonical target, line 100, literal `<b>` tags, `END-OF-DIFF-100`, and the final no-newline marker. Scroll inside the details, then choose **DENY**. Send `probe` again and choose **ALLOW ONCE**. The terminal should report `SIMULATED result: deny; mutation_performed=false` followed by the corresponding `once` result. Each request expires after 120 seconds; send `probe` again if needed. Press Ctrl+C to close the fixture.
+
+The fixture serves the real HUD and bridge against an in-memory fake Hermes API on two automatically assigned loopback ports. It directly constructs bridge state with a dummy credential; it never imports Hermes, reads COMPANION credentials, connects to the accepted Hermes port, or reads/writes the vault. It creates no durable server-side session or document. The browser may retain ordinary HUD UI preferences for that temporary origin. All decisions are simulated, including session/always. This proves only the HUD fixture surface, not a real Hermes decision, installed plugin lifecycle, concurrent approval safety, gateway privacy, or mutation authorization. Do not start the live bridge or install the plugin for this check.
 
 ## Blockers before a mutating handler
 
@@ -50,3 +72,4 @@ The local disposable-root suite now passes 23/23 (16 P5-01 plus 7 P5-02A). The n
 4. Implement and test atomic, recoverable edit/move execution with final containment and stale-state revalidation against disposable Windows roots. Run end-to-end denial, timeout, exception, replay, and approval tests in an isolated runtime before requesting live activation.
 
 P5-02A source work may continue on this branch. No live plugin install, configuration grant, lifecycle restart, or real vault/inbox mutation follows from this candidate.
+

@@ -161,6 +161,12 @@ Current Phase 5 contract:
 
 `docs/phase5/p5-01-native-vault-contract.md`
 
+### P5-02A approval integrity in progress (source only)
+
+[Issue #22](https://github.com/S-Pillow/orion-personal-ai/issues/22) and [draft PR #23](https://github.com/S-Pillow/orion-personal-ai/pull/23) track fresh nonce-bound plans and qualification of an internal once-only approval helper. Windows source tests passed 23/23 and the simulated installed-Hermes dispatcher probe passed 2/2 at `57a3ee3`. Windows plugin doctor passed cleanly at `ea4e138`: **4 tools / 2 hooks**, no warnings. The public apply handler still refuses every mutation.
+
+The HUD candidate now presents the full command and description instead of hiding/truncating the diff. Local HUD checks pass 74/74 Python tests and 3/3 JavaScript renderer tests. The next operator check is the isolated HUD browser fixture, with no live Hermes/profile/vault access. See [P5-02A instructions and remaining gates](docs/phase5/p5-02a-approval-integrity.md). Full plugin lifecycle, concurrent approval safety, actual Hermes-to-HUD diff delivery, and atomic/recoverable fixture writes remain open.
+
 ## Accepted manual-off lifecycle
 
 Default behavior is intentionally quiet:
@@ -260,7 +266,7 @@ Reference/code-donor fork. Reuse only proven patterns that still close a current
 
 ## Resume point
 
-Resume with a separately authorized **Phase 5 / P5-02 plan** if live plugin work is desired, while keeping final Phase 4 live voice acceptance on issue #19.
+Continue **Phase 5 / P5-02A source-only work** on draft PR #23, starting with the isolated HUD approval-display check above. Keep final Phase 4 live voice acceptance on issue #19. Live plugin installation and real mutation still require separate authorization.
 
 Immediate sequence:
 
@@ -273,4 +279,5 @@ Immediate sequence:
 
 The safe project-status shorthand is:
 
-> Phase 3 presentation slices P3-01 through P3-05A merged/accepted; Phase 4 voice work partially accepted with final live TTS/barge-in acceptance deferred; Phase 5 P5-01 source-only vault contract accepted; live P5-02 work requires separate authorization.
+> Phase 3 presentation slices P3-01 through P3-05A merged/accepted; Phase 4 voice work partially accepted with final live TTS/barge-in acceptance deferred; Phase 5 P5-01 source-only vault contract accepted; P5-02A source-only approval qualification in progress on draft PR #23; live P5-02 work requires separate authorization.
+
