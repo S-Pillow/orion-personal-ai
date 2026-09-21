@@ -76,6 +76,28 @@ class DisposableMutationCandidateTests(unittest.TestCase):
         self.assertTrue(preview["success"])
         return draft, self.vault / Path(target), preview
 
+    def test_candidate_rejects_live_default_root_identity(self):
+        with patch.dict(os.environ, {
+            "ORION_VAULT_ROOT": plugin.DEFAULT_VAULT_ROOT,
+            "ORION_INBOX_ROOT": str(self.inbox),
+            plugin.RECOVERY_ROOT_ENV: str(self.recovery),
+            plugin.DISPOSABLE_MUTATION_FLAG: "1",
+        }):
+            with self.assertRaisesRegex(RuntimeError, "live_vault_root_rejected"):
+                plugin._candidate_disposable_roots()
+
+    def test_candidate_requires_recovery_root_disjoint_from_data_roots(self):
+        nested = self.vault / "recovery"
+        nested.mkdir()
+        with patch.dict(os.environ, {
+            "ORION_VAULT_ROOT": str(self.vault),
+            "ORION_INBOX_ROOT": str(self.inbox),
+            plugin.RECOVERY_ROOT_ENV: str(nested),
+            plugin.DISPOSABLE_MUTATION_FLAG: "1",
+        }):
+            with self.assertRaisesRegex(RuntimeError, "recovery_root_must_be_disjoint"):
+                plugin._candidate_disposable_roots()
+
     def test_candidate_is_not_registered_and_requires_disposable_opt_in(self):
         class Context:
             def __init__(self):
