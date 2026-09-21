@@ -417,6 +417,50 @@ class P501VaultContractTests(unittest.TestCase):
                         allow_missing_leaf=True,
                     )
 
+    def test_windows_component_policy_rejects_ads_and_aliases(self):
+        bad = [
+            "note.md:payload.md", "folder/note.md:payload.md",
+            "CON.md", "folder/lpt1.txt.md", "note.md ", "folder. /note.md",
+            "folder./note.md", "note?.md", "note\x01.md", "a//note.md",
+            "a/./note.md", "a/../note.md",
+        ]
+        for value in bad:
+            with self.subTest(value=value):
+                with self.assertRaises(plugin.PathPolicyError):
+                    plugin._resolve_under_root(
+                        self.vault, value, allow_missing_leaf=True,
+                    )
+
+    def test_leading_space_path_is_preserved_not_redirected(self):
+        spaced = self.vault / " note.md"
+        plain = self.vault / "note.md"
+        spaced.write_text("spaced\n", encoding="utf-8")
+        plain.write_text("plain\n", encoding="utf-8")
+        preview = json.loads(plugin.preview_edit({
+            "target_relative_path": " note.md", "new_content": "after\n",
+        }))
+        self.assertEqual(preview["plan"]["target_relative_path"], " note.md")
+        self.assertEqual(preview["plan"]["target_canonical_path"], str(spaced.resolve()))
+        self.assertEqual(spaced.read_text(encoding="utf-8"), "spaced\n")
+        self.assertEqual(plain.read_text(encoding="utf-8"), "plain\n")
+
+    def test_unterminated_diff_lines_are_separate_and_marked(self):
+        note = self.vault / "note.md"
+        note.write_bytes(b"old")
+        preview = json.loads(plugin.preview_edit({
+            "target_relative_path": "note.md", "new_content": "new",
+        }))
+        self.assertIn("-old\n\\ No newline at end of file\n+new\n\\ No newline at end of file\n", preview["diff"])
+        self.assertEqual(note.read_bytes(), b"old")
+
+        draft = self._write_orion_draft(body="body")
+        draft.write_bytes(draft.read_bytes().removesuffix(b"\n"))
+        move = json.loads(plugin.preview_move_draft({
+            "source_draft": "draft.md", "target_relative_path": "draft.md",
+        }))
+        self.assertIn("+body\n\\ No newline at end of file\n", move["diff"])
+        self.assertFalse((self.vault / "draft.md").exists())
+
     def test_non_markdown_target_is_rejected(self):
         note = self.vault / "note.txt"
         note.write_text("text", encoding="utf-8")

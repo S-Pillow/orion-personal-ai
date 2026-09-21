@@ -129,7 +129,7 @@ Tracking:
 
 Phase 5 work has started without installing or enabling a new live plugin and without performing any protected vault mutation.
 
-Current source-only work is tracked in issue #20 and draft PR #21.
+Current source-only work is tracked in issue #20 and PR #21, which is open and ready for review.
 
 P5-01 currently establishes:
 
@@ -153,7 +153,7 @@ Local Windows verification on 2026-09-21 passed:
 - because iai's `doc:` tag is intentionally lossy, Orion accepts a candidate only when that tag maps to exactly one current contained Markdown file; missing or ambiguous mappings are omitted rather than guessed;
 - no direct iai store access or second semantic ranker is introduced.
 
-Fresh local regression and Hermes-doctor verification for the destination-recommendation seam now pass. P5-01 has reached source-only acceptance readiness; owner/operator acceptance of the source-only contract remains the final P5-01 checkpoint before any separately authorized P5-02 work.
+The 13/13 Windows test and Hermes-doctor results above apply to commit `835509f`. Review feedback after PR #21 became ready identified three preview issues: NTFS alternate data stream paths, significant leading whitespace in filenames, and diffs for text without a final newline. Source fixes and three new regression tests are now on the PR branch; the updated suite passed 16/16 in a disposable non-Windows checkout. Fresh Windows source-test and Hermes-doctor verification of the updated branch remain pending, followed by owner/operator review of the source-only contract. P5-02 remains a separate authorization gate.
 
 Important boundary: P5-01 is still **source-only**. No live COMPANION plugin install/enable, Hermes restart for this plugin, vault write, inbox write, move, edit, restore, or delete has been authorized or performed.
 
@@ -265,7 +265,7 @@ Resume with **PRD Phase 5 / P5-01 native vault-actions source contract** while k
 Immediate sequence:
 
 1. keep PR #16 unmerged until stable-connectivity voice acceptance is completed;
-2. record P5-01 source-only acceptance after the fresh 13/13 test and 4-tool/1-hook Hermes-doctor pass;
+2. sync the PR #21 review fixes, rerun the 16-test P5-01 suite and Hermes source doctor on Windows, then complete owner/operator source-only review before recording acceptance;
 3. keep destination recommendation advisory and preserve native iai recall ordering rather than introducing a second semantic ranker;
 4. keep P5-01 source-only — do not install/enable the plugin or perform protected vault mutation;
 5. require a separately approved P5-02 before live plugin installation or any real move/edit/delete/restore behavior;

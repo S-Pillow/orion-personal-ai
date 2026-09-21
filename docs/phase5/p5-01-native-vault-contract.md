@@ -113,7 +113,7 @@ The current P5-01 source now implements this as `orion_vault_recommend_destinati
 - recommendation order follows `memory_recall`; Orion adds no semantic reranking;
 - no direct iai store access is used.
 
-Fresh local verification on 2026-09-21 passed for this implementation: the source suite passed 13/13 in 0.133 s and Hermes doctor passed with 4 tools / 1 hook. The remaining P5-01 boundary is owner/operator acceptance of this source-only contract; no live install, MCP grant, restart for activation, or protected filesystem mutation is authorized by these checks.
+The 2026-09-21 Windows results above apply to commit `835509f`. After PR #21 became ready for review, three preview findings were addressed in source: reject NTFS alternate data stream and invalid Windows component forms, preserve leading whitespace in valid relative filenames, and delimit diff records when either side lacks a final newline. Three regression tests were added; the updated suite passed 16/16 in a disposable non-Windows checkout. Fresh Windows source-test and Hermes-doctor validation of the updated branch remain pending before source-only acceptance. No live install, MCP grant, restart for activation, or protected filesystem mutation is authorized by these checks.
 
 Hermes plugins have no MCP access by default. A later owner-approved live install would also require the COMPANION plugin entry to grant only `mcp_allowlist: ["iai-mcp"]`. P5-01 does not make that config change.
 

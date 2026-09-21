@@ -61,14 +61,18 @@ def _plan_token(plan: Dict[str, Any]) -> str:
 
 
 def _unified_diff(old: str, new: str, old_name: str, new_name: str) -> str:
+    records = difflib.unified_diff(
+        old.splitlines(keepends=True),
+        new.splitlines(keepends=True),
+        fromfile=old_name,
+        tofile=new_name,
+        lineterm="\n",
+    )
+    # difflib leaves an unterminated final content line without a delimiter.
+    # Mark it explicitly so the approval preview cannot merge adjacent records.
     return "".join(
-        difflib.unified_diff(
-            old.splitlines(keepends=True),
-            new.splitlines(keepends=True),
-            fromfile=old_name,
-            tofile=new_name,
-            lineterm="\n",
-        )
+        record if record.endswith("\n") else record + "\n\\ No newline at end of file\n"
+        for record in records
     )
 
 
@@ -79,19 +83,31 @@ def _roots() -> tuple[Path, Path]:
 
 
 def _normalize_relative(raw: Any) -> PurePosixPath:
-    value = str(raw or "").strip()
-    if not value or "\x00" in value:
+    if not isinstance(raw, str) or not raw:
         raise PathPolicyError("invalid_relative_path")
 
-    normalized = value.replace("\\", "/")
+    normalized = raw.replace("\\", "/")
     posix = PurePosixPath(normalized)
     windows = PureWindowsPath(normalized)
 
     if posix.is_absolute() or windows.is_absolute() or windows.drive:
         raise PathPolicyError("absolute_path_rejected")
 
-    if not posix.parts or any(part in ("", ".", "..") for part in posix.parts):
+    parts = normalized.split("/")
+    if any(part in ("", ".", "..") for part in parts):
         raise PathPolicyError("path_traversal_rejected")
+
+    # Validate each component using Windows rules even when fixture tests run
+    # on another OS. ADS, device names, and trimmed names are never vault paths.
+    forbidden = '<>:"|?*'
+    devices = {"CON", "PRN", "AUX", "NUL"}
+    devices.update(f"COM{i}" for i in range(1, 10))
+    devices.update(f"LPT{i}" for i in range(1, 10))
+    for part in parts:
+        if (any(ord(char) < 32 or char in forbidden for char in part)
+                or part.endswith((" ", "."))
+                or part.split(".", 1)[0].upper() in devices):
+            raise PathPolicyError("invalid_windows_component")
 
     return posix
 

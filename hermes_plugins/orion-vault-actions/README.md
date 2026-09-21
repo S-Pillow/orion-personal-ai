@@ -74,6 +74,8 @@ Current Windows verification evidence (2026-09-21):
 - COMPANION user-plugin baseline was `[]`, so no pre-existing user plugin was displaced;
 - destination recommendation coverage passed for native iai ordering, ambiguous lossy `doc:` tag omission, and fail-closed iai errors.
 
+These Windows results apply to commit `835509f`. Review feedback on the ready PR led to source-only fixes for NTFS alternate data stream and invalid Windows component paths, leading-space path identity, and unambiguous diffs for files without final newlines. The updated suite passed 16/16 in a disposable non-Windows checkout. Run the source suite and Hermes doctor again on Windows after syncing the updated branch; do not treat the prior Windows result as verification of the new source.
+
 ## iai destination-recommendation seam
 
 The COMPANION profile already has `iai-mcp` enabled. Phase 5 destination recommendation should therefore call the existing native iai recall/search authority rather than recreate the historical Docker recommender or add an Orion-side semantic ranker.
