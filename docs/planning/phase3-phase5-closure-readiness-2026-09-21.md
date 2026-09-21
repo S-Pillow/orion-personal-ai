@@ -64,6 +64,23 @@ The source and target are separate policy roots, so a move must not assume POSIX
 - if a crash occurs after target creation but before source removal, recovery should identify a safe duplicate state rather than guessing which copy to delete;
 - if the configured roots ever move to different Windows volumes, fail closed until cross-volume behavior receives a separate acceptance design.
 
+### Windows final-identity hardening after the first candidate passes
+
+The current source candidate re-reads the draft hash immediately before `unlink`, which is a good stale-state guard but still leaves a small path-based TOCTOU window between final read and deletion.
+
+Before enabling a production move handler, qualify a Windows handle-held variant:
+
+- open the approved source with `CreateFileW` using read + delete access and a sharing mode that does not permit conflicting write/delete/rename while the operation is in flight;
+- record the file identity from the open handle (volume serial + file ID) and compare it to the preview/final path identity where appropriate;
+- read/verify the approved bytes through that held identity;
+- create and verify the target;
+- request source deletion through the same held handle using `SetFileInformationByHandle(FileDispositionInfo)`, then close;
+- classify sharing violations as a safe stale/busy failure, not an instruction to fall back to path-based deletion.
+
+Microsoft documents that omitted `FILE_SHARE_DELETE` prevents later delete/rename opens while the handle is held, and that volume serial + file ID identify a file on the local computer. This materially narrows the accidental editor/sync race without pretending same-user processes are sandboxed.
+
+Do not merge this mechanism into the active source candidate until its existing Windows baseline passes; otherwise a new Win32 layer would make a basic logic failure harder to isolate.
+
 Required fixture failure injection:
 
 - before temp/exclusive create;
@@ -161,7 +178,7 @@ Deletion remains separately approval-gated. Prefer recoverable quarantine/backup
 
 Inbox draft creation may be automatic only under the dedicated inbox root and must use exclusive creation to avoid overwriting an existing draft.
 
-The display tool should be capability-bounded. The donor Jarvis `hud_display` proves that agent-driven media panels are useful, but Orion should not inherit LAN-wide broadcast or arbitrary embed authority. The first Orion contract should support a small typed payload, e.g. text/evidence/image/video/link metadata, and one local HUD target. Future multi-device broadcast remains explicit and later-phase work.
+The display tool should be capability-bounded. Pinned-Hermes source review found that the existing session SSE already forwards `tool.started` with redacted/display-safe tool arguments to the HUD; the accepted pin's `tool.completed` event does not forward the result. Therefore Orion can use the bounded `orion_display` arguments themselves as the summon payload over the existing Hermes -> bridge -> HUD stream, with no second callback server/token. The donor Jarvis `hud_display` proves the UX value but POSTs to its own summon endpoint, accepts arbitrary iframe/media URLs, and broadcasts to every open HUD. Orion V1 should instead begin with one local panel and typed `text` / `evidence` / `link` payloads, no arbitrary HTML/iframe, and no implicit broadcast. Future rich media and device routing remain explicit later gates.
 
 ## Phase 3 closure plan
 
