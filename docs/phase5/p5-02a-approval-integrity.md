@@ -22,7 +22,7 @@ Orion Master PRD v2.8 requires the exact operation/diff and canonical target in 
 - The approval hook verifies cached bytes and diff against the plan, names the canonical target, and includes the exact unified diff. Missing, mismatched, or oversized content returns `action=block`.
 - The apply handler is unchanged and always returns `p5_01_mutation_not_authorized`. A directive requesting approval is not evidence that Hermes obtained a human decision.
 
-Local source tests use disposable roots. The existing P5-01 suite passed 16/16 and the new plan tests passed 4/4 in the scratch environment. Windows source tests and Hermes doctor on this candidate remain pending; there is no live approval smoke.
+Local source tests use disposable roots. The existing P5-01 suite passed 16/16 and the new plan tests passed 4/4 in the scratch environment. On Windows, the owner ran `unittest discover -p "test_p5*.py" -v` against the checked-out P5-02A branch and reported 20/20 passing in 0.166 s. The pinned COMPANION Hermes `plugins doctor <source-dir> --ci` reported PASS for discovery, manifest parsing, import, and registration, with 4 tools and 1 hook. This is source-only verification; there is no live approval smoke.
 
 ## Blockers before a mutating handler
 
