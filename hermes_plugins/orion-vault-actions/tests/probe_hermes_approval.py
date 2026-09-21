@@ -59,7 +59,6 @@ class ApprovalSignalProbe(unittest.TestCase):
                 patch.object(approval, "_get_cron_approval_mode", return_value="approve"),
                 patch.object(approval, "_is_single_query_approval_context", return_value=single_query_auto),
                 patch.object(approval, "_get_single_query_approval_mode", return_value="approve"),
-                patch.object(approval, "prompt_dangerous_approval", return_value=choice),
                 patch.object(approval, "approve_session"),
                 patch.object(approval, "approve_permanent"),
                 patch.object(approval, "save_permanent_allowlist"),
@@ -68,7 +67,8 @@ class ApprovalSignalProbe(unittest.TestCase):
             for item in patches:
                 stack.enter_context(item)
             result = approval.request_tool_approval(
-                "orion_vault_apply_plan", description, rule_key=key
+                "orion_vault_apply_plan", description, rule_key=key,
+                approval_callback=lambda *_args, **_kwargs: choice,
             )
         return bool(result.get("approved")), bool(receipt)
 
