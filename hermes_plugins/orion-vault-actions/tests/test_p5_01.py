@@ -45,9 +45,11 @@ class EnvRoots:
 
 
 class FakeContext:
-    def __init__(self):
+    def __init__(self, mcp_responses=None):
         self.tools = {}
         self.hooks = {}
+        self.mcp_responses = list(mcp_responses or [])
+        self.mcp_calls = []
 
     def register_tool(self, *, name, toolset, schema, handler, **kwargs):
         self.tools[name] = {
@@ -59,6 +61,22 @@ class FakeContext:
 
     def register_hook(self, name, callback):
         self.hooks[name] = callback
+
+    def call_mcp(self, server, tool, arguments=None, timeout=30):
+        self.mcp_calls.append(
+            {
+                "server": server,
+                "tool": tool,
+                "arguments": dict(arguments or {}),
+                "timeout": timeout,
+            }
+        )
+        if not self.mcp_responses:
+            raise AssertionError("unexpected MCP call")
+        response = self.mcp_responses.pop(0)
+        if isinstance(response, BaseException):
+            raise response
+        return response
 
 
 class P501VaultContractTests(unittest.TestCase):
@@ -89,6 +107,7 @@ class P501VaultContractTests(unittest.TestCase):
             {
                 plugin.PREVIEW_EDIT_TOOL,
                 plugin.PREVIEW_MOVE_TOOL,
+                plugin.RECOMMEND_TOOL,
                 plugin.APPLY_TOOL,
             },
         )
@@ -156,6 +175,143 @@ class P501VaultContractTests(unittest.TestCase):
         self.assertTrue(draft.exists())
         self.assertFalse((target_dir / "draft.md").exists())
         self.assertIn("+draft body", result["diff"])
+
+    def _write_orion_draft(self, name="draft.md", body="draft body"):
+        draft = self.inbox / name
+        draft.parent.mkdir(parents=True, exist_ok=True)
+        draft.write_text(
+            f"---\norion_draft: true\nstatus: draft\n---\n{body}\n",
+            encoding="utf-8",
+        )
+        return draft
+
+    def test_destination_recommendation_uses_iai_order_and_unique_doc_tags(self):
+        draft = self._write_orion_draft(body="alpha project notes")
+        source_a = self.vault / "AIOS" / "reference.md"
+        source_b = self.vault / "Research" / "other.md"
+        source_a.parent.mkdir()
+        source_b.parent.mkdir()
+        source_a.write_text("alpha", encoding="utf-8")
+        source_b.write_text("other", encoding="utf-8")
+
+        ctx = FakeContext(
+            [
+                {
+                    "ok": True,
+                    "result": {
+                        "hits": [
+                            {"record_id": "r-aios", "literal_surface": "alpha"},
+                            {"record_id": "r-research", "literal_surface": "other"},
+                        ]
+                    },
+                },
+                {
+                    "ok": True,
+                    "result": {
+                        "hits": [
+                            {
+                                "id": "r-aios",
+                                "tags": [plugin._doc_tag("AIOS/reference.md")],
+                            },
+                            {
+                                "id": "r-research",
+                                "tags": [plugin._doc_tag("Research/other.md")],
+                            },
+                        ]
+                    },
+                },
+            ]
+        )
+        plugin.register(ctx)
+        handler = ctx.tools[plugin.RECOMMEND_TOOL]["handler"]
+
+        result = json.loads(
+            handler({"source_draft": "draft.md", "top": 5})
+        )
+
+        self.assertTrue(result["success"])
+        self.assertFalse(result["mutation_performed"])
+        self.assertEqual(result["native_recall_hit_count"], 2)
+        self.assertEqual(result["recommendation_count"], 2)
+        self.assertEqual(result["recommendations"][0]["directory"], "AIOS")
+        self.assertEqual(
+            result["recommendations"][0]["suggested_target_relative_path"],
+            "AIOS/draft.md",
+        )
+        self.assertEqual(
+            result["recommendations"][0]["native_recall_rank"],
+            1,
+        )
+        self.assertEqual(result["recommendations"][1]["directory"], "Research")
+        self.assertEqual(
+            [call["tool"] for call in ctx.mcp_calls],
+            [plugin.IAI_RECALL_TOOL, plugin.IAI_TEMPORAL_RECALL_TOOL],
+        )
+        self.assertEqual(
+            [call["server"] for call in ctx.mcp_calls],
+            [plugin.IAI_MCP_SERVER, plugin.IAI_MCP_SERVER],
+        )
+        self.assertEqual(draft.read_text(encoding="utf-8").splitlines()[-1], "alpha project notes")
+        self.assertEqual(source_a.read_text(encoding="utf-8"), "alpha")
+        self.assertEqual(source_b.read_text(encoding="utf-8"), "other")
+
+    def test_destination_recommendation_skips_ambiguous_lossy_doc_tag(self):
+        self._write_orion_draft()
+        nested = self.vault / "A" / "B.md"
+        flat = self.vault / "A-B.md"
+        nested.parent.mkdir()
+        nested.write_text("nested", encoding="utf-8")
+        flat.write_text("flat", encoding="utf-8")
+
+        collision_tag = plugin._doc_tag("A/B.md")
+        self.assertEqual(collision_tag, plugin._doc_tag("A-B.md"))
+
+        ctx = FakeContext(
+            [
+                {
+                    "ok": True,
+                    "result": {
+                        "hits": [{"record_id": "r1", "literal_surface": "body"}]
+                    },
+                },
+                {
+                    "ok": True,
+                    "result": {
+                        "hits": [{"id": "r1", "tags": [collision_tag]}]
+                    },
+                },
+            ]
+        )
+        plugin.register(ctx)
+        result = json.loads(
+            ctx.tools[plugin.RECOMMEND_TOOL]["handler"](
+                {"source_draft": "draft.md"}
+            )
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["native_recall_hit_count"], 1)
+        self.assertEqual(result["recommendation_count"], 0)
+        self.assertEqual(result["recommendations"], [])
+        self.assertTrue(nested.exists())
+        self.assertTrue(flat.exists())
+
+    def test_destination_recommendation_fails_closed_on_iai_error(self):
+        draft = self._write_orion_draft()
+        before = draft.read_bytes()
+
+        ctx = FakeContext([{"ok": False, "error": "unavailable"}])
+        plugin.register(ctx)
+        result = json.loads(
+            ctx.tools[plugin.RECOMMEND_TOOL]["handler"](
+                {"source_draft": "draft.md"}
+            )
+        )
+
+        self.assertFalse(result["success"])
+        self.assertEqual(result["error"], "iai_recall_invalid_response")
+        self.assertFalse(result["mutation_performed"])
+        self.assertEqual(draft.read_bytes(), before)
 
     def test_move_preview_does_not_create_missing_target_directories(self):
         draft = self.inbox / "draft.md"
