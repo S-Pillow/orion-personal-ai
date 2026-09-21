@@ -10,6 +10,7 @@ The current implementation exposes:
 
 - `orion_vault_preview_edit` — read-only edit preview;
 - `orion_vault_preview_move_draft` — read-only inbox-to-vault move preview;
+- `orion_vault_recommend_destination` — read-only iai-backed destination recommendation;
 - `orion_vault_apply_plan` — fail-closed placeholder used only to prove Hermes approval interception.
 
 The apply handler always returns `p5_01_mutation_not_authorized`. No protected filesystem mutation is implemented in P5-01.
@@ -76,15 +77,28 @@ Current Windows verification evidence (2026-09-21):
 
 The COMPANION profile already has `iai-mcp` enabled. Phase 5 destination recommendation should therefore call the existing native iai recall/search authority rather than recreate the historical Docker recommender or add an Orion-side semantic ranker.
 
-The intended P5-01 recommendation behavior is read-only:
+The implemented P5-01 recommendation behavior is read-only against the Orion inbox/vault:
 
-- use iai-native result ordering;
-- derive candidate directories only from recalled vault-record provenance/source paths;
-- revalidate each candidate against the authoritative vault and containment policy;
-- return recommendations with evidence;
+- call `iai-mcp.memory_recall` for native semantic ordering;
+- call `iai-mcp.memory_temporal_recall` only for the recalled records' document tags;
+- compute iai-compatible `doc:` tags for current contained Markdown files in the vault;
+- accept a source only when one document tag maps to exactly one current file;
+- preserve native recall order and deduplicate only by destination directory;
+- omit ambiguous/missing mappings rather than guessing;
 - never mutate the draft or vault.
 
-This seam is still to be implemented/tested before P5-01 source acceptance.
+The source deliberately does not open the iai store directly.
+
+A future live install must explicitly grant this plugin access only to the configured iai server:
+
+```yaml
+plugins:
+  entries:
+    orion-vault-actions:
+      mcp_allowlist: ["iai-mcp"]
+```
+
+P5-01 does **not** apply that live configuration.
 
 ## Future P5-02 installation gate
 
