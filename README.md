@@ -93,30 +93,73 @@ Latest merged Phase 3 composition commit:
 
 `ef1ae1156c32c4f5afdd0a6d6568577f1498eb6a`
 
-### Phase 4 — native Hermes voice/wake evaluation active
+### Phase 4 — native Hermes voice foundation partially accepted; final live voice acceptance deferred
 
-PRD Phase 4 is the active experimental workstream. Orion continues to use the accepted Hermes native voice/wake architecture; no separate Orion hotword service or duplicate STT/TTS stack has been authorized.
+Phase 4 remains open, but its current state is narrower than the earlier wake-training experiment.
 
-Current wake evaluation record:
+Accepted / merged:
 
-`docs/phase4/p4-03-native-hermes-wake-evaluation.md`
+- P4-04A Hermes audio gateway compatibility bridge merged in PR #18;
+- authenticated loopback `POST /api/audio/transcribe` and `POST /api/audio/speak` compatibility endpoints are available on the accepted Hermes gateway;
+- `audio_api=true` is accepted while `realtime_voice=false` remains truthful;
+- direct TTS -> STT transport round-trip passed against the accepted runtime.
 
-Current evidence includes:
+Deferred / not yet merge-ready:
 
-- real Windows/JLab/MME wake-path testing;
-- openWakeWord selected as the trained fixed-phrase engine class for the custom `Hey Orion` experiment;
-- a validated 54,000-file synthetic positive/adversarial corpus plus augmentation and precomputed negative-feature inputs;
-- two substantive custom-model training iterations completed;
-- a real `best_val_fp` feedback defect identified and corrected;
-- v1 retained as a defective-run artifact rather than a legitimate alternative weight schedule;
-- v2 established as the first measured feedback-driven run;
-- both v1 and v2 preserved/hash-verified as immutable experiment artifacts;
-- v1 live screening recovered `19/39 = 48.7%` detections, with no durable attempt-40 result; even a hypothetical hit on #40 would cap v1 at `50%`;
-- v2 live screening completed at `14/40 = 35%` detections;
-- both custom models failed the working `>=95%` initial live-detection gate and are **not accepted** for Orion runtime use;
-- the two-iteration custom-training budget is exhausted; **no v3 is currently authorized**.
+- draft PR #16 contains the Orion push-to-talk voice foundation and remains unmerged;
+- live PTT already proved microphone -> Hermes STT -> same persisted conversation session -> visible reply;
+- active-run interruption by PTT was observed;
+- final audible spoken-reply / Speak Replies OFF / audible-barge-in acceptance is deferred under issue #19 because Edge TTS was intermittently unavailable during an ISP/provider-path outage;
+- direct Edge TTS and direct P4-04A audio round-trip later recovered without an Orion/Hermes code change, so the remaining gate is runtime acceptance under stable connectivity rather than another speculative code patch.
 
-The custom `Hey Orion` v1/v2 path is therefore rejected under the current experiment. Phase 4 remains active because the final wake strategy still requires an owner disposition and the remaining native voice requirements are not closed.
+Wake status:
+
+- custom `Hey Orion` v1 and v2 remain rejected experimental artifacts at 48.7% and 35% live detection respectively;
+- the working acceptance gate remains `>=95%`;
+- no v3 is authorized under the current training approach;
+- push-to-talk/manual activation is the accepted interim activation path;
+- wake does not imply login auto-start.
+
+Tracking:
+
+- draft PR #16 — Phase 4 P4-04 push-to-talk voice foundation
+- issue #19 — P4-04B resume native TTS/live voice acceptance after Edge connectivity stabilizes
+
+### Phase 5 — P5-01 native vault contract accepted (source only)
+
+Phase 5 work has started without installing or enabling a new live plugin and without performing any protected vault mutation.
+
+P5-01 source-only work is recorded in issue #20 and PR #21. Owner/operator acceptance was confirmed on 2026-09-21 after Windows verification and review-thread closure.
+
+P5-01 currently establishes:
+
+- a native Hermes plugin shape under `hermes_plugins/orion-vault-actions/`;
+- read-only edit and inbox-to-vault move previews;
+- canonical Windows path containment after normalization / real-path resolution;
+- rejection of traversal, absolute-path escape, symlink/junction/reparse escape, non-Markdown targets, and invalid state;
+- immutable SHA-256 preview-plan tokens;
+- plan-scoped Hermes `pre_tool_call` approval interception;
+- a fail-closed apply placeholder that performs no protected mutation even after approval;
+- explicit separation between preview and any future mutation implementation;
+- source-only install/rollback boundaries for a later owner-approved P5-02.
+
+Local Windows verification on 2026-09-21 passed:
+
+- P5-01 fixture suite: **13/13 tests passed in 0.133 s**;
+- Hermes `plugins doctor ... --ci`: runtime discovery, manifest parsing, import, and registration passed with **4 tools / 1 hook and no warnings**;
+- COMPANION user-plugin baseline: `[]` before any Orion plugin install;
+- COMPANION MCP inventory shows `iai-mcp` **enabled**;
+- a fourth source-only tool, `orion_vault_recommend_destination`, now uses native iai `memory_recall` ordering and `memory_temporal_recall` document tags to derive advisory destination candidates;
+- because iai's `doc:` tag is intentionally lossy, Orion accepts a candidate only when that tag maps to exactly one current contained Markdown file; missing or ambiguous mappings are omitted rather than guessed;
+- no direct iai store access or second semantic ranker is introduced.
+
+The 13/13 Windows test and earlier Hermes-doctor results above apply to commit `835509f`. Review feedback after PR #21 became ready identified three preview issues: NTFS alternate data stream paths, significant leading whitespace in filenames, and diffs for text without a final newline. Source fixes and three new regression tests are on the PR branch. On Windows at `574c2a3`, Hermes doctor passed with 4 tools / 1 hook; 15/16 tests passed, with one failure caused by the new test fixture leaving a trailing CR from Windows CRLF. The fixture now uses explicit cross-platform CRLF bytes without a terminal newline, and 16/16 tests pass in a disposable non-Windows checkout. The corrected suite passed 16/16 on Windows in 0.139 s at `25cb56b`. Hermes doctor had already passed on the unchanged plugin source at `574c2a3`. P5-01 is accepted at the source-only boundary. P5-02 remains a separate authorization gate.
+
+Important boundary: P5-01 is still **source-only**. No live COMPANION plugin install/enable, Hermes restart for this plugin, vault write, inbox write, move, edit, restore, or delete has been authorized or performed.
+
+Current Phase 5 contract:
+
+`docs/phase5/p5-01-native-vault-contract.md`
 
 ## Accepted manual-off lifecycle
 
@@ -217,14 +260,17 @@ Reference/code-donor fork. Reuse only proven patterns that still close a current
 
 ## Resume point
 
-Resume with **PRD Phase 4 / P4-03 wake-strategy owner disposition**.
+Resume with a separately authorized **Phase 5 / P5-02 plan** if live plugin work is desired, while keeping final Phase 4 live voice acceptance on issue #19.
 
 Immediate sequence:
 
-1. treat custom `Hey Orion` v1/v2 as rejected experimental artifacts; do not load them into the Orion runtime;
-2. do not launch v3 automatically and do not lower the acceptance gate to make v1/v2 pass;
-3. choose the next supported wake strategy using the existing evidence — for example an already-performing Hermes/openWakeWord stock phrase/model, a separately approved future `Hey Orion` data/model redesign, or push-to-talk/another supported fallback;
-4. if an alternate wake model/phrase is selected, run a bounded JLab/MME acceptance protocol before runtime acceptance;
-5. after the wake-strategy disposition is clear, continue the remaining PRD Phase 4 native voice requirements: shared typed/voice conversation continuity, spoken streaming, visible voice-privacy modes, bounded follow-up, and barge-in.
+1. keep PR #16 unmerged until stable-connectivity voice acceptance is completed;
+2. treat P5-01 as accepted source-only: Windows source tests passed 16/16 at `25cb56b`, Hermes doctor passed on the unchanged plugin code at `574c2a3`, and owner/operator review is complete;
+3. keep destination recommendation advisory and preserve native iai recall ordering rather than introducing a second semantic ranker;
+4. preserve the P5-01 source-only boundary — no plugin install/enablement or protected vault mutation is authorized by this acceptance;
+5. require a separately approved P5-02 before live plugin installation or any real move/edit/delete/restore behavior;
+6. preserve Hermes as the generic approval authority, iai as memory authority, Obsidian as the durable human-authored vault, and Orion as presentation/control.
 
-Preserve the accepted Hermes/iai/manual-off boundaries throughout.
+The safe project-status shorthand is:
+
+> Phase 3 presentation slices P3-01 through P3-05A merged/accepted; Phase 4 voice work partially accepted with final live TTS/barge-in acceptance deferred; Phase 5 P5-01 source-only vault contract accepted; live P5-02 work requires separate authorization.
