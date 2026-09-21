@@ -103,7 +103,19 @@ The historical Phase 3 recommender remains a behavioral donor only. Its accepted
 5. do not add Orion-side embeddings, semantic ranking, or a second memory store;
 6. do not mutate the draft or vault during recommendation.
 
-P5-01 still needs source-level implementation/tests for this read-only native iai seam before the source-only slice is complete.
+The current P5-01 source now implements this as `orion_vault_recommend_destination`:
+
+- the draft text is sent to iai `memory_recall`, which remains the semantic ordering authority;
+- `memory_temporal_recall` is used only to recover each recalled record's `doc:` tag through a supported read-only MCP call;
+- Orion scans the authoritative vault read-only and computes iai's deterministic `doc:` tag for each contained Markdown file;
+- a recalled record is eligible only when its tag maps to exactly one current vault file;
+- lossy-tag collisions, missing metadata, reparse-point paths, and non-contained candidates are omitted rather than guessed;
+- recommendation order follows `memory_recall`; Orion adds no semantic reranking;
+- no direct iai store access is used.
+
+This implementation is pending a fresh local source-test and Hermes-doctor gate before P5-01 acceptance.
+
+Hermes plugins have no MCP access by default. A later owner-approved live install would also require the COMPANION plugin entry to grant only `mcp_allowlist: ["iai-mcp"]`. P5-01 does not make that config change.
 
 ## P5-01 source scope
 
