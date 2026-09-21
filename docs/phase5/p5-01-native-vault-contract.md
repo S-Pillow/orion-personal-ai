@@ -72,6 +72,39 @@ hermes -p companion plugins list --user --json
 
 This establishes a clean pre-P5-01 native-plugin baseline.
 
+The same COMPANION profile currently reports the existing iai MCP server as enabled:
+
+```text
+MCP Servers:
+iai-mcp    ...    all    enabled
+```
+
+This is the preferred Phase 5 destination-recommendation seam. P5-01 must reuse native iai recall/search behavior through the already configured `iai-mcp` authority and must not revive the historical Docker recommender or introduce a second semantic ranker.
+
+## Source verification evidence
+
+Windows source verification on 2026-09-21 passed:
+
+- `test_p5_01.py`: 10/10 tests passed in 0.115 s;
+- Hermes `plugins doctor <source-dir> --ci`: runtime discovery, manifest parsing, import, and registration passed;
+- doctor reported 3 registered tools and 1 `pre_tool_call` hook with no warnings after the manifest declaration was corrected to `provides_hooks`;
+- verification used the source tree only and did not install or enable the plugin.
+
+The tested behaviors include side-effect-free edit and move previews, no creation of missing target directories during preview, absolute/traversal-path rejection, Markdown-only enforcement, symlink/junction/reparse escape rejection, expired/unknown plan blocking, plan-scoped approval rule keys, and a known-plan apply placeholder that still refuses mutation.
+
+## iai destination-recommendation seam
+
+The historical Phase 3 recommender remains a behavioral donor only. Its accepted semantic rule is retained:
+
+1. use iai's native recall/search result ordering;
+2. derive candidate vault directories only from source/provenance paths already associated with recalled vault records;
+3. validate each candidate against the current authoritative vault and canonical containment rules;
+4. return advisory recommendations with evidence/provenance;
+5. do not add Orion-side embeddings, semantic ranking, or a second memory store;
+6. do not mutate the draft or vault during recommendation.
+
+P5-01 still needs source-level implementation/tests for this read-only native iai seam before the source-only slice is complete.
+
 ## P5-01 source scope
 
 Allowed in this ticket:
@@ -98,4 +131,6 @@ Not allowed in this ticket:
 
 ## Acceptance boundary
 
-P5-01 may close only after source tests pass and operator review confirms the source-only contract. A separate owner-approved P5-02 gate is required before live plugin installation or any protected filesystem mutation.
+P5-01 may close only after the source tests pass, Hermes doctor passes, the read-only native iai destination-recommendation seam is implemented/tested, and operator review confirms the source-only contract.
+
+A separate owner-approved P5-02 gate is required before live plugin installation or any protected filesystem mutation. Passing P5-01 does not itself authorize copying the plugin into COMPANION, enabling it, restarting Hermes for it, or applying a move/edit/delete/restore.
