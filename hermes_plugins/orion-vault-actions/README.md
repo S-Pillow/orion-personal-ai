@@ -64,6 +64,28 @@ From the Orion repository root, run:
 
 The suite uses temporary directories only. It must not touch the live vault or inbox.
 
+Current Windows verification evidence (2026-09-21):
+
+- `test_p5_01.py`: 10/10 passed in 0.115 s;
+- Hermes `plugins doctor <source-dir> --ci`: PASS;
+- runtime discovery, manifest parsing, import, and registration passed;
+- doctor observed 3 tools and 1 hook with no warnings;
+- COMPANION user-plugin baseline was `[]`, so no pre-existing user plugin was displaced.
+
+## iai destination-recommendation seam
+
+The COMPANION profile already has `iai-mcp` enabled. Phase 5 destination recommendation should therefore call the existing native iai recall/search authority rather than recreate the historical Docker recommender or add an Orion-side semantic ranker.
+
+The intended P5-01 recommendation behavior is read-only:
+
+- use iai-native result ordering;
+- derive candidate directories only from recalled vault-record provenance/source paths;
+- revalidate each candidate against the authoritative vault and containment policy;
+- return recommendations with evidence;
+- never mutate the draft or vault.
+
+This seam is still to be implemented/tested before P5-01 source acceptance.
+
 ## Future P5-02 installation gate
 
 A later installation ticket must, at minimum:
