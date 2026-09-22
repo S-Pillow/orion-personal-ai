@@ -16,6 +16,7 @@ import secrets
 import stat
 import threading
 import time
+from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Dict
 
@@ -757,59 +758,98 @@ def post_approval_response(
         if (pending is not None and pending["description"] == description
                 and time.monotonic() - pending["created"] <= PREVIEW_TTL_SECONDS):
             pending["once"] = True
+            pending["choice"] = choice
+            pending["surface"] = surface
 
 
-def _probe_fresh_once_approval(
+def _fresh_once_approval_evidence(
     plan_token: str, *, approval_request=None, redact=None
-) -> bool:
-    """Source-only handler-side approval candidate; never writes a file.
+) -> Dict[str, Any]:
+    """Return non-reusable evidence for one matched fresh human ONCE decision.
 
-    An isolated test-only tool may call this to exercise Hermes dispatch. The
-    registered apply handler remains a fail-closed placeholder. A future
-    mutator would need separate final state checks, one-use plan consumption,
-    atomic recovery, and qualified exact-diff display before any write.
+    The evidence is correlation metadata for a future durable receipt. It is
+    deliberately insufficient to authorize any later action: no Hermes rule
+    key/pattern key is returned, and the normal fresh approval attempt still
+    has to exist in memory while the gate result is consumed.
     """
+    failure = {
+        "approved": False,
+        "mutation_performed": False,
+        "authorization_reusable": False,
+    }
     try:
         plan = _lookup_preview(plan_token)
         if plan is None:
-            return False
+            return dict(failure, error="unknown_or_expired_plan")
         message = _approval_summary(plan)
         if len(message.encode("utf-8")) > MAX_APPROVAL_MESSAGE_CHARS:
-            return False
+            return dict(failure, error="approval_message_too_large")
         if redact is None:
             from agent.redact import redact_sensitive_text
 
             redact = redact_sensitive_text
         if redact(message) != message:
-            return False
+            return dict(failure, error="approval_message_redacted")
         if approval_request is None:
             from tools.approval import request_tool_approval
 
             approval_request = request_tool_approval
     except Exception:
-        return False
+        return dict(failure, error="approval_preparation_failed")
 
-    # The random key is private to this invocation; a grant for the public
-    # plan token or an earlier attempt cannot satisfy a fresh human response.
+    attempt_id = secrets.token_hex(16)
     rule_key = f"orion_vault_attempt:{plan_token}:{secrets.token_hex(16)}"
     pattern_key = f"plugin_rule:{rule_key}"
     with _APPROVAL_ATTEMPTS_LOCK:
         if len(_APPROVAL_ATTEMPTS) >= APPROVAL_ATTEMPT_LIMIT:
-            return False
+            return dict(failure, error="approval_attempt_limit")
         _APPROVAL_ATTEMPTS[pattern_key] = {
-            "description": message, "created": time.monotonic(), "once": False
+            "attempt_id": attempt_id,
+            "description": message,
+            "created": time.monotonic(),
+            "once": False,
+            "choice": None,
+            "surface": None,
         }
+
     try:
         result = approval_request(APPLY_TOOL, message, rule_key=rule_key)
         with _APPROVAL_ATTEMPTS_LOCK:
-            observed = bool(_APPROVAL_ATTEMPTS[pattern_key]["once"])
-        return bool(isinstance(result, dict) and result.get("approved") is True and observed)
+            pending = dict(_APPROVAL_ATTEMPTS.get(pattern_key) or {})
+        approved = bool(
+            isinstance(result, dict)
+            and result.get("approved") is True
+            and pending.get("once") is True
+            and pending.get("choice") == "once"
+            and pending.get("surface") in ("cli", "gateway")
+        )
+        if not approved:
+            return dict(failure, error="fresh_once_not_observed")
+        return {
+            "approved": True,
+            "mutation_performed": False,
+            "authorization_reusable": False,
+            "attempt_id": attempt_id,
+            "plan_token": plan_token,
+            "choice": "once",
+            "surface": pending["surface"],
+            "approval_message_sha256": _sha_text(message),
+        }
     except Exception:
-        return False
+        return dict(failure, error="approval_gate_failed")
     finally:
         with _APPROVAL_ATTEMPTS_LOCK:
             _APPROVAL_ATTEMPTS.pop(pattern_key, None)
 
+
+def _probe_fresh_once_approval(
+    plan_token: str, *, approval_request=None, redact=None
+) -> bool:
+    """Compatibility bool wrapper around structured fresh-once evidence."""
+    evidence = _fresh_once_approval_evidence(
+        plan_token, approval_request=approval_request, redact=redact
+    )
+    return bool(evidence.get("approved") is True)
 
 
 def _candidate_result(
@@ -1719,8 +1759,234 @@ def _revalidate_disposable_restore_preview(plan_token: str) -> Dict[str, Any]:
         )
 
 
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _public_plan_snapshot(plan: Dict[str, Any]) -> Dict[str, Any]:
+    """Persist only the public immutable plan fields, never cached bytes/diff."""
+    return {
+        key: value
+        for key, value in plan.items()
+        if not str(key).startswith("_")
+    }
+
+
+def _validate_candidate_approval_evidence(
+    plan_token: str, plan: Dict[str, Any], evidence: Any
+) -> Dict[str, Any]:
+    if not isinstance(evidence, dict):
+        raise ValueError("approval_evidence_required")
+    if (
+        evidence.get("approved") is not True
+        or evidence.get("authorization_reusable") is not False
+        or evidence.get("plan_token") != plan_token
+        or evidence.get("choice") != "once"
+        or evidence.get("surface") not in ("cli", "gateway")
+        or not re.fullmatch(r"[0-9a-f]{32}", str(evidence.get("attempt_id") or ""))
+    ):
+        raise ValueError("approval_evidence_invalid")
+
+    message = _approval_summary(plan)
+    if evidence.get("approval_message_sha256") != _sha_text(message):
+        raise ValueError("approval_evidence_message_mismatch")
+    return {
+        "attempt_id": evidence["attempt_id"],
+        "surface": evidence["surface"],
+        "choice": "once",
+        "approval_message_sha256": evidence["approval_message_sha256"],
+        "authorization_reusable": False,
+    }
+
+
+def _candidate_receipt_payload(
+    *,
+    recovery_id: str,
+    plan_token: str,
+    plan: Dict[str, Any],
+    approval: Dict[str, Any],
+    backup_file: str,
+    backup_sha256: str,
+    state: str,
+    created_at_utc: str,
+    final_classification: str | None = None,
+) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {
+        "schema_version": 1,
+        "receipt_type": "orion_vault_action",
+        "recovery_id": recovery_id,
+        "plan_token": plan_token,
+        "plan": _public_plan_snapshot(plan),
+        "approval": dict(approval),
+        "backup_file": backup_file,
+        "backup_sha256": backup_sha256,
+        "state": state,
+        "created_at_utc": created_at_utc,
+        "updated_at_utc": _utc_now_iso(),
+    }
+    if final_classification:
+        payload["final_classification"] = final_classification
+    return payload
+
+
+def _write_candidate_receipt_prepared(
+    recovery_dir: Path,
+    *,
+    plan_token: str,
+    plan: Dict[str, Any],
+    approval: Dict[str, Any],
+    backup_file: str,
+    backup_sha256: str,
+) -> None:
+    path = recovery_dir / "receipt.json"
+    created = _utc_now_iso()
+    payload = _candidate_receipt_payload(
+        recovery_id=plan_token,
+        plan_token=plan_token,
+        plan=plan,
+        approval=approval,
+        backup_file=backup_file,
+        backup_sha256=backup_sha256,
+        state="prepared",
+        created_at_utc=created,
+    )
+    data = json.dumps(
+        payload, ensure_ascii=False, sort_keys=True, indent=2
+    ).encode("utf-8")
+    _durable_write_exclusive(path, data)
+
+
+def _commit_candidate_receipt(
+    recovery_dir: Path, *, final_classification: str
+) -> None:
+    path = recovery_dir / "receipt.json"
+    if not path.is_file() or _is_reparse_point(path):
+        raise RuntimeError("receipt_missing")
+    try:
+        current = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("receipt_invalid_json") from exc
+    if (
+        not isinstance(current, dict)
+        or current.get("schema_version") != 1
+        or current.get("state") != "prepared"
+    ):
+        raise RuntimeError("receipt_invalid_state")
+    payload = dict(current)
+    payload["state"] = "committed"
+    payload["final_classification"] = final_classification
+    payload["updated_at_utc"] = _utc_now_iso()
+    _write_candidate_manifest(path, payload)
+
+
+def _inspect_disposable_receipt_candidate(recovery_id: str) -> Dict[str, Any]:
+    """Read-only restart-safe validation of a durable correlation receipt."""
+    try:
+        _vault_root, _inbox_root, recovery_root = _candidate_disposable_roots()
+    except Exception as exc:
+        return _candidate_result(success=False, error=str(exc))
+
+    if not isinstance(recovery_id, str) or not re.fullmatch(
+        r"[0-9a-f]{64}", recovery_id
+    ):
+        return _candidate_result(success=False, error="invalid_recovery_id")
+
+    recovery_dir = recovery_root / recovery_id
+    receipt_path = recovery_dir / "receipt.json"
+    try:
+        if (
+            not recovery_dir.is_dir()
+            or _is_reparse_point(recovery_dir)
+            or not receipt_path.is_file()
+            or _is_reparse_point(receipt_path)
+        ):
+            return _candidate_result(success=False, error="receipt_missing")
+        _ensure_contained(
+            recovery_root.resolve(strict=True), recovery_dir.resolve(strict=True)
+        )
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return _candidate_result(success=False, error="receipt_invalid_json")
+    except Exception as exc:
+        return _candidate_result(
+            success=False, error=f"receipt_read_error:{type(exc).__name__}"
+        )
+
+    if not isinstance(receipt, dict):
+        return _candidate_result(success=False, error="receipt_invalid")
+    plan = receipt.get("plan")
+    approval = receipt.get("approval")
+    if (
+        receipt.get("schema_version") != 1
+        or receipt.get("receipt_type") != "orion_vault_action"
+        or receipt.get("recovery_id") != recovery_id
+        or receipt.get("plan_token") != recovery_id
+        or receipt.get("state") not in ("prepared", "committed")
+        or not isinstance(plan, dict)
+        or _plan_token(plan) != recovery_id
+        or not isinstance(approval, dict)
+        or approval.get("choice") != "once"
+        or approval.get("surface") not in ("cli", "gateway")
+        or approval.get("authorization_reusable") is not False
+        or not re.fullmatch(
+            r"[0-9a-f]{32}", str(approval.get("attempt_id") or "")
+        )
+        or not re.fullmatch(
+            r"[0-9a-f]{64}",
+            str(approval.get("approval_message_sha256") or ""),
+        )
+    ):
+        return _candidate_result(success=False, error="receipt_invalid")
+
+    backup_name = receipt.get("backup_file")
+    backup = recovery_dir / str(backup_name or "")
+    if (
+        backup_name not in ("original.bin", "source.bin")
+        or not backup.is_file()
+        or _is_reparse_point(backup)
+    ):
+        return _candidate_result(success=False, error="receipt_backup_missing")
+    backup_sha = _sha_bytes(backup.read_bytes())
+    if backup_sha != receipt.get("backup_sha256"):
+        return _candidate_result(
+            success=False, error="receipt_backup_hash_mismatch"
+        )
+
+    recovery = _inspect_disposable_recovery_candidate(recovery_id)
+    if not recovery.get("success"):
+        return _candidate_result(
+            success=False,
+            error="receipt_recovery_record_invalid",
+        )
+    if (
+        recovery.get("action") != plan.get("action")
+        or recovery.get("backup_sha256") != backup_sha
+    ):
+        return _candidate_result(
+            success=False, error="receipt_recovery_correlation_mismatch"
+        )
+
+    return _candidate_result(
+        success=True,
+        mutation_performed=False,
+        recovery_required=bool(recovery.get("recovery_required")),
+        correlation_valid=True,
+        authorization_reusable=False,
+        recovery_id=recovery_id,
+        plan_token=recovery_id,
+        action=plan.get("action"),
+        receipt_state=receipt.get("state"),
+        final_classification=receipt.get("final_classification"),
+        current_classification=recovery.get("classification"),
+        approval_attempt_id=approval.get("attempt_id"),
+        approval_surface=approval.get("surface"),
+        approval_choice=approval.get("choice"),
+        backup_sha256=backup_sha,
+    )
+
+
 def _execute_disposable_plan_candidate(
-    plan_token: str, *, failure_hook=None
+    plan_token: str, *, failure_hook=None, approval_evidence=None
 ) -> Dict[str, Any]:
     """P5-02B unregistered mutation prototype for disposable roots only.
 
@@ -1739,6 +2005,15 @@ def _execute_disposable_plan_candidate(
                 return _candidate_result(success=False, error="plan_already_consumed")
     except Exception as exc:
         return _candidate_result(success=False, error=str(exc))
+
+    receipt_approval = None
+    if approval_evidence is not None:
+        try:
+            receipt_approval = _validate_candidate_approval_evidence(
+                plan_token, plan, approval_evidence
+            )
+        except Exception as exc:
+            return _candidate_result(success=False, error=str(exc))
 
     action = plan.get("action")
     recovery_dir: Path | None = None
@@ -1775,6 +2050,15 @@ def _execute_disposable_plan_candidate(
                 "after_sha256": plan.get("proposed_sha256"),
                 "backup_file": "original.bin",
             })
+            if receipt_approval is not None:
+                _write_candidate_receipt_prepared(
+                    recovery_dir,
+                    plan_token=plan_token,
+                    plan=plan,
+                    approval=receipt_approval,
+                    backup_file="original.bin",
+                    backup_sha256=_sha_bytes(old_bytes),
+                )
             _candidate_checkpoint("edit_after_recovery", failure_hook)
 
             temporary = target.with_name(
@@ -1814,6 +2098,10 @@ def _execute_disposable_plan_candidate(
                 "after_sha256": plan.get("proposed_sha256"),
                 "backup_file": "original.bin",
             })
+            if receipt_approval is not None:
+                _commit_candidate_receipt(
+                    recovery_dir, final_classification="committed"
+                )
             return _candidate_result(
                 success=True,
                 mutation_performed=True,
@@ -1891,6 +2179,15 @@ def _execute_disposable_plan_candidate(
                 "source_sha256": plan.get("source_sha256"),
                 "backup_file": "source.bin",
             })
+            if receipt_approval is not None:
+                _write_candidate_receipt_prepared(
+                    recovery_dir,
+                    plan_token=plan_token,
+                    plan=plan,
+                    approval=receipt_approval,
+                    backup_file="source.bin",
+                    backup_sha256=_sha_bytes(source_bytes),
+                )
             _candidate_checkpoint("move_after_recovery", failure_hook)
 
             if not _candidate_mark_consumed(plan_token):
@@ -1981,6 +2278,10 @@ def _execute_disposable_plan_candidate(
                 "source_sha256": plan.get("source_sha256"),
                 "backup_file": "source.bin",
             })
+            if receipt_approval is not None:
+                _commit_candidate_receipt(
+                    recovery_dir, final_classification="committed"
+                )
             return _candidate_result(
                 success=True,
                 mutation_performed=True,
