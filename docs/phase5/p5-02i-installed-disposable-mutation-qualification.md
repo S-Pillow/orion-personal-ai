@@ -551,6 +551,57 @@ After one committed edit and one committed move:
 - require correlation validity, committed classification, and non-reusable authorization;
 - do not auto-repair or auto-restore anything.
 
+## I5 observed result — PASS
+
+Installed-runtime I5 restart-safe recovery/receipt classification completed
+successfully.
+
+Observed:
+
+- disposable edit committed before restart simulation;
+- disposable move committed before restart simulation;
+- preview cache, preview timestamps, approval-attempt cache,
+  consumed-plan cache, and consumed-approval-attempt cache were cleared;
+- edit recovery classification remained `committed`;
+- edit receipt remained `committed` with valid correlation;
+- move recovery classification remained `committed`;
+- move receipt remained `committed` with valid correlation;
+- `authorization_reusable=false`;
+- restart-surviving receipts remained non-authorizing;
+- registered apply remained fail-closed after cache loss with no live preview
+  authority;
+- real vault/inbox untouched;
+- disposable fixture cleaned;
+- COMPANION config SHA-256 remained
+  `34D9BD9DDC1BC59783CE2DC80D98FBD66D7AA7CC670DDFB875E0D1C78E8462D7`;
+- installed `__init__.py` SHA-256 remained
+  `FCFA3DDC4A86B99691FB003CF4421027C5CC3CA22AC99ADBCCEEE8D3B3C7B5DA`;
+- Hermes gateway remained stopped;
+- operator worktree cleaned.
+
+Acceptance markers:
+
+```text
+I5_EDIT_COMMITTED_BEFORE_RESTART=true
+I5_MOVE_COMMITTED_BEFORE_RESTART=true
+I5_EPHEMERAL_STATE_CLEARED=true
+I5_EDIT_RECOVERY_CLASSIFICATION=committed
+I5_EDIT_RECEIPT_STATE=committed
+I5_EDIT_RECEIPT_CORRELATION_VALID=true
+I5_MOVE_RECOVERY_CLASSIFICATION=committed
+I5_MOVE_RECEIPT_STATE=committed
+I5_MOVE_RECEIPT_CORRELATION_VALID=true
+I5_AUTHORIZATION_REUSABLE=false
+I5_RESTART_RECEIPTS_NON_AUTHORIZING=true
+I5_REGISTERED_APPLY_FAIL_CLOSED_AFTER_RESTART=true
+I5_REAL_VAULT_INBOX_TOUCHED=false
+DISPOSABLE_FIXTURE_CLEANED=true
+P5_02I_I5_QUALIFICATION=PASS
+P5_02I_I5_OPERATOR_WORKTREE_CLEANED=true
+```
+
+I5 is accepted.
+
 ### I6 — disposable historical restore
 
 Using the committed disposable records only:
