@@ -428,6 +428,31 @@ the explicit PASS marker was reached.
 The installed P5-02I plugin update is therefore fully accepted and I4 may run
 against the hardened installed code.
 
+### I4 installed-runtime operator probe
+
+Prepared source pin:
+
+```text
+c36792838660f7d4eb232bb7e71327a4f4aeba96
+scripts/phase5/p5-02i-stale-approval-qualification.py
+```
+
+The probe imports the installed P5-02I plugin, keeps Hermes manual-off, uses
+temporary disposable roots under an explicit neutral parent, and exercises
+three real human **ALLOW ONCE** decisions:
+
+1. edit evidence is first presented to a mismatched plan and refused, then the
+   correct target is changed after approval; stale execution must refuse and
+   consume the approval so restoring the old bytes cannot revive it;
+2. a move target is created after approval; execution must refuse and consume
+   the approval so deleting the raced-in target cannot revive it;
+3. a successful disposable edit creates a committed durable receipt; the
+   receipt's approval record is then presented to a different plan and must
+   fail as non-authorizing evidence.
+
+Acceptance also requires registered apply to remain fail-closed, no real
+vault/inbox access, and fixture cleanup only on PASS.
+
 ### I4 — stale-state and evidence-consumption checks
 
 At minimum:
