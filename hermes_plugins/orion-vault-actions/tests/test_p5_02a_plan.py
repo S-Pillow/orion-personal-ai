@@ -164,6 +164,40 @@ class PlanBindingTests(unittest.TestCase):
         self.assertFalse(plugin._APPROVAL_ATTEMPTS)
         self.assertEqual(note.read_bytes(), b"old\n")
 
+    def test_structured_once_evidence_is_non_reusable_and_exactly_bound(self):
+        note = self.vault / "note.md"
+        note.write_bytes(b"old\n")
+        token = json.loads(plugin.preview_edit({
+            "target_relative_path": "note.md", "new_content": "new\n",
+        }))["plan_token"]
+
+        def gate(_tool_name, description, *, rule_key):
+            plugin.post_approval_response(
+                pattern_key=f"plugin_rule:{rule_key}",
+                description=description,
+                choice="once",
+                surface="gateway",
+            )
+            return {"approved": True}
+
+        evidence = plugin._fresh_once_approval_evidence(
+            token, approval_request=gate, redact=lambda text: text,
+        )
+
+        self.assertTrue(evidence["approved"])
+        self.assertFalse(evidence["authorization_reusable"])
+        self.assertEqual(evidence["plan_token"], token)
+        self.assertEqual(evidence["choice"], "once")
+        self.assertEqual(evidence["surface"], "gateway")
+        self.assertRegex(evidence["attempt_id"], r"^[0-9a-f]{32}$")
+        self.assertRegex(
+            evidence["approval_message_sha256"], r"^[0-9a-f]{64}$"
+        )
+        self.assertNotIn("rule_key", evidence)
+        self.assertNotIn("pattern_key", evidence)
+        self.assertFalse(plugin._APPROVAL_ATTEMPTS)
+        self.assertEqual(note.read_bytes(), b"old\n")
+
     def test_concurrent_attempts_are_isolated_and_late_callback_is_ignored(self):
         note = self.vault / "note.md"
         note.write_bytes(b"old\n")
