@@ -1,6 +1,6 @@
 # P5-02C Production Recovery / Restore Contract
 
-Status: **SOURCE-ONLY / READ-ONLY INSPECTOR WINDOWS-VERIFIED / RESTORE PREVIEW IN PROGRESS / NO LIVE RESTORE**
+Status: **SOURCE-ONLY / READ-ONLY INSPECTOR WINDOWS-VERIFIED / RESTORE PREVIEW CANDIDATE / NO LIVE RESTORE**
 Date: 2026-09-22
 Depends on: P5-01 accepted baseline, P5-02A approval integrity, P5-02B Windows mutation/recovery candidate
 
@@ -276,6 +276,101 @@ Implement **restore preview only**:
 - keep every restore mutator unregistered/unimplemented.
 
 Do not wire restore execution until this preview/revalidation gate passes on Windows.
+
+## Restore-preview candidate
+
+The source-only candidate now implements private historical restore preview and read-only stale revalidation.
+
+### Edit restore preview
+
+For a committed edit recovery record, the preview:
+
+- revalidates the recovery record and backup hash;
+- requires the current target to exist as a contained Markdown file;
+- reads the current target fresh;
+- on Windows, binds the current target file ID in addition to its SHA-256;
+- generates an exact unified diff from current bytes -> recovery backup bytes;
+- binds recovery ID, current hash, restore hash, target canonical path, file ID when available, exact diff hash, and a fresh preview nonce into a new plan;
+- stores exact proposed restore bytes only in the bounded preview cache;
+- performs no write.
+
+A committed record whose target has changed since the original operation remains eligible for an intentional historical restore because the restore preview binds the *new current state*. A missing current target is not silently recreated by edit restore; that requires a separately designed create/restore flow.
+
+### Move-source restore preview
+
+For a committed move recovery record, the preview:
+
+- requires the inbox source to remain absent;
+- requires the inbox parent to exist and not be a reparse point;
+- validates the recovery backup and Orion draft markers;
+- generates an exact creation diff from /dev/null -> inbox source backup bytes;
+- binds recovery ID, backup hash, source-absent state, source candidate path, parent canonical path, and fresh nonce;
+- records the vault target only as reference context and does not require that target to still exist;
+- leaves the vault target untouched;
+- performs no write.
+
+This preserves the design rule that restoring a moved source is a source recreation, not a hidden reverse move.
+
+### Read-only revalidation
+
+`_revalidate_disposable_restore_preview()` fails closed if, after preview:
+
+- the recovery record is no longer valid/committed;
+- the recovery backup hash changes;
+- an edit target changes hash;
+- a Windows edit target is replaced with a different file object even if the bytes are identical;
+- an edit target canonical identity changes;
+- a move-source candidate appears;
+- a move-source parent identity changes or becomes a reparse point;
+- the preview expires or is missing.
+
+It never mutates documents or recovery records.
+
+### Approval presentation
+
+The existing exact approval summary now has explicit restore variants:
+
+- historical edit restore: recovery record, canonical target, current hash, restore hash, exact diff;
+- historical move-source restore: recovery record, inbox source candidate, absent state, restore hash, reference vault target, exact diff.
+
+The text explicitly states that restore execution is not registered and will not mutate.
+
+### Non-execution boundary
+
+Restore plans are intentionally unsupported by both current execution paths:
+
+- `apply_plan_placeholder` still returns `p5_01_mutation_not_authorized`;
+- private `_execute_disposable_plan_candidate()` returns `unsupported_action` for restore plans.
+
+The restore-preview gate cannot become an accidental restore mutator merely because it shares the preview cache and approval presentation machinery.
+
+### Source tests in this delta
+
+Eight restore-specific tests now cover:
+
+- exact edit restore preview and approval text;
+- edit stale-content revalidation;
+- Windows same-bytes/different-file-ID replacement rejection;
+- unresolved prepared record rejection;
+- exact move-source creation preview and approval text;
+- move-source preview when the reference vault target no longer exists;
+- move-source stale source-appearance rejection;
+- corrupt recovery backup refusal;
+- explicit refusal to execute restore plans through existing public/private mutators.
+
+Together with the previous suite, current expected `test_p5*.py` discovery is **55 tests**:
+
+- 16 P5-01;
+- 9 P5-02A;
+- 30 P5-02B/P5-02C tests.
+
+The accepted Windows baseline remains 46/46. This 55-test restore-preview delta is pending a fresh Windows run.
+
+## Next verification
+
+Run the 55-test Windows suite only. No gateway, HUD fixture, plugin install, or persistent service is needed.
+
+If 55/55 passes, the next source task is **production receipt schema + restore execution design review**, not immediate restore mutation. The source should first gain restart-safe receipt semantics and exact authorization correlation before any restore executor is considered.
 
 ## Stop conditions before live mutation
 
