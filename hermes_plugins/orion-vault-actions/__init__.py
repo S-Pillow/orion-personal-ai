@@ -667,6 +667,41 @@ def _approval_summary(plan: Dict[str, Any]) -> str:
             "Current apply handler remains fail-closed and will not mutate."
         )
 
+    if action == "restore_edit":
+        restore_sha = plan.get("restore_sha256")
+        if (
+            _sha_bytes(proposed_bytes) != restore_sha
+            or restore_sha != plan.get("recovery_backup_sha256")
+        ):
+            raise ValueError("restore_content_mismatch")
+        return (
+            "Approve Orion historical edit restore preview? "
+            f"Recovery record: {plan.get('recovery_id')}. "
+            f"Target: {target}. "
+            f"Current SHA-256: {plan.get('current_sha256')}. "
+            f"Restore SHA-256: {restore_sha}.\n"
+            f"Exact unified diff:\n{diff}\n"
+            "Restore execution is not registered and will not mutate."
+        )
+
+    if action == "restore_move_source":
+        restore_sha = plan.get("restore_sha256")
+        if (
+            _sha_bytes(proposed_bytes) != restore_sha
+            or restore_sha != plan.get("recovery_backup_sha256")
+            or plan.get("source_state") != "absent"
+        ):
+            raise ValueError("restore_source_content_mismatch")
+        return (
+            "Approve Orion historical move-source restore preview? "
+            f"Recovery record: {plan.get('recovery_id')}. "
+            f"Inbox source to recreate: {target}. "
+            f"Source state: absent. Restore SHA-256: {restore_sha}. "
+            f"Reference vault target: {plan.get('reference_target_canonical_path')}.\n"
+            f"Exact unified diff:\n{diff}\n"
+            "Restore execution is not registered and will not mutate."
+        )
+
     raise ValueError("unknown_vault_action")
 
 
@@ -1344,6 +1379,334 @@ def _inspect_disposable_recovery_candidate(plan_token: str) -> Dict[str, Any]:
         source_draft=source_rel,
         target_relative_path=target_rel,
     )
+
+
+def _read_disposable_recovery_backup(
+    recovery_root: Path, recovery_id: str, backup_name: str
+) -> tuple[Path, bytes]:
+    recovery_dir = recovery_root / recovery_id
+    if not recovery_dir.is_dir() or _is_reparse_point(recovery_dir):
+        raise FileNotFoundError("recovery_record_missing")
+    _ensure_contained(
+        recovery_root.resolve(strict=True), recovery_dir.resolve(strict=True)
+    )
+    backup = recovery_dir / backup_name
+    if not backup.is_file() or _is_reparse_point(backup):
+        raise FileNotFoundError("recovery_backup_missing")
+    return backup, backup.read_bytes()
+
+
+def _preview_disposable_restore_candidate(recovery_id: str) -> Dict[str, Any]:
+    """Build a historical restore preview without mutating any file.
+
+    Only already-committed recovery records are eligible. Prepared/unresolved
+    records belong to recovery-resolution flows, not historical restore.
+    """
+    try:
+        vault_root, inbox_root, recovery_root = _candidate_disposable_roots()
+    except Exception as exc:
+        return _candidate_result(success=False, error=str(exc))
+
+    inspected = _inspect_disposable_recovery_candidate(recovery_id)
+    if not inspected.get("success"):
+        return _candidate_result(
+            success=False,
+            error=inspected.get("error", "recovery_inspection_failed"),
+        )
+    if inspected.get("manifest_state") != "committed":
+        return _candidate_result(
+            success=False,
+            error="historical_restore_requires_committed_record",
+        )
+
+    action = inspected.get("action")
+    try:
+        if action == "edit_note":
+            target_rel = inspected.get("target_relative_path")
+            target, normalized_rel = _resolve_under_root(
+                vault_root, target_rel, must_exist=True
+            )
+            _require_markdown(normalized_rel)
+            current_bytes, current_text = _read_utf8(target)
+            _backup_path, backup_bytes = _read_disposable_recovery_backup(
+                recovery_root, recovery_id, "original.bin"
+            )
+            try:
+                backup_text = backup_bytes.decode("utf-8")
+            except UnicodeDecodeError:
+                return _candidate_result(
+                    success=False, error="recovery_backup_utf8_required"
+                )
+
+            backup_sha = _sha_bytes(backup_bytes)
+            if backup_sha != inspected.get("backup_sha256"):
+                return _candidate_result(
+                    success=False, error="recovery_backup_hash_mismatch"
+                )
+
+            current_sha = _sha_bytes(current_bytes)
+            target_file_id = None
+            if os.name == "nt":
+                try:
+                    target_file_id = _windows_path_file_identity(target)
+                except Exception:
+                    return _candidate_result(
+                        success=False, error="restore_target_file_identity_unavailable"
+                    )
+
+            diff = _unified_diff(
+                current_text,
+                backup_text,
+                f"vault/{normalized_rel}",
+                f"vault/{normalized_rel}",
+            )
+            plan = {
+                "schema_version": 1,
+                "preview_nonce": secrets.token_hex(16),
+                "action": "restore_edit",
+                "recovery_id": recovery_id,
+                "recovery_action": "edit_note",
+                "recovery_manifest_state": "committed",
+                "target_relative_path": normalized_rel,
+                "target_canonical_path": str(target.resolve(strict=True)),
+                "current_sha256": current_sha,
+                "restore_sha256": backup_sha,
+                "recovery_backup_sha256": backup_sha,
+                **(
+                    {"target_file_id": target_file_id}
+                    if target_file_id else {}
+                ),
+                "diff_sha256": _sha_text(diff),
+            }
+            token = _plan_token(plan)
+            _remember_preview(
+                token, plan, diff=diff, proposed_bytes=backup_bytes
+            )
+            return _candidate_result(
+                success=True,
+                mutation_performed=False,
+                mode="preview",
+                restore_kind="historical_edit",
+                plan_token=token,
+                plan=plan,
+                diff=diff,
+                changed=current_sha != backup_sha,
+            )
+
+        if action == "move_draft":
+            source_rel = inspected.get("source_draft")
+            source, normalized_rel = _resolve_under_root(
+                inbox_root, source_rel, allow_missing_leaf=True
+            )
+            _require_markdown(normalized_rel)
+            if source.exists() or os.path.lexists(source):
+                return _candidate_result(
+                    success=False, error="restore_source_exists"
+                )
+            if not source.parent.is_dir():
+                return _candidate_result(
+                    success=False, error="restore_source_parent_missing"
+                )
+            if _is_reparse_point(source.parent):
+                return _candidate_result(
+                    success=False, error="restore_source_parent_reparse_rejected"
+                )
+
+            _backup_path, backup_bytes = _read_disposable_recovery_backup(
+                recovery_root, recovery_id, "source.bin"
+            )
+            try:
+                backup_text = backup_bytes.decode("utf-8")
+            except UnicodeDecodeError:
+                return _candidate_result(
+                    success=False, error="recovery_backup_utf8_required"
+                )
+            if (
+                "orion_draft: true" not in backup_text
+                or "status: draft" not in backup_text
+            ):
+                return _candidate_result(
+                    success=False, error="recovery_backup_not_orion_draft"
+                )
+
+            backup_sha = _sha_bytes(backup_bytes)
+            if backup_sha != inspected.get("backup_sha256"):
+                return _candidate_result(
+                    success=False, error="recovery_backup_hash_mismatch"
+                )
+
+            target_rel = inspected.get("target_relative_path")
+            target_path, _ = _resolve_under_root(
+                vault_root, target_rel, must_exist=True
+            )
+            target_sha = _sha_bytes(target_path.read_bytes())
+            diff = _unified_diff(
+                "",
+                backup_text,
+                "/dev/null",
+                f"inbox/{normalized_rel}",
+            )
+            plan = {
+                "schema_version": 1,
+                "preview_nonce": secrets.token_hex(16),
+                "action": "restore_move_source",
+                "recovery_id": recovery_id,
+                "recovery_action": "move_draft",
+                "recovery_manifest_state": "committed",
+                "source_draft": normalized_rel,
+                "source_state": "absent",
+                "target_relative_path": normalized_rel,
+                "target_canonical_path": str(source.resolve(strict=False)),
+                "source_parent_canonical_path": str(
+                    source.parent.resolve(strict=True)
+                ),
+                "restore_sha256": backup_sha,
+                "recovery_backup_sha256": backup_sha,
+                "reference_target_relative_path": target_rel,
+                "reference_target_canonical_path": str(
+                    target_path.resolve(strict=True)
+                ),
+                "reference_target_sha256": target_sha,
+                "diff_sha256": _sha_text(diff),
+            }
+            token = _plan_token(plan)
+            _remember_preview(
+                token, plan, diff=diff, proposed_bytes=backup_bytes
+            )
+            return _candidate_result(
+                success=True,
+                mutation_performed=False,
+                mode="preview",
+                restore_kind="historical_move_source",
+                plan_token=token,
+                plan=plan,
+                diff=diff,
+                changed=True,
+            )
+
+        return _candidate_result(
+            success=False, error="unsupported_recovery_action"
+        )
+    except FileNotFoundError as exc:
+        return _candidate_result(success=False, error=str(exc))
+    except Exception as exc:
+        return _candidate_result(
+            success=False, error=f"restore_preview_error:{type(exc).__name__}"
+        )
+
+
+def _revalidate_disposable_restore_preview(plan_token: str) -> Dict[str, Any]:
+    """Read-only final-state check for a previously built restore preview."""
+    plan = _lookup_preview(plan_token)
+    if plan is None:
+        return _candidate_result(success=False, error="unknown_or_expired_plan")
+    if plan.get("action") not in ("restore_edit", "restore_move_source"):
+        return _candidate_result(success=False, error="not_restore_preview")
+
+    try:
+        _approval_summary(plan)
+        vault_root, inbox_root, recovery_root = _candidate_disposable_roots()
+    except Exception as exc:
+        return _candidate_result(success=False, error=str(exc))
+
+    recovery_id = plan.get("recovery_id")
+    inspected = _inspect_disposable_recovery_candidate(recovery_id)
+    if (
+        not inspected.get("success")
+        or inspected.get("manifest_state") != "committed"
+    ):
+        return _candidate_result(
+            success=False, error="restore_recovery_record_changed"
+        )
+
+    try:
+        backup_name = (
+            "original.bin"
+            if plan.get("action") == "restore_edit"
+            else "source.bin"
+        )
+        _backup_path, backup_bytes = _read_disposable_recovery_backup(
+            recovery_root, recovery_id, backup_name
+        )
+        if (
+            _sha_bytes(backup_bytes) != plan.get("restore_sha256")
+            or _sha_bytes(backup_bytes) != plan.get("recovery_backup_sha256")
+        ):
+            return _candidate_result(
+                success=False, error="restore_backup_changed"
+            )
+
+        if plan.get("action") == "restore_edit":
+            target, normalized_rel = _resolve_under_root(
+                vault_root, plan.get("target_relative_path"), must_exist=True
+            )
+            if (
+                normalized_rel != plan.get("target_relative_path")
+                or str(target.resolve(strict=True))
+                != plan.get("target_canonical_path")
+            ):
+                return _candidate_result(
+                    success=False, error="restore_target_identity_changed"
+                )
+            if os.name == "nt" and plan.get("target_file_id"):
+                try:
+                    current_file_id = _windows_path_file_identity(target)
+                except Exception:
+                    return _candidate_result(
+                        success=False,
+                        error="restore_target_file_identity_unavailable",
+                    )
+                if current_file_id != plan.get("target_file_id"):
+                    return _candidate_result(
+                        success=False, error="restore_target_file_id_changed"
+                    )
+            if _sha_bytes(target.read_bytes()) != plan.get("current_sha256"):
+                return _candidate_result(
+                    success=False, error="restore_current_state_changed"
+                )
+        else:
+            source, normalized_rel = _resolve_under_root(
+                inbox_root, plan.get("source_draft"), allow_missing_leaf=True
+            )
+            if normalized_rel != plan.get("source_draft"):
+                return _candidate_result(
+                    success=False, error="restore_source_identity_changed"
+                )
+            if str(source.resolve(strict=False)) != plan.get("target_canonical_path"):
+                return _candidate_result(
+                    success=False, error="restore_source_identity_changed"
+                )
+            if (
+                not source.parent.is_dir()
+                or _is_reparse_point(source.parent)
+                or str(source.parent.resolve(strict=True))
+                != plan.get("source_parent_canonical_path")
+            ):
+                return _candidate_result(
+                    success=False, error="restore_source_parent_changed"
+                )
+            if source.exists() or os.path.lexists(source):
+                return _candidate_result(
+                    success=False, error="restore_source_no_longer_absent"
+                )
+
+        return _candidate_result(
+            success=True,
+            mutation_performed=False,
+            recovery_required=False,
+            valid=True,
+            plan_token=plan_token,
+            recovery_id=recovery_id,
+            action=plan.get("action"),
+        )
+    except FileNotFoundError:
+        return _candidate_result(
+            success=False, error="restore_required_path_missing"
+        )
+    except Exception as exc:
+        return _candidate_result(
+            success=False, error=f"restore_revalidation_error:{type(exc).__name__}"
+        )
 
 
 def _execute_disposable_plan_candidate(
