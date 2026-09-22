@@ -244,6 +244,31 @@ This observation determines the exact live plugin-entry schema before adding the
 
 A second config SHA-256 is captured after enablement.
 
+## H3 observed result — PASS
+
+Operator H3 evidence:
+
+- Hermes enable succeeded with `--no-allow-tool-override`;
+- plugin status: **enabled**;
+- source: user;
+- declared capabilities: none;
+- live config SHA-256 after Hermes-native enable: `1104B781D7CAF7F2B9B88616ACB13901DFB7ECE4E912BA588D6A3238AC2BA83A`;
+- Hermes wrote the native plugin config shape:
+
+```yaml
+plugins:
+  enabled:
+    - orion-vault-actions
+  disabled: []
+  entries:
+    orion-vault-actions:
+      allow_tool_override: false
+```
+
+- gateway remained stopped / no process detected.
+
+H3 is accepted. No plugin code executed inside a live gateway session yet.
+
 ## Gate H3.5 — MCP allowlist config
 
 Only after H3 reveals Hermes's native plugin-entry shape may the existing source-documented iai seam be added:
