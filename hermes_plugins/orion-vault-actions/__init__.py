@@ -1081,6 +1081,13 @@ def _windows_recovery_acl_broad_writers(path: Path) -> list[str]:
             ("SidStart", wintypes.DWORD),
         ]
 
+    class ACCESS_ALLOWED_OBJECT_ACE_PREFIX(ctypes.Structure):
+        _fields_ = [
+            ("Header", ACE_HEADER),
+            ("Mask", wintypes.DWORD),
+            ("Flags", wintypes.DWORD),
+        ]
+
     advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 
@@ -1166,16 +1173,38 @@ def _windows_recovery_acl_broad_writers(path: Path) -> list[str]:
             header = ctypes.cast(
                 ace_ptr, ctypes.POINTER(ACE_HEADER)
             ).contents
-            if int(header.AceType) != 0:  # ACCESS_ALLOWED_ACE_TYPE
+            ace_type = int(header.AceType)
+            if ace_type == 0:  # ACCESS_ALLOWED_ACE_TYPE
+                ace = ctypes.cast(
+                    ace_ptr, ctypes.POINTER(ACCESS_ALLOWED_ACE)
+                ).contents
+                mask = int(ace.Mask)
+                sid_offset = ACCESS_ALLOWED_ACE.SidStart.offset
+            elif ace_type == 5:  # ACCESS_ALLOWED_OBJECT_ACE_TYPE
+                prefix = ctypes.cast(
+                    ace_ptr,
+                    ctypes.POINTER(ACCESS_ALLOWED_OBJECT_ACE_PREFIX),
+                ).contents
+                mask = int(prefix.Mask)
+                flags = int(prefix.Flags)
+                sid_offset = ctypes.sizeof(
+                    ACCESS_ALLOWED_OBJECT_ACE_PREFIX
+                )
+                if flags & 0x1:  # ACE_OBJECT_TYPE_PRESENT
+                    sid_offset += 16
+                if flags & 0x2:  # ACE_INHERITED_OBJECT_TYPE_PRESENT
+                    sid_offset += 16
+            elif ace_type in (9, 11):
+                # Callback allow ACEs can carry conditional access semantics.
+                # Do not claim the ACL is safe without a full condition parser.
+                raise PathPolicyError("unsupported_callback_allow_ace")
+            else:
                 continue
-            ace = ctypes.cast(
-                ace_ptr, ctypes.POINTER(ACCESS_ALLOWED_ACE)
-            ).contents
-            if not (int(ace.Mask) & write_mask):
+
+            if not (mask & write_mask):
                 continue
             sid_ptr = ctypes.c_void_p(
-                int(ace_ptr.value)
-                + ACCESS_ALLOWED_ACE.SidStart.offset
+                int(ace_ptr.value) + sid_offset
             )
             sid_text = ctypes.c_wchar_p()
             if not convert_sid(sid_ptr, ctypes.byref(sid_text)):
