@@ -462,6 +462,47 @@ At minimum:
 - verify used or mismatched approval evidence cannot authorize a later attempt;
 - verify receipt data cannot authorize a later attempt.
 
+## I4 observed result — PASS
+
+Installed-runtime I4 stale-state and approval-evidence consumption qualification
+completed successfully against the hardened P5-02I installed plugin.
+
+Observed:
+
+- mismatched approval evidence refused;
+- stale edit refused after human ALLOW ONCE;
+- stale edit approval consumed and could not be revived after restoring old bytes;
+- move target race refused after human ALLOW ONCE;
+- move approval consumed and could not be revived after removing the raced-in target;
+- committed durable receipt could not authorize a different plan;
+- registered apply remained fail-closed;
+- real vault/inbox untouched;
+- disposable fixture cleaned;
+- COMPANION config SHA-256 remained
+  `34D9BD9DDC1BC59783CE2DC80D98FBD66D7AA7CC670DDFB875E0D1C78E8462D7`;
+- installed `__init__.py` SHA-256 remained
+  `FCFA3DDC4A86B99691FB003CF4421027C5CC3CA22AC99ADBCCEEE8D3B3C7B5DA`;
+- Hermes gateway remained stopped;
+- operator worktree cleaned.
+
+Acceptance markers:
+
+```text
+I4_MISMATCHED_EVIDENCE_REFUSED=true
+I4_STALE_EDIT_REFUSED=true
+I4_STALE_EDIT_APPROVAL_CONSUMED=true
+I4_MOVE_TARGET_RACE_REFUSED=true
+I4_MOVE_APPROVAL_CONSUMED=true
+I4_DURABLE_RECEIPT_NON_AUTHORIZING=true
+I4_REGISTERED_APPLY_FAIL_CLOSED=true
+I4_REAL_VAULT_INBOX_TOUCHED=false
+DISPOSABLE_FIXTURE_CLEANED=true
+P5_02I_I4_QUALIFICATION=PASS
+P5_02I_I4_OPERATOR_WORKTREE_CLEANED=true
+```
+
+I4 is accepted.
+
 ### I5 — restart-safe recovery classification
 
 After one committed edit and one committed move:
