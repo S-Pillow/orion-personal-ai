@@ -63,14 +63,14 @@ For an inbox-to-vault move plan the executor:
 9. on Windows, binds the preview to the source's volume + 128-bit file ID and later reopens that exact source with `GENERIC_READ | DELETE`, `FILE_SHARE_READ` only, and `FILE_FLAG_OPEN_REPARSE_POINT`;
 10. rejects a same-path/same-bytes replacement whose file ID no longer matches the approved preview;
 11. keeps that source handle open while the destination is created and verified, blocking new conflicting write/delete/rename opens;
-12. re-reads the source through the held handle immediately before deletion so a writer that was already open before Orion started is still detected;
-13. if the source changed, removes the just-created target only when that target still exactly matches Orion's approved bytes;
+12. if another process already holds conflicting write/delete access, the guard open fails before recovery/target creation; otherwise the guard remains held through the operation;
+13. re-reads the source through the held handle immediately before deletion as a final content check, then removes the just-created target only if unexpected drift is detected and that target still exactly matches Orion's approved bytes;
 14. otherwise marks the held source object for deletion with `SetFileInformationByHandle(FileDispositionInfo)` and closes the same handle;
 15. verifies source-path absence + target hash and marks the manifest `committed`.
 
 On non-Windows fixture execution the earlier path-based re-read/unlink behavior remains so the source logic stays testable cross-platform. The production target is Windows, where the held handle materially narrows the final read-to-delete TOCTOU window.
 
-Microsoft documents that `FILE_ID_INFO` combines the volume serial with a 128-bit file ID to identify a file on one computer, and that `FileDispositionInfo` requires a handle opened with DELETE access. The guard intentionally opens with only `FILE_SHARE_READ`: new conflicting write/delete/rename opens fail while the operation is in flight. An already-open broadly shared writer is still possible, which is why the source is re-read through the held handle immediately before deletion.
+Microsoft documents that `FILE_ID_INFO` combines the volume serial with a 128-bit file ID to identify a file on one computer, and that `FileDispositionInfo` requires a handle opened with DELETE access. The guard intentionally opens with only `FILE_SHARE_READ`: new conflicting write/delete/rename opens fail while the operation is in flight. Windows evaluates share compatibility when the guard is opened, so an existing writer with write access causes the guard open to fail rather than being grandfathered into the protected interval. The held-handle re-read remains a final content check for unexpected state changes.
 
 References:
 https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-file_id_info
@@ -106,7 +106,7 @@ Expected classifications:
 | move interrupted after target create | source + target may both exist; recovery required |
 | source path is replaced with same bytes after preview | Windows file-ID mismatch; refuse before recovery/mutation |
 | new write/rename/delete open after source guard is held | sharing violation; approved source remains protected |
-| pre-existing broadly shared writer changes source after target creation | held-handle re-read detects drift; do not delete source; remove target only if it is still exactly ours |
+| pre-existing writer has conflicting write access | held guard cannot open; refuse before recovery or target mutation |
 | interruption after Windows delete mark but before normal completion | fail/recovery-required; recovery manifest remains prepared even if handle close completes deletion |
 | replay after protected mutation attempt | refused |
 | recovery-root collision | fail closed |
@@ -132,7 +132,7 @@ P5-02B adds tests for:
 - interruption before source deletion with explicit recovery-required duplicate state;
 - Windows preview binding to source file ID and rejection of a same-path/same-bytes replacement;
 - Windows blocking of a new conflicting source writer while the held guard is active;
-- Windows detection of source drift through a writer handle that existed before Orion acquired its guard;
+- Windows refusal when a writer handle already holds conflicting write access;
 - Windows interruption immediately after handle-based delete marking.
 
 The prior Windows baseline at `e45bc95` passed **37/37** source tests, the installed-Hermes dispatcher probe passed **2/2**, and plugin doctor passed with 4 tools / 2 hooks. The isolated exact-display gate and the real-Hermes no-write fresh-once gate also passed afterward. Those results remain valid for their tested commits.
