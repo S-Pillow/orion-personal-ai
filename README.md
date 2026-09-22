@@ -161,11 +161,34 @@ Current Phase 5 contract:
 
 `docs/phase5/p5-01-native-vault-contract.md`
 
-### P5-02A approval integrity in progress (source only)
+### P5-02 approval/mutation safety — source baseline accepted; production activation not yet ready
 
-[Issue #22](https://github.com/S-Pillow/orion-personal-ai/issues/22) and [draft PR #23](https://github.com/S-Pillow/orion-personal-ai/pull/23) track fresh nonce-bound plans and qualification of an internal once-only approval helper. Windows source tests passed 23/23 and the simulated installed-Hermes dispatcher probe passed 2/2 at `57a3ee3`. Windows plugin doctor passed cleanly at `ea4e138`: **4 tools / 2 hooks**, no warnings. The public apply handler still refuses every mutation.
+[Issue #22](https://github.com/S-Pillow/orion-personal-ai/issues/22) and [draft PR #23](https://github.com/S-Pillow/orion-personal-ai/pull/23) now contain the broader P5-02 source/disposable qualification work.
 
-The HUD candidate now presents the full command and description instead of hiding/truncating the diff. Local HUD checks pass 74/74 Python tests and 3/3 JavaScript renderer tests. The next operator check is the isolated HUD browser fixture, with no live Hermes/profile/vault access. See [P5-02A instructions and remaining gates](docs/phase5/p5-02a-approval-integrity.md). Full plugin lifecycle, concurrent approval safety, actual Hermes-to-HUD diff delivery, and atomic/recoverable fixture writes remain open.
+Accepted Windows evidence through P5-02E:
+
+- full `test_p5*.py`: **86/86 passed**;
+- installed-Hermes dispatcher probe: **2/2 passed**;
+- plugin doctor: **PASS**, 4 tools / 2 hooks;
+- exact HUD approval-card visual gate accepted;
+- real Hermes fresh human DENY / ALLOW ONCE no-write gate accepted;
+- Windows move-path file-ID / held-handle hardening accepted;
+- recovery reconciliation and historical restore preview/stale revalidation accepted;
+- restart-safe non-authorizing approval/recovery receipts accepted;
+- private disposable edit/move/restore transaction behavior, crash classification, and replay refusal accepted.
+
+The registered `orion_vault_apply_plan` handler still refuses all protected mutation. The private disposable executors are not registered, and no live COMPANION plugin install/enable, service restart for this plugin, production recovery-root creation, vault write, inbox write, move, edit, restore, or delete has been authorized or performed.
+
+Production activation readiness is documented in:
+
+`docs/phase5/p5-02f-production-activation-readiness-review.md`
+
+Current readiness decision:
+
+- preview-only COMPANION install may enter a **separate explicit authorization gate**;
+- live edit/move/restore activation is **NO-GO** until production recovery-root/ACL validation, mutation-mode/startup gating, dedicated handler-side approval ownership, normal-edit Windows file-ID parity, bounded restart recovery enumeration, production schema/rollback freeze, and installed-runtime disposable qualification are completed.
+
+Do not interpret source/disposable acceptance as live mutation authorization.
 
 ## Accepted manual-off lifecycle
 
