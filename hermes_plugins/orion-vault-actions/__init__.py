@@ -569,6 +569,16 @@ def preview_move_draft(params: Dict[str, Any], **_: Any) -> str:
         )
 
     source_bytes, source_text = _read_utf8(source)
+    source_file_id = None
+    if os.name == "nt":
+        try:
+            source_file_id = _windows_path_file_identity(source)
+        except Exception:
+            return _json({
+                "success": False,
+                "error": "source_file_identity_unavailable",
+                "mutation_performed": False,
+            })
     if len(source_text) > MAX_TEXT_CHARS:
         return _json({"success": False, "error": "draft_too_large", "max_chars": MAX_TEXT_CHARS})
     if "orion_draft: true" not in source_text or "status: draft" not in source_text:
@@ -591,6 +601,7 @@ def preview_move_draft(params: Dict[str, Any], **_: Any) -> str:
         "target_canonical_path": str(target.resolve(strict=False)),
         "target_existing_ancestor_canonical_path": str(target_parent_real),
         "source_sha256": _sha_bytes(source_bytes),
+        **({"source_file_id": source_file_id} if source_file_id else {}),
         "diff_sha256": _sha_text(diff),
         "target_state": "absent",
     }
@@ -885,6 +896,242 @@ def _write_candidate_manifest(path: Path, payload: Dict[str, Any]) -> None:
             temporary.unlink()
 
 
+def _windows_file_identity_from_handle(handle) -> str:
+    """Return the Windows volume + 128-bit file identity for an open handle."""
+    import ctypes
+    from ctypes import wintypes
+
+    class FILE_ID_128(ctypes.Structure):
+        _fields_ = [("Identifier", ctypes.c_ubyte * 16)]
+
+    class FILE_ID_INFO(ctypes.Structure):
+        _fields_ = [
+            ("VolumeSerialNumber", ctypes.c_ulonglong),
+            ("FileId", FILE_ID_128),
+        ]
+
+    get_info = ctypes.WinDLL("kernel32", use_last_error=True).GetFileInformationByHandleEx
+    get_info.argtypes = [
+        wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD
+    ]
+    get_info.restype = wintypes.BOOL
+    info = FILE_ID_INFO()
+    # FILE_INFO_BY_HANDLE_CLASS.FileIdInfo == 0x12.
+    if not get_info(handle, 0x12, ctypes.byref(info), ctypes.sizeof(info)):
+        code = ctypes.get_last_error()
+        raise OSError(code, "GetFileInformationByHandleEx(FileIdInfo) failed")
+    file_id = bytes(info.FileId.Identifier).hex()
+    return f"{int(info.VolumeSerialNumber):016x}:{file_id}"
+
+
+def _windows_handle_is_reparse_point(handle) -> bool:
+    import ctypes
+    from ctypes import wintypes
+
+    class FILE_ATTRIBUTE_TAG_INFO(ctypes.Structure):
+        _fields_ = [
+            ("FileAttributes", wintypes.DWORD),
+            ("ReparseTag", wintypes.DWORD),
+        ]
+
+    get_info = ctypes.WinDLL("kernel32", use_last_error=True).GetFileInformationByHandleEx
+    get_info.argtypes = [
+        wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD
+    ]
+    get_info.restype = wintypes.BOOL
+    info = FILE_ATTRIBUTE_TAG_INFO()
+    # FILE_INFO_BY_HANDLE_CLASS.FileAttributeTagInfo == 9.
+    if not get_info(handle, 9, ctypes.byref(info), ctypes.sizeof(info)):
+        code = ctypes.get_last_error()
+        raise OSError(code, "GetFileInformationByHandleEx(FileAttributeTagInfo) failed")
+    return bool(int(info.FileAttributes) & 0x400)
+
+
+def _windows_open_file_handle(
+    path: Path, *, desired_access: int, share_mode: int
+):
+    import ctypes
+    from ctypes import wintypes
+
+    create_file = ctypes.WinDLL("kernel32", use_last_error=True).CreateFileW
+    create_file.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    ]
+    create_file.restype = wintypes.HANDLE
+    # FILE_FLAG_OPEN_REPARSE_POINT keeps a raced-in reparse object from being
+    # transparently followed after the path-based containment check.
+    handle = create_file(
+        str(path),
+        desired_access,
+        share_mode,
+        None,
+        3,  # OPEN_EXISTING
+        0x00200000,  # FILE_FLAG_OPEN_REPARSE_POINT
+        None,
+    )
+    invalid = ctypes.c_void_p(-1).value
+    if handle == invalid:
+        code = ctypes.get_last_error()
+        raise OSError(code, f"CreateFileW failed for {path}")
+    return handle
+
+
+def _windows_close_file_handle(handle) -> None:
+    import ctypes
+    from ctypes import wintypes
+
+    close_handle = ctypes.WinDLL("kernel32", use_last_error=True).CloseHandle
+    close_handle.argtypes = [wintypes.HANDLE]
+    close_handle.restype = wintypes.BOOL
+    if not close_handle(handle):
+        code = ctypes.get_last_error()
+        raise OSError(code, "CloseHandle failed")
+
+
+def _windows_path_file_identity(path: Path) -> str:
+    """Read one path identity without retaining a lock/share restriction."""
+    if os.name != "nt":
+        raise RuntimeError("windows_identity_requires_windows")
+
+    handle = _windows_open_file_handle(
+        path,
+        desired_access=0x80000000,  # GENERIC_READ
+        share_mode=0x1 | 0x2 | 0x4,  # READ | WRITE | DELETE
+    )
+    try:
+        if _windows_handle_is_reparse_point(handle):
+            raise PathPolicyError("reparse_point_rejected")
+        return _windows_file_identity_from_handle(handle)
+    finally:
+        _windows_close_file_handle(handle)
+
+
+class _WindowsSourceGuard:
+    """Hold the approved source object through target verification + deletion."""
+
+    def __init__(self, path: Path):
+        if os.name != "nt":
+            raise RuntimeError("windows_source_guard_requires_windows")
+        self.path = path
+        self.handle = _windows_open_file_handle(
+            path,
+            # GENERIC_READ | DELETE. New conflicting write/delete/rename opens
+            # are denied while this handle is alive because only READ is shared.
+            desired_access=0x80000000 | 0x00010000,
+            share_mode=0x1,  # FILE_SHARE_READ
+        )
+        try:
+            if _windows_handle_is_reparse_point(self.handle):
+                raise PathPolicyError("reparse_point_rejected")
+            self.file_identity = _windows_file_identity_from_handle(self.handle)
+        except Exception:
+            try:
+                _windows_close_file_handle(self.handle)
+            finally:
+                self.handle = None
+            raise
+
+    def read_bytes(self) -> bytes:
+        if self.handle is None:
+            raise RuntimeError("source_guard_closed")
+
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        get_size = kernel32.GetFileSizeEx
+        get_size.argtypes = [wintypes.HANDLE, ctypes.POINTER(ctypes.c_longlong)]
+        get_size.restype = wintypes.BOOL
+        set_pointer = kernel32.SetFilePointerEx
+        set_pointer.argtypes = [
+            wintypes.HANDLE,
+            ctypes.c_longlong,
+            ctypes.POINTER(ctypes.c_longlong),
+            wintypes.DWORD,
+        ]
+        set_pointer.restype = wintypes.BOOL
+        read_file = kernel32.ReadFile
+        read_file.argtypes = [
+            wintypes.HANDLE,
+            ctypes.c_void_p,
+            wintypes.DWORD,
+            ctypes.POINTER(wintypes.DWORD),
+            ctypes.c_void_p,
+        ]
+        read_file.restype = wintypes.BOOL
+
+        size = ctypes.c_longlong()
+        if not get_size(self.handle, ctypes.byref(size)):
+            code = ctypes.get_last_error()
+            raise OSError(code, "GetFileSizeEx failed")
+        if size.value < 0 or size.value > MAX_TEXT_CHARS * 4:
+            raise PathPolicyError("draft_too_large")
+
+        new_position = ctypes.c_longlong()
+        if not set_pointer(
+            self.handle, ctypes.c_longlong(0), ctypes.byref(new_position), 0
+        ):
+            code = ctypes.get_last_error()
+            raise OSError(code, "SetFilePointerEx failed")
+
+        remaining = int(size.value)
+        chunks = []
+        while remaining:
+            count = min(remaining, 64 * 1024)
+            buffer = ctypes.create_string_buffer(count)
+            read = wintypes.DWORD()
+            if not read_file(
+                self.handle, buffer, count, ctypes.byref(read), None
+            ):
+                code = ctypes.get_last_error()
+                raise OSError(code, "ReadFile failed")
+            if read.value == 0:
+                raise OSError("unexpected_eof")
+            chunks.append(buffer.raw[: read.value])
+            remaining -= int(read.value)
+        return b"".join(chunks)
+
+    def mark_delete(self) -> None:
+        if self.handle is None:
+            raise RuntimeError("source_guard_closed")
+
+        import ctypes
+        from ctypes import wintypes
+
+        class FILE_DISPOSITION_INFO(ctypes.Structure):
+            _fields_ = [("DeleteFile", ctypes.c_ubyte)]
+
+        set_info = ctypes.WinDLL(
+            "kernel32", use_last_error=True
+        ).SetFileInformationByHandle
+        set_info.argtypes = [
+            wintypes.HANDLE,
+            ctypes.c_int,
+            ctypes.c_void_p,
+            wintypes.DWORD,
+        ]
+        set_info.restype = wintypes.BOOL
+        disposition = FILE_DISPOSITION_INFO(1)
+        # FILE_INFO_BY_HANDLE_CLASS.FileDispositionInfo == 4.
+        if not set_info(
+            self.handle, 4, ctypes.byref(disposition), ctypes.sizeof(disposition)
+        ):
+            code = ctypes.get_last_error()
+            raise OSError(code, "SetFileInformationByHandle(FileDispositionInfo) failed")
+
+    def close(self) -> None:
+        if self.handle is None:
+            return
+        handle, self.handle = self.handle, None
+        _windows_close_file_handle(handle)
+
+
 def _candidate_replace_file(target: Path, replacement: Path) -> None:
     """Replace one existing file; use native ReplaceFileW on Windows."""
     if os.name != "nt":
@@ -1047,10 +1294,42 @@ def _execute_disposable_plan_candidate(
             if target.exists() or os.path.lexists(target):
                 return _candidate_result(success=False, error="target_already_exists")
 
-            source_bytes, source_text = _read_utf8(source)
+            source_guard = None
+            if os.name == "nt":
+                try:
+                    source_guard = _WindowsSourceGuard(source)
+                except Exception:
+                    return _candidate_result(
+                        success=False, error="source_handle_unavailable"
+                    )
+                expected_file_id = plan.get("source_file_id")
+                if (not expected_file_id
+                        or source_guard.file_identity != expected_file_id):
+                    try:
+                        source_guard.close()
+                    except Exception:
+                        pass
+                    return _candidate_result(
+                        success=False, error="source_file_id_changed"
+                    )
+                source_bytes = source_guard.read_bytes()
+                try:
+                    source_text = source_bytes.decode("utf-8")
+                except UnicodeDecodeError:
+                    source_guard.close()
+                    return _candidate_result(
+                        success=False, error="utf8_required"
+                    )
+            else:
+                source_bytes, source_text = _read_utf8(source)
+
             if _sha_bytes(source_bytes) != plan.get("source_sha256"):
+                if source_guard is not None:
+                    source_guard.close()
                 return _candidate_result(success=False, error="stale_source_hash")
             if "orion_draft: true" not in source_text or "status: draft" not in source_text:
+                if source_guard is not None:
+                    source_guard.close()
                 return _candidate_result(success=False, error="source_is_not_orion_draft")
 
             recovery_dir = _candidate_recovery_dir(recovery_root, plan_token)
@@ -1087,7 +1366,11 @@ def _execute_disposable_plan_candidate(
                     recovery_dir=str(recovery_dir),
                 )
 
-            latest_source = source.read_bytes()
+            latest_source = (
+                source_guard.read_bytes()
+                if source_guard is not None
+                else source.read_bytes()
+            )
             if _sha_bytes(latest_source) != plan.get("source_sha256"):
                 cleanup_ok = False
                 try:
@@ -1096,6 +1379,12 @@ def _execute_disposable_plan_candidate(
                         cleanup_ok = True
                 except OSError:
                     cleanup_ok = False
+                if source_guard is not None:
+                    try:
+                        source_guard.close()
+                    except Exception:
+                        cleanup_ok = False
+                    source_guard = None
                 return _candidate_result(
                     success=False,
                     error="source_changed_before_delete",
@@ -1105,7 +1394,13 @@ def _execute_disposable_plan_candidate(
                 )
 
             _candidate_checkpoint("move_before_source_delete", failure_hook)
-            source.unlink()
+            if source_guard is not None:
+                source_guard.mark_delete()
+                _candidate_checkpoint("move_after_delete_mark", failure_hook)
+                source_guard.close()
+                source_guard = None
+            else:
+                source.unlink()
             _candidate_checkpoint("move_after_source_delete", failure_hook)
 
             if source.exists() or not target.is_file():
@@ -1146,14 +1441,25 @@ def _execute_disposable_plan_candidate(
 
         return _candidate_result(success=False, error="unsupported_action")
     except FileExistsError:
+        try:
+            if "source_guard" in locals() and source_guard is not None:
+                source_guard.close()
+        except Exception:
+            pass
         return _candidate_result(
             success=False,
             error="exclusive_target_or_recovery_exists",
             mutation_performed=mutation_started,
-            recovery_required=mutation_started,
+            recovery_required=mutation_started or close_failed,
             recovery_dir=str(recovery_dir) if recovery_dir else None,
         )
     except Exception as exc:
+        close_failed = False
+        try:
+            if "source_guard" in locals() and source_guard is not None:
+                source_guard.close()
+        except Exception:
+            close_failed = True
         return _candidate_result(
             success=False,
             error=f"candidate_failure:{type(exc).__name__}",
