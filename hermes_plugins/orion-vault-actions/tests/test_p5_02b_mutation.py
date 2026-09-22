@@ -431,6 +431,219 @@ class DisposableMutationCandidateTests(unittest.TestCase):
         self.assertEqual(inspected["error"], "recovery_backup_hash_mismatch")
         self.assertFalse(inspected["mutation_performed"])
 
+    def test_restore_edit_preview_binds_recovery_current_hash_and_exact_diff(self):
+        note, preview = self._edit_preview()
+        committed = plugin._execute_disposable_plan_candidate(
+            preview["plan_token"]
+        )
+        self.assertTrue(committed["success"])
+        note.write_bytes(b"later\n")
+
+        restore = plugin._preview_disposable_restore_candidate(
+            preview["plan_token"]
+        )
+
+        self.assertTrue(restore["success"])
+        self.assertFalse(restore["mutation_performed"])
+        self.assertEqual(restore["plan"]["action"], "restore_edit")
+        self.assertEqual(
+            restore["plan"]["recovery_id"], preview["plan_token"]
+        )
+        self.assertEqual(
+            restore["plan"]["current_sha256"],
+            plugin._sha_bytes(b"later\n"),
+        )
+        self.assertEqual(
+            restore["plan"]["restore_sha256"],
+            plugin._sha_bytes(b"before\n"),
+        )
+        self.assertIn("-later\n", restore["diff"])
+        self.assertIn("+before\n", restore["diff"])
+        self.assertEqual(note.read_bytes(), b"later\n")
+
+        cached = plugin._lookup_preview(restore["plan_token"])
+        summary = plugin._approval_summary(cached)
+        self.assertIn("historical edit restore preview", summary)
+        self.assertIn(preview["plan_token"], summary)
+        self.assertIn(str(note.resolve(strict=True)), summary)
+        self.assertIn(restore["diff"], summary)
+
+    def test_restore_edit_revalidation_rejects_stale_current_content(self):
+        note, preview = self._edit_preview()
+        committed = plugin._execute_disposable_plan_candidate(
+            preview["plan_token"]
+        )
+        self.assertTrue(committed["success"])
+
+        restore = plugin._preview_disposable_restore_candidate(
+            preview["plan_token"]
+        )
+        self.assertTrue(restore["success"])
+        note.write_bytes(b"newer user edit\n")
+
+        checked = plugin._revalidate_disposable_restore_preview(
+            restore["plan_token"]
+        )
+
+        self.assertFalse(checked["success"])
+        self.assertEqual(checked["error"], "restore_current_state_changed")
+        self.assertEqual(note.read_bytes(), b"newer user edit\n")
+
+    def test_windows_restore_edit_revalidation_rejects_same_bytes_replacement(self):
+        if os.name != "nt":
+            self.skipTest("Windows file identity is the hardening target")
+
+        note, preview = self._edit_preview()
+        committed = plugin._execute_disposable_plan_candidate(
+            preview["plan_token"]
+        )
+        self.assertTrue(committed["success"])
+
+        restore = plugin._preview_disposable_restore_candidate(
+            preview["plan_token"]
+        )
+        self.assertTrue(restore["success"])
+        self.assertIn("target_file_id", restore["plan"])
+
+        replacement = self.vault / "replacement.md"
+        replacement.write_bytes(note.read_bytes())
+        os.replace(replacement, note)
+
+        checked = plugin._revalidate_disposable_restore_preview(
+            restore["plan_token"]
+        )
+
+        self.assertFalse(checked["success"])
+        self.assertEqual(checked["error"], "restore_target_file_id_changed")
+        self.assertEqual(note.read_bytes(), b"after\n")
+
+    def test_restore_preview_rejects_unresolved_prepared_record(self):
+        _note, preview = self._edit_preview()
+
+        def fail(name):
+            if name == "edit_after_replace":
+                raise RuntimeError("leave prepared record after protected effect")
+
+        result = plugin._execute_disposable_plan_candidate(
+            preview["plan_token"], failure_hook=fail
+        )
+        self.assertFalse(result["success"])
+
+        restore = plugin._preview_disposable_restore_candidate(
+            preview["plan_token"]
+        )
+
+        self.assertFalse(restore["success"])
+        self.assertEqual(
+            restore["error"], "historical_restore_requires_committed_record"
+        )
+
+    def test_restore_move_source_preview_is_creation_only_and_exact(self):
+        draft, target, preview = self._draft_preview()
+        source_bytes = draft.read_bytes()
+        committed = plugin._execute_disposable_plan_candidate(
+            preview["plan_token"]
+        )
+        self.assertTrue(committed["success"])
+        target_before = target.read_bytes()
+
+        restore = plugin._preview_disposable_restore_candidate(
+            preview["plan_token"]
+        )
+
+        self.assertTrue(restore["success"])
+        self.assertFalse(restore["mutation_performed"])
+        self.assertEqual(
+            restore["plan"]["action"], "restore_move_source"
+        )
+        self.assertEqual(restore["plan"]["source_state"], "absent")
+        self.assertEqual(
+            restore["plan"]["restore_sha256"],
+            plugin._sha_bytes(source_bytes),
+        )
+        self.assertIn("--- /dev/null", restore["diff"])
+        self.assertIn("+++ inbox/draft.md", restore["diff"])
+        self.assertFalse(draft.exists())
+        self.assertEqual(target.read_bytes(), target_before)
+
+        cached = plugin._lookup_preview(restore["plan_token"])
+        summary = plugin._approval_summary(cached)
+        self.assertIn("historical move-source restore preview", summary)
+        self.assertIn(preview["plan_token"], summary)
+        self.assertIn(str(draft.resolve(strict=False)), summary)
+
+        checked = plugin._revalidate_disposable_restore_preview(
+            restore["plan_token"]
+        )
+        self.assertTrue(checked["success"])
+        self.assertTrue(checked["valid"])
+        self.assertFalse(draft.exists())
+        self.assertEqual(target.read_bytes(), target_before)
+
+    def test_restore_move_source_preview_does_not_require_reference_target_survival(self):
+        draft, target, preview = self._draft_preview()
+        committed = plugin._execute_disposable_plan_candidate(
+            preview["plan_token"]
+        )
+        self.assertTrue(committed["success"])
+        target.unlink()
+
+        restore = plugin._preview_disposable_restore_candidate(
+            preview["plan_token"]
+        )
+
+        self.assertTrue(restore["success"])
+        self.assertEqual(
+            restore["plan"]["reference_target_state"], "absent"
+        )
+        self.assertIsNone(restore["plan"]["reference_target_sha256"])
+        self.assertFalse(draft.exists())
+        self.assertFalse(target.exists())
+
+    def test_restore_move_source_revalidation_rejects_source_appearance(self):
+        draft, _target, preview = self._draft_preview()
+        committed = plugin._execute_disposable_plan_candidate(
+            preview["plan_token"]
+        )
+        self.assertTrue(committed["success"])
+
+        restore = plugin._preview_disposable_restore_candidate(
+            preview["plan_token"]
+        )
+        self.assertTrue(restore["success"])
+        draft.write_bytes(b"someone created this after preview\n")
+
+        checked = plugin._revalidate_disposable_restore_preview(
+            restore["plan_token"]
+        )
+
+        self.assertFalse(checked["success"])
+        self.assertEqual(
+            checked["error"], "restore_source_no_longer_absent"
+        )
+        self.assertEqual(
+            draft.read_bytes(), b"someone created this after preview\n"
+        )
+
+    def test_restore_preview_rejects_corrupt_recovery_backup(self):
+        _note, preview = self._edit_preview()
+        committed = plugin._execute_disposable_plan_candidate(
+            preview["plan_token"]
+        )
+        self.assertTrue(committed["success"])
+        recovery = Path(committed["recovery_dir"])
+        (recovery / "original.bin").write_bytes(b"corrupt")
+
+        restore = plugin._preview_disposable_restore_candidate(
+            preview["plan_token"]
+        )
+
+        self.assertFalse(restore["success"])
+        self.assertEqual(
+            restore["error"], "recovery_backup_hash_mismatch"
+        )
+        self.assertFalse(restore["mutation_performed"])
+
     def test_move_commit_is_exclusive_verified_and_replay_fails(self):
         draft, target, preview = self._draft_preview()
         source_bytes = draft.read_bytes()
