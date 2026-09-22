@@ -503,6 +503,45 @@ P5_02I_I4_OPERATOR_WORKTREE_CLEANED=true
 
 I4 is accepted.
 
+### I5 installed-runtime operator probe
+
+Prepared source pin:
+
+```text
+b5162484cdd19c1b5200e3783244e29c7f6033fe
+scripts/phase5/p5-02i-restart-classification-qualification.py
+```
+
+The probe imports the already-installed hardened P5-02I plugin and uses only
+temporary disposable roots. It requires two real human **ALLOW ONCE** decisions:
+
+1. one committed disposable edit;
+2. one committed disposable move.
+
+After both transactions are durably committed, the probe clears:
+
+- preview cache;
+- preview timestamps;
+- approval-attempt cache;
+- consumed-plan cache;
+- consumed-approval-attempt cache.
+
+That simulates loss of all relevant process-memory authorization state. The
+probe then inspects both recovery records and both receipts from disk and
+requires:
+
+- recovery classification `committed`;
+- receipt state `committed`;
+- valid plan/receipt/recovery correlation;
+- `authorization_reusable=false`;
+- no reconciliation required;
+- final/current classification `committed`;
+- original approval attempt correlation preserved;
+- public apply still fail-closed with `plan_known=false` after the in-memory
+  preview cache is gone.
+
+I5 performs no restore, repair, or automatic recovery action.
+
 ### I5 — restart-safe recovery classification
 
 After one committed edit and one committed move:
