@@ -216,6 +216,52 @@ Create an Orion-marked disposable draft and absent disposable target, then:
 
 A separate DENY attempt must leave source/target/recovery state unchanged.
 
+## I3 observed result — PASS
+
+Operator execution of the installed-runtime disposable move probe completed successfully.
+
+Observed:
+
+- real Hermes human **DENY** control passed;
+- fresh-plan real Hermes **ALLOW ONCE** passed;
+- disposable move committed with `mutation_performed=true`;
+- source SHA-256: `da84eb6e01c935b76368d57baa4dcd504f5081fe4f0188faf45e24e1dd4e8579`;
+- source absent after commit;
+- target bytes exactly matched approved source bytes;
+- Windows source file-ID binding present;
+- recovery classification: `committed`;
+- receipt state: `committed`;
+- `authorization_reusable=false`;
+- replay refused;
+- registered apply remained fail-closed;
+- real vault/inbox untouched;
+- disposable fixture cleaned;
+- Hermes gateway remained stopped;
+- COMPANION config SHA-256 remained exactly `34D9BD9DDC1BC59783CE2DC80D98FBD66D7AA7CC670DDFB875E0D1C78E8462D7`;
+- temporary operator worktree cleaned.
+
+Acceptance markers included:
+
+```text
+P5_02I_MOVE_DENY_CONTROL=PASS
+P5_02I_MOVE_FRESH_ONCE=PASS
+DISPOSABLE_MOVE_MUTATION_PERFORMED=true
+MOVE_SOURCE_ABSENT=true
+MOVE_TARGET_BYTES_MATCH=true
+WINDOWS_SOURCE_FILE_ID_BOUND=true
+MOVE_RECOVERY_CLASSIFICATION=committed
+MOVE_RECEIPT_STATE=committed
+MOVE_AUTHORIZATION_REUSABLE=false
+MOVE_PLAN_REPLAY_REFUSED=true
+REGISTERED_APPLY_FAIL_CLOSED=true
+REAL_VAULT_INBOX_TOUCHED=false
+DISPOSABLE_FIXTURE_CLEANED=true
+P5_02I_MOVE_QUALIFICATION=PASS
+P5_02I_MOVE_OPERATOR_WORKTREE_CLEANED=true
+```
+
+I3 is accepted.
+
 ### I4 — stale-state and evidence-consumption checks
 
 At minimum:
