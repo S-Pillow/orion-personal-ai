@@ -74,7 +74,12 @@ Open the printed loopback URL. Select `orion-hud-main` under **SESSION** and sen
 
 The fixture intentionally exposes only `once` and `deny`; session/always are rejected at the fixture HTTP boundary and persistence callbacks are forbidden as a second safety belt. It imports the installed Hermes approval engine and uses its real gateway approval queue/resolver, but it does not install/discover the Orion plugin, start COMPANION, load a model, call the registered apply handler, invoke the disposable mutator, or touch the live vault/inbox. The approval lifecycle hook is routed directly to the candidate observer in-process so this test covers the candidate's private fresh-once marker without changing the installed plugin set.
 
-A PASS here closes the real Hermes approval-engine -> Orion HUD -> human decision -> fresh-once marker path. It still does not authorize filesystem mutation.
+Windows operator execution of this gate is now **PASS**. The real-Hermes no-write fixture produced:
+- DENY -> `fresh_once=false; mutation_performed=false; note_unchanged=true`;
+- ALLOW ONCE -> `fresh_once=true; mutation_performed=false; note_unchanged=true`;
+- both approval POSTs returned HTTP 200 through the real Orion bridge/HUD path.
+
+This closes the real Hermes approval-engine -> Orion HUD -> human decision -> fresh-once marker path. It still does not authorize filesystem mutation.
 
 ## Blockers before a mutating handler
 
