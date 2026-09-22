@@ -1818,8 +1818,12 @@ def _inspect_recovery_record_at_roots(
 
     action = manifest.get("action")
     if (
-        manifest.get("schema_version") != 1
+        manifest.get("schema_version") not in (1, 2)
         or manifest.get("plan_token") != plan_token
+        or (
+            manifest.get("schema_version") == 2
+            and manifest.get("recovery_id") != plan_token
+        )
         or manifest.get("state") not in ("prepared", "committed")
         or action not in (
             "edit_note", "move_draft", "restore_edit", "restore_move_source"
@@ -2074,18 +2078,16 @@ def _read_disposable_recovery_backup(
     return backup, backup.read_bytes()
 
 
-def _preview_disposable_restore_candidate(recovery_id: str) -> Dict[str, Any]:
-    """Build a historical restore preview without mutating any file.
-
-    Only already-committed recovery records are eligible. Prepared/unresolved
-    records belong to recovery-resolution flows, not historical restore.
-    """
-    try:
-        vault_root, inbox_root, recovery_root = _candidate_disposable_roots()
-    except Exception as exc:
-        return _candidate_result(success=False, error=str(exc))
-
-    inspected = _inspect_disposable_recovery_candidate(recovery_id)
+def _preview_restore_candidate_at_roots(
+    vault_root: Path,
+    inbox_root: Path,
+    recovery_root: Path,
+    recovery_id: str,
+) -> Dict[str, Any]:
+    """Build a historical restore preview at already-validated roots."""
+    inspected = _inspect_recovery_record_at_roots(
+        vault_root, inbox_root, recovery_root, recovery_id
+    )
     if not inspected.get("success"):
         return _candidate_result(
             success=False,
@@ -2286,8 +2288,45 @@ def _preview_disposable_restore_candidate(recovery_id: str) -> Dict[str, Any]:
         )
 
 
-def _revalidate_disposable_restore_preview(plan_token: str) -> Dict[str, Any]:
-    """Read-only final-state check for a previously built restore preview."""
+def _preview_disposable_restore_candidate(recovery_id: str) -> Dict[str, Any]:
+    try:
+        vault_root, inbox_root, recovery_root = _candidate_disposable_roots()
+    except Exception as exc:
+        return _candidate_result(success=False, error=str(exc))
+    return _preview_restore_candidate_at_roots(
+        vault_root, inbox_root, recovery_root, recovery_id
+    )
+
+
+def _preview_production_restore_candidate(
+    recovery_id: str,
+    *,
+    local_fs_probe=None,
+    acl_probe=None,
+    access_probe=None,
+) -> Dict[str, Any]:
+    preflight = _validate_production_roots(
+        local_fs_probe=local_fs_probe,
+        acl_probe=acl_probe,
+        access_probe=access_probe,
+    )
+    if not preflight.get("success"):
+        return preflight
+    return _preview_restore_candidate_at_roots(
+        Path(preflight["vault_root"]),
+        Path(preflight["inbox_root"]),
+        Path(preflight["recovery_root"]),
+        recovery_id,
+    )
+
+
+def _revalidate_restore_preview_at_roots(
+    plan_token: str,
+    vault_root: Path,
+    inbox_root: Path,
+    recovery_root: Path,
+) -> Dict[str, Any]:
+    """Read-only final-state check for a restore preview at validated roots."""
     plan = _lookup_preview(plan_token)
     if plan is None:
         return _candidate_result(success=False, error="unknown_or_expired_plan")
@@ -2296,12 +2335,13 @@ def _revalidate_disposable_restore_preview(plan_token: str) -> Dict[str, Any]:
 
     try:
         _approval_summary(plan)
-        vault_root, inbox_root, recovery_root = _candidate_disposable_roots()
     except Exception as exc:
         return _candidate_result(success=False, error=str(exc))
 
     recovery_id = plan.get("recovery_id")
-    inspected = _inspect_disposable_recovery_candidate(recovery_id)
+    inspected = _inspect_recovery_record_at_roots(
+        vault_root, inbox_root, recovery_root, recovery_id
+    )
     if (
         not inspected.get("success")
         or inspected.get("manifest_state") != "committed"
@@ -2405,6 +2445,16 @@ def _revalidate_disposable_restore_preview(plan_token: str) -> Dict[str, Any]:
         return _candidate_result(
             success=False, error=f"restore_revalidation_error:{type(exc).__name__}"
         )
+
+
+def _revalidate_disposable_restore_preview(plan_token: str) -> Dict[str, Any]:
+    try:
+        vault_root, inbox_root, recovery_root = _candidate_disposable_roots()
+    except Exception as exc:
+        return _candidate_result(success=False, error=str(exc))
+    return _revalidate_restore_preview_at_roots(
+        plan_token, vault_root, inbox_root, recovery_root
+    )
 
 
 def _utc_now_iso() -> str:
@@ -2632,7 +2682,7 @@ def _inspect_receipt_at_roots(
     plan = receipt.get("plan")
     approval = receipt.get("approval")
     if (
-        receipt.get("schema_version") != 1
+        receipt.get("schema_version") not in (1, 2)
         or receipt.get("receipt_type") != "orion_vault_action"
         or receipt.get("recovery_id") != recovery_id
         or receipt.get("plan_token") != recovery_id
