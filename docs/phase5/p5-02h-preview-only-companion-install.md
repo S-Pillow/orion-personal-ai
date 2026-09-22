@@ -439,6 +439,22 @@ Repository cross-check also confirmed that `scripts/operator/Start-Orion.ps1` at
 
 H4 should therefore use the repository operator Start script rather than the stale versioned v2.7.4 wrapper that enforces a clean Hermes checkout.
 
+## H4 observed result — PASS
+
+Operator H4 evidence:
+
+- repository operator `scripts/operator/Start-Orion.ps1` started Orion successfully;
+- output included `ORION READY`;
+- Hermes API health returned HTTP 200;
+- gateway process detected running (PID 14616);
+- `orion-vault-actions` remained enabled as a user plugin;
+- installed-location plugin doctor remained PASS at **4 tools / 2 hooks**;
+- live COMPANION config SHA-256 remained exactly `34D9BD9DDC1BC59783CE2DC80D98FBD66D7AA7CC670DDFB875E0D1C78E8462D7`;
+- P4-04A compatibility patch remained verified and intact;
+- no production recovery root was created and no real vault/inbox mutation was intentionally performed by the lifecycle step.
+
+H4 lifecycle/load is accepted.
+
 ## Gate H4 — lifecycle/load
 
 Use the accepted installed one-shot Orion operator lifecycle:
