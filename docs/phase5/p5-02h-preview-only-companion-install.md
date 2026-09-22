@@ -568,6 +568,24 @@ Required installed-runtime checks:
 - no real vault/inbox content changes;
 - no unexpected extra approval/mutation path appears.
 
+## Post-H4.5 manual-off restoration — PASS
+
+Operator shutdown through the accepted repository Stop Orion path completed successfully:
+
+- Hermes gateway drained and stopped cleanly;
+- `hermes -p companion gateway status` reports no gateway process;
+- `http://127.0.0.1:8642/health` is unreachable;
+- COMPANION config SHA-256 remains exactly `34D9BD9DDC1BC59783CE2DC80D98FBD66D7AA7CC670DDFB875E0D1C78E8462D7`;
+- `orion-vault-actions` remains enabled;
+- installed-location doctor remains PASS at **4 tools / 2 hooks**;
+- operator marker `P5_02H_MANUAL_OFF_RESTORED=true` was emitted.
+
+Stop Orion also reported `Ollama: stopping Orion-owned server PID 42040`. This is compatible with the repository launcher ownership model when a prior launcher session already owns the recorded Ollama PID; it is recorded as observed lifecycle behavior rather than inferred from the H4 “already available” line.
+
+The preview-only install remains in place while runtime is returned to manual-off.
+
+One acceptance item remains before closing P5-02H: exercise installed preview-edit, preview-move, and destination-recommendation handlers against disposable temporary roots and verify byte-for-byte fixture stability plus known-plan apply refusal. No live vault/inbox paths may be used.
+
 ## Gate H5 — rollback
 
 Rollback triggers include:
