@@ -4,16 +4,27 @@ This directory contains the source-controlled native Hermes plugin planned for O
 
 ## Current status
 
-P5-01 source-only contract accepted on 2026-09-21. The plugin is **not installed or enabled** in the live COMPANION profile by this acceptance.
+P5-01 through P5-02E source/disposable safety work is accepted through the current Windows baseline. The plugin is still **not installed or enabled** in the live COMPANION profile, and no protected real-vault mutation is registered.
 
-The current implementation exposes:
+Current accepted evidence:
+
+- `test_p5*.py`: **86/86 passed** on Windows;
+- installed-Hermes dispatcher probe: **2/2 passed**;
+- plugin doctor: **PASS**, 4 tools / 2 hooks;
+- exact HUD approval presentation and real Hermes fresh-once no-write approval path accepted;
+- Windows move identity/held-handle hardening accepted;
+- recovery reconciliation, restore preview/revalidation, restart-safe non-authorizing receipts, and private disposable restore transactions accepted.
+
+The current registered implementation exposes:
 
 - `orion_vault_preview_edit` — read-only edit preview;
 - `orion_vault_preview_move_draft` — read-only inbox-to-vault move preview;
 - `orion_vault_recommend_destination` — read-only iai-backed destination recommendation;
-- `orion_vault_apply_plan` — fail-closed placeholder used only to prove Hermes approval interception.
+- `orion_vault_apply_plan` — fail-closed placeholder.
 
-The apply handler always returns `p5_01_mutation_not_authorized`. No protected filesystem mutation is implemented in P5-01.
+The apply handler still always returns `p5_01_mutation_not_authorized`. Private disposable edit/move/restore executors exist only for source qualification and are not registered.
+
+Production activation readiness is reviewed in `docs/phase5/p5-02f-production-activation-readiness-review.md`. Preview-only installation may be considered only under a separate explicit owner authorization. Live mutation remains NO-GO until the P5-02F blockers are closed.
 
 ## P5-02A source candidate
 
