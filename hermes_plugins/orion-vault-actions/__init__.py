@@ -1884,6 +1884,38 @@ def _commit_candidate_receipt(
     _write_candidate_manifest(path, payload)
 
 
+def _receipt_approval_message_matches_plan(
+    plan: Dict[str, Any], message: str
+) -> bool:
+    """Bind persisted approval text back to the immutable public plan."""
+    action = plan.get("action")
+    if action == "edit_note":
+        prefix = (
+            "Approve Orion vault edit preview? "
+            f"Target: {plan.get('target_canonical_path')}. "
+            f"Original SHA-256: {plan.get('original_sha256')}. "
+            f"Proposed SHA-256: {plan.get('proposed_sha256')}.\n"
+            "Exact unified diff:\n"
+        )
+        suffix = "\nCurrent apply handler remains fail-closed and will not mutate."
+    elif action == "move_draft":
+        prefix = (
+            "Approve Orion draft move preview? "
+            f"Source: {plan.get('source_canonical_path')}. "
+            f"Target: {plan.get('target_canonical_path')}. "
+            f"Source SHA-256: {plan.get('source_sha256')}.\n"
+            "Exact unified diff:\n"
+        )
+        suffix = "\nCurrent apply handler remains fail-closed and will not mutate."
+    else:
+        return False
+
+    if not message.startswith(prefix) or not message.endswith(suffix):
+        return False
+    diff = message[len(prefix):len(message) - len(suffix)]
+    return _sha_text(diff) == plan.get("diff_sha256")
+
+
 def _inspect_disposable_receipt_candidate(recovery_id: str) -> Dict[str, Any]:
     """Read-only restart-safe validation of a durable correlation receipt."""
     try:
@@ -1945,6 +1977,17 @@ def _inspect_disposable_receipt_candidate(recovery_id: str) -> Dict[str, Any]:
         )
         or _sha_text(approval.get("approval_message", ""))
             != approval.get("approval_message_sha256")
+        or not _receipt_approval_message_matches_plan(
+            plan, approval.get("approval_message", "")
+        )
+        or (
+            receipt.get("state") == "committed"
+            and receipt.get("final_classification") != "committed"
+        )
+        or (
+            receipt.get("state") == "prepared"
+            and receipt.get("final_classification") is not None
+        )
     ):
         return _candidate_result(success=False, error="receipt_invalid")
 
