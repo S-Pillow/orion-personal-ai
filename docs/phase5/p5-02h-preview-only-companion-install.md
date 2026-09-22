@@ -329,6 +329,23 @@ Disposition: procedural path mismatch only; no runtime/plugin failure and no vau
 
 Before retrying H4, read the actual `Start Orion.lnk` target, arguments, and working directory and confirm the versioned publication files exist. Do not reinstall operator controls.
 
+## H4 launcher resolution — PASS
+
+Read-only operator inspection confirmed:
+
+- versioned publication exists at `C:\Users\spill\AppData\Local\Orion\operator\versions\2.7.4-candidate1`;
+- `Start-Orion.ps1` is present;
+- desktop shortcut target is `C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`;
+- desktop shortcut arguments are exactly:
+
+```text
+-NoProfile -ExecutionPolicy Bypass -File "C:\Users\spill\AppData\Local\Orion\operator\versions\2.7.4-candidate1\Start-Orion.ps1"
+```
+
+- shortcut working directory is the same versioned publication directory.
+
+Therefore the corrected H4 retry must mirror this exact installed invocation contract. No operator reinstall or lifecycle-script modification is required.
+
 ## Gate H4 — lifecycle/load
 
 Use the accepted installed one-shot Orion operator lifecycle:
