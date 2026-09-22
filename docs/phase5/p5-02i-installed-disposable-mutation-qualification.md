@@ -1,6 +1,6 @@
 # P5-02I Installed-Runtime Disposable Mutation Qualification
 
-Status: **OWNER AUTHORIZED / I1-I3 PASS / I4 SOURCE HARDENING VERIFIED / INSTALLED UPDATE AUTHORIZATION REQUIRED**
+Status: **COMPLETE / INSTALLED-RUNTIME DISPOSABLE MUTATION QUALIFIED / PRODUCTION MUTATION STILL DISABLED AND UNAUTHORIZED**
 
 Base: P5-02H preview-only COMPANION install accepted on 2026-09-22.
 
@@ -746,6 +746,111 @@ The post-mutation case must prove:
 
 The disposable fixture is removed only after both classifications and all
 evidence are captured. On failure the fixture is preserved.
+
+## I7 observed result — PASS
+
+Installed-runtime I7 controlled failure classification completed successfully.
+
+Observed pre-mutation interruption:
+
+- operation returned unsuccessful;
+- protected bytes remained unchanged;
+- durable recovery + receipt preparation existed;
+- restart-safe recovery classification was `prepared_no_effect`;
+- receipt state remained `prepared`;
+- reconciliation was required;
+- approval remained non-reusable.
+
+Observed post-mutation interruption:
+
+- operation returned unsuccessful with `mutation_performed=true`;
+- proposed bytes were present after protected replacement;
+- restart-safe recovery classification was `applied_unfinalized`;
+- receipt state remained `prepared`;
+- reconciliation was required;
+- `recovery_required=true`;
+- no automatic retry or repair occurred;
+- classification was derived after clearing all relevant in-memory state.
+
+Global acceptance conditions also remained true:
+
+- `authorization_reusable=false`;
+- registered apply remained fail-closed;
+- real vault/inbox untouched;
+- disposable fixture cleaned only after evidence capture;
+- COMPANION config SHA-256 remained
+  `34D9BD9DDC1BC59783CE2DC80D98FBD66D7AA7CC670DDFB875E0D1C78E8462D7`;
+- installed `__init__.py` SHA-256 remained
+  `FCFA3DDC4A86B99691FB003CF4421027C5CC3CA22AC99ADBCCEEE8D3B3C7B5DA`;
+- Hermes gateway remained stopped;
+- operator worktree cleaned.
+
+Acceptance markers:
+
+```text
+I7_PRE_FAILURE_RESULT_REFUSED=true
+I7_PRE_FAILURE_PROTECTED_BYTES_UNCHANGED=true
+I7_PRE_FAILURE_RECOVERY_CLASSIFICATION=prepared_no_effect
+I7_PRE_FAILURE_RECEIPT_STATE=prepared
+I7_PRE_FAILURE_RECONCILIATION_REQUIRED=true
+I7_POST_FAILURE_MUTATION_PERFORMED=true
+I7_POST_FAILURE_RECOVERY_CLASSIFICATION=applied_unfinalized
+I7_POST_FAILURE_RECEIPT_STATE=prepared
+I7_POST_FAILURE_RECONCILIATION_REQUIRED=true
+I7_POST_FAILURE_RECOVERY_REQUIRED=true
+I7_NO_AUTO_RETRY_OR_REPAIR=true
+I7_RESTART_CLASSIFICATION_DISK_DERIVED=true
+I7_AUTHORIZATION_REUSABLE=false
+I7_REGISTERED_APPLY_FAIL_CLOSED=true
+I7_REAL_VAULT_INBOX_TOUCHED=false
+DISPOSABLE_FIXTURE_CLEANED_AFTER_EVIDENCE=true
+P5_02I_I7_QUALIFICATION=PASS
+P5_02I_I7_OPERATOR_WORKTREE_CLEANED=true
+```
+
+I7 is accepted.
+
+## P5-02I completion
+
+P5-02I installed-runtime disposable mutation qualification is complete.
+
+Accepted installed-runtime evidence now covers:
+
+- I1 disposable guardrails and live-root overlap refusal;
+- I2 disposable edit with real human DENY and fresh ALLOW ONCE;
+- I3 disposable move with Windows source file-ID binding;
+- I4 stale-state refusal, approval consumption, and non-authorizing receipts;
+- I5 restart-safe disk-only recovery/receipt classification;
+- I6 historical edit and move-source restore as new independently approved transactions;
+- I7 controlled pre-mutation and post-mutation interruption classification.
+
+The installed COMPANION plugin is the verified P5-02I source pin:
+
+```text
+ce676a263f3dd2c18a7d7700b17a6023c6845904
+```
+
+The preserved rollback copy for the prior P5-02H installation remains at:
+
+```text
+C:\Users\spill\AppData\Local\hermes\profiles\companion\orion\backups\p5-02i-plugin-update-20260922-034043
+```
+
+This completion does **not** authorize or activate production mutation.
+
+Still prohibited / not performed:
+
+- `ORION_P5_MUTATION_MODE=mutation_enabled`;
+- production recovery-root creation/configuration;
+- production recovery-root ACL changes;
+- registration of the private production executor;
+- real `C:\Personal\Me` mutation;
+- real `C:\Personal\Orion-Inbox` mutation;
+- merge/deploy;
+- Hermes/Ollama/iai upgrade.
+
+The next production-facing gate must be separately scoped and explicitly
+authorized. P5-02I completion alone does not widen the live mutation boundary.
 
 ### I7 — controlled failure checkpoints
 
