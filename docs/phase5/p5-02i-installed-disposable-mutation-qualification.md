@@ -602,6 +602,42 @@ P5_02I_I5_OPERATOR_WORKTREE_CLEANED=true
 
 I5 is accepted.
 
+### I6 installed-runtime operator probe
+
+Prepared source pin:
+
+```text
+da372a6b181482362720ccec4781633cdada8302
+scripts/phase5/p5-02i-historical-restore-qualification.py
+```
+
+The probe imports the already-installed hardened P5-02I plugin and uses only
+temporary disposable roots. It requires six real human **ALLOW ONCE** decisions:
+
+1. committed edit origin;
+2. committed move origin;
+3. historical edit restore;
+4. historical move-source restore;
+5. a second committed edit origin used only for stale-restore testing;
+6. stale historical edit restore approval that must be consumed when post-
+   approval state changes.
+
+The probe requires:
+
+- originating edit/move approval evidence cannot authorize a restore;
+- each successful restore has a new plan token, new approval attempt, new
+  recovery transaction, and committed receipt;
+- historical edit restore returns the exact original bytes;
+- historical move-source restore recreates only the disposable inbox source and
+  leaves the disposable vault target byte-for-byte unchanged;
+- origin recovery records remain unchanged by restore;
+- stale restore after ALLOW ONCE refuses before mutation;
+- restoring the stale fixture to its prior bytes does not revive the consumed
+  restore approval;
+- registered apply remains fail-closed;
+- real vault/inbox remain untouched;
+- fixture cleanup occurs only on PASS.
+
 ### I6 — disposable historical restore
 
 Using the committed disposable records only:
