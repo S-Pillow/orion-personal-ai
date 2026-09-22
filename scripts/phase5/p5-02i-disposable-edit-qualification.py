@@ -109,7 +109,17 @@ def expect_error(fn, expected: str) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("plugin_dir", type=Path)
+    parser.add_argument(
+        "--fixture-parent",
+        type=Path,
+        required=True,
+        help="Existing neutral parent for disposable roots (for example D:\\Orion)",
+    )
     args = parser.parse_args()
+
+    fixture_parent = args.fixture_parent.resolve()
+    if not fixture_parent.is_dir():
+        raise RuntimeError(f"fixture parent missing: {fixture_parent}")
 
     if gateway_is_listening():
         raise RuntimeError(
@@ -152,7 +162,12 @@ def main() -> int:
     ):
         raise RuntimeError("production mutation mode is not disabled")
 
-    fixture = Path(tempfile.mkdtemp(prefix="orion-p5-02i-edit-"))
+    fixture = Path(
+        tempfile.mkdtemp(
+            prefix="orion-p5-02i-edit-",
+            dir=str(fixture_parent),
+        )
+    )
     passed = False
     print(f"DISPOSABLE_FIXTURE={fixture}", flush=True)
 
