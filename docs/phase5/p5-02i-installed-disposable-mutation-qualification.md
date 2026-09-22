@@ -705,6 +705,48 @@ P5_02I_I6_OPERATOR_WORKTREE_CLEANED=true
 
 I6 is accepted.
 
+### I7 installed-runtime operator probe
+
+Prepared source pin:
+
+```text
+3ec68836724ffa2ef795fc6e9e624f0bb8daca21
+scripts/phase5/p5-02i-failure-classification-qualification.py
+```
+
+The probe imports the already-installed hardened P5-02I plugin and uses only
+temporary disposable roots. It requires two real human **ALLOW ONCE** decisions:
+
+1. pre-mutation failure after durable recovery/receipt preparation but before
+   protected edit replacement;
+2. post-mutation failure after protected edit replacement but before recovery
+   manifest / receipt finalization.
+
+The pre-mutation case must prove:
+
+- result refused / unsuccessful;
+- `mutation_performed=false`;
+- target bytes unchanged;
+- prepared recovery + receipt exist;
+- restart-safe recovery classification is `prepared_no_effect`;
+- receipt remains `prepared`, reconciliation-required, and non-authorizing.
+
+The post-mutation case must prove:
+
+- result unsuccessful but `mutation_performed=true`;
+- proposed bytes are present;
+- recovery is required;
+- manifest + receipt remain `prepared`;
+- after clearing all in-memory plan/approval/consumption state, disk inspection
+  classifies the transaction as `applied_unfinalized`;
+- receipt remains correlation-valid, reconciliation-required, and
+  `authorization_reusable=false`;
+- no automatic retry or repair is attempted;
+- public apply remains fail-closed with no live preview authority.
+
+The disposable fixture is removed only after both classifications and all
+evidence are captured. On failure the fixture is preserved.
+
 ### I7 — controlled failure checkpoints
 
 Exercise at least one pre-mutation and one post-mutation failure checkpoint on disposable files and require restart-safe classification:
