@@ -1537,9 +1537,18 @@ def _preview_disposable_restore_candidate(recovery_id: str) -> Dict[str, Any]:
 
             target_rel = inspected.get("target_relative_path")
             target_path, _ = _resolve_under_root(
-                vault_root, target_rel, must_exist=True
+                vault_root, target_rel, allow_missing_leaf=True
             )
-            target_sha = _sha_bytes(target_path.read_bytes())
+            if target_path.exists():
+                if not target_path.is_file():
+                    return _candidate_result(
+                        success=False, error="restore_reference_target_not_file"
+                    )
+                target_sha = _sha_bytes(target_path.read_bytes())
+                target_state = "present"
+            else:
+                target_sha = None
+                target_state = "absent"
             diff = _unified_diff(
                 "",
                 backup_text,
@@ -1564,8 +1573,9 @@ def _preview_disposable_restore_candidate(recovery_id: str) -> Dict[str, Any]:
                 "recovery_backup_sha256": backup_sha,
                 "reference_target_relative_path": target_rel,
                 "reference_target_canonical_path": str(
-                    target_path.resolve(strict=True)
+                    target_path.resolve(strict=False)
                 ),
+                "reference_target_state": target_state,
                 "reference_target_sha256": target_sha,
                 "diff_sha256": _sha_text(diff),
             }
