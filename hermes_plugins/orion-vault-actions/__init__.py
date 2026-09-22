@@ -833,6 +833,7 @@ def _fresh_once_approval_evidence(
             "plan_token": plan_token,
             "choice": "once",
             "surface": pending["surface"],
+            "approval_message": message,
             "approval_message_sha256": _sha_text(message),
         }
     except Exception:
@@ -1788,12 +1789,16 @@ def _validate_candidate_approval_evidence(
         raise ValueError("approval_evidence_invalid")
 
     message = _approval_summary(plan)
-    if evidence.get("approval_message_sha256") != _sha_text(message):
+    if (
+        evidence.get("approval_message") != message
+        or evidence.get("approval_message_sha256") != _sha_text(message)
+    ):
         raise ValueError("approval_evidence_message_mismatch")
     return {
         "attempt_id": evidence["attempt_id"],
         "surface": evidence["surface"],
         "choice": "once",
+        "approval_message": message,
         "approval_message_sha256": evidence["approval_message_sha256"],
         "authorization_reusable": False,
     }
@@ -1928,6 +1933,9 @@ def _inspect_disposable_receipt_candidate(recovery_id: str) -> Dict[str, Any]:
         or approval.get("choice") != "once"
         or approval.get("surface") not in ("cli", "gateway")
         or approval.get("authorization_reusable") is not False
+        or not isinstance(approval.get("approval_message"), str)
+        or len(approval.get("approval_message", "").encode("utf-8"))
+            > MAX_APPROVAL_MESSAGE_CHARS
         or not re.fullmatch(
             r"[0-9a-f]{32}", str(approval.get("attempt_id") or "")
         )
@@ -1935,6 +1943,8 @@ def _inspect_disposable_receipt_candidate(recovery_id: str) -> Dict[str, Any]:
             r"[0-9a-f]{64}",
             str(approval.get("approval_message_sha256") or ""),
         )
+        or _sha_text(approval.get("approval_message", ""))
+            != approval.get("approval_message_sha256")
     ):
         return _candidate_result(success=False, error="receipt_invalid")
 
@@ -1976,8 +1986,11 @@ def _inspect_disposable_receipt_candidate(recovery_id: str) -> Dict[str, Any]:
         plan_token=recovery_id,
         action=plan.get("action"),
         receipt_state=receipt.get("state"),
+        receipt_finalized=receipt.get("state") == "committed",
+        receipt_reconciliation_required=receipt.get("state") != "committed",
         final_classification=receipt.get("final_classification"),
         current_classification=recovery.get("classification"),
+        approval_message_sha256=approval.get("approval_message_sha256"),
         approval_attempt_id=approval.get("attempt_id"),
         approval_surface=approval.get("surface"),
         approval_choice=approval.get("choice"),
