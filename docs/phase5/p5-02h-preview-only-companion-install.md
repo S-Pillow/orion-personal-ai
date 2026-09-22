@@ -161,6 +161,25 @@ Create a timestamped backup below the existing COMPANION `orion\backups` directo
 
 Before any install mutation, fail closed if either `ORION_P5_MUTATION_MODE` or `ORION_P5_PRODUCTION_RECOVERY_ROOT` is already set in the current process or declared in the profile `.env`. For this preview-only gate the desired state is to leave both absent, which makes source mutation mode default to `disabled`.
 
+## H2 first staging attempt — SAFE FAILURE
+
+Observed operator result:
+
+- rollback backup created at `C:\Users\spill\AppData\Local\hermes\profiles\companion\orion\backups\p5-02h-preview-20260922-014521`;
+- captured live config SHA-256: `13C7CBA513A260659A2859A6F60289483C657DDBC0686E9E1EB2EEBF156A504D`;
+- temporary worktree creation failed because the local Git object database had not fetched pinned commit `b8cbb63c3db20c38543220956d3f776bffecf432`;
+- cleanup left `PLUGIN_STAGED=False`;
+- installed-location doctor correctly reported plugin path not found;
+- compact user-plugin list remained empty;
+- `plugins show orion-vault-actions` reported not found;
+- managed gateway remained stopped.
+
+No COMPANION config change, plugin enablement, or vault/inbox mutation occurred.
+
+The standalone `finally` parse error was an interactive PowerShell statement-boundary issue after the failed `try/catch`; there was no staging directory to remove and no live-state consequence.
+
+Remediation: fetch the exact branch/commit first, verify the 40-character SHA resolves, then perform staging with cleanup expressed without a detached interactive `finally` block.
+
 ## Gate H2 — install exact pinned plugin while disabled
 
 Do not use `hermes plugins install` against the Orion monorepo because the accepted plugin is a repository subdirectory and the observed installer exposes no subdirectory selector.
