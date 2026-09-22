@@ -308,6 +308,46 @@ H3.5 is accepted. The next step is the first lifecycle/load gate. No real vault/
 
 ## Gate H4 — lifecycle/load
 
+Use the accepted installed one-shot Orion operator lifecycle:
+
+```text
+%LOCALAPPDATA%\Orion\operator\Start-Orion.ps1
+```
+
+The accepted source behavior:
+
+- ensures Ollama is available;
+- starts Hermes profile `companion` using `hermes -p companion gateway start`;
+- waits for `http://127.0.0.1:8642/health`;
+- records Orion launcher ownership for Ollama;
+- exits after the gateway is ready;
+- does not change Scheduled Task definitions or login startup;
+- leaves iai under Hermes/iai demand-wake ownership.
+
+Before starting:
+
+- require live config SHA-256 `34D9BD9DDC1BC59783CE2DC80D98FBD66D7AA7CC670DDFB875E0D1C78E8462D7`;
+- require `ORION_P5_MUTATION_MODE` absent from process/profile env;
+- require `ORION_P5_PRODUCTION_RECOVERY_ROOT` absent from process/profile env;
+- require installed plugin doctor PASS at 4 tools / 2 hooks;
+- require gateway currently stopped.
+
+H4 lifecycle PASS criteria:
+
+- Start Orion exits successfully;
+- Hermes health endpoint returns HTTP 200;
+- `hermes -p companion gateway status` reports a running gateway process;
+- Orion plugin remains enabled;
+- installed-location doctor remains 4 tools / 2 hooks;
+- live config SHA-256 remains unchanged from the H3.5 value;
+- no production recovery root appears;
+- no real vault/inbox content is intentionally mutated by this lifecycle step.
+
+Do not perform an apply-tool invocation in the lifecycle/load sub-step. First establish that the enabled plugin loads into the accepted runtime without destabilizing the gateway. The no-write registered-tool smoke follows as a separate H4.5 step.
+
+Do not enable login startup.
+
+
 Use only the accepted manual-off Hermes lifecycle.
 
 Do not enable login startup.
