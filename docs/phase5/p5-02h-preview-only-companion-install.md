@@ -379,6 +379,27 @@ exit $LASTEXITCODE
 
 The earlier failure came from the default parameter expression evaluating `Join-Path $PSScriptRoot ...` before `$PSScriptRoot` was usable in that invocation context. No source/runtime patch is needed. The H4 retry must pass the installed `orion-config.json` explicitly.
 
+## H4 third lifecycle attempt — SAFE FAILURE / ACCEPTED LIFECYCLE DRIFT IDENTIFIED
+
+Observed operator result:
+
+- versioned v2.7.4 launcher was invoked with explicit installed `orion-config.json`;
+- launcher refused before runtime start with `HERMES_CHECKOUT_NOT_CLEAN`;
+- Hermes health remained unavailable;
+- gateway remained stopped;
+- Orion plugin remained enabled;
+- installed plugin doctor remained PASS at **4 tools / 2 hooks**;
+- live config SHA-256 remained exactly `34D9BD9DDC1BC59783CE2DC80D98FBD66D7AA7CC670DDFB875E0D1C78E8462D7`.
+
+Repository evidence explains a likely accepted incompatibility:
+
+- Phase 1 v2.7.4 lifecycle package enforces a clean Hermes checkout at pinned commit `5fc308a70719a83cccdbba4c0e39c23f5a8239d5`;
+- accepted P4-04A later applies a bounded source patch to that pinned Hermes checkout at `gateway/platforms/api_server.py`;
+- P4-04A leaves deterministic sidecars `api_server.py.orion-p4-04a.bak` and `api_server.py.orion-p4-04a.json`;
+- P4-04A runtime acceptance explicitly records a successful normal restart through repository `scripts/operator/Start-Orion.ps1` after the patch was applied.
+
+Therefore do not reset/clean/stash/rollback Hermes merely to satisfy the older v2.7.4 clean-checkout invariant. First classify the current Hermes checkout read-only and verify that any dirtiness is exactly the accepted P4-04A patch state.
+
 ## Gate H4 — lifecycle/load
 
 Use the accepted installed one-shot Orion operator lifecycle:
