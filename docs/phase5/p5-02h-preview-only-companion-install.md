@@ -134,6 +134,21 @@ H0 is accepted. No live profile file was changed and no gateway process was star
 
 Before H1/H2, perform one additional read-only CLI/config-shape check so installation uses Hermes-native plugin management where supported and the config backup/edit is targeted rather than guessed.
 
+## H0.5 plugin/config shape — PASS
+
+Additional operator evidence:
+
+- `hermes plugins list` reports plugins are opt-in and supports compact user-plugin listing;
+- install supports immutable `--ref COMMIT_SHA`, but the CLI exposes no repository-subdirectory selector;
+- enable supports `--no-allow-tool-override`;
+- `plugins show <name>` is available;
+- the current live `config.yaml` contains no `plugins:` block;
+- the observed config SHA-256 begins `13C7CBA5...` (full value will be captured locally in H1 metadata).
+
+Because `orion-vault-actions` is a subdirectory of the Orion monorepo, P5-02H will not use the Git-repository installer against the monorepo root. The authorized install method is a rollback-backed copy of only the pinned source plugin directory into the COMPANION user-plugin directory, followed by Hermes-native doctor/show/enable operations.
+
+The first mutating step will still keep the plugin disabled while installed-location doctor/show/capability checks run.
+
 ## Gate H1 — rollback capture
 
 H1 is intentionally deferred until H0 output identifies the live config filename(s) and current plugin inventory.
