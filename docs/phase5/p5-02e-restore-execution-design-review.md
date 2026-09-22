@@ -1,6 +1,6 @@
 # P5-02E Restore Execution Design Review
 
-Status: **DESIGN COMPLETE / PRIVATE DISPOSABLE EXECUTOR CANDIDATE / WINDOWS VERIFICATION PENDING / LIVE RESTORE PROHIBITED**
+Status: **DESIGN COMPLETE / PRIVATE DISPOSABLE EXECUTOR WINDOWS-VERIFIED / LIVE RESTORE PROHIBITED**
 Date: 2026-09-22
 Depends on: P5-02A approval integrity, P5-02B Windows mutation hardening, P5-02C recovery + restore preview, P5-02D restart-safe receipts
 
@@ -471,7 +471,16 @@ Current expected `test_p5*.py` discovery is **86 tests**:
 - 36 P5-02B/P5-02C/P5-02D;
 - 24 P5-02E restore-execution tests.
 
-The accepted Windows baseline remains **62/62 + dispatcher 2/2 + plugin doctor PASS**. The 86-test private restore-executor delta is pending fresh Windows verification.
+Windows operator verification is now **PASS** for the private restore-execution delta:
+
+- full `test_p5*.py`: **86/86 passed** in 1.850s;
+- installed-Hermes dispatcher probe: **2/2 passed** in 0.074s;
+- plugin doctor: **PASS**, manifest `orion-vault-actions 0.1.0`, 4 tools / 2 hooks;
+- no gateway/HUD fixture or persistent probe process was started by these commands.
+
+The known Hermes SQLite 3.40.1 WAL-reset warning remained non-fatal and Hermes used `journal_mode=DELETE`. It remains separate runtime hygiene.
+
+This accepts the private disposable restore-transaction layer on Windows. The executor remains unregistered and the live apply handler remains fail-closed.
 
 ## Updated stop condition
 
