@@ -3603,6 +3603,814 @@ def _execute_disposable_restore_candidate(
         )
 
 
+def _production_preflight(
+    *,
+    local_fs_probe=None,
+    acl_probe=None,
+    access_probe=None,
+) -> Dict[str, Any]:
+    preflight = _validate_production_roots(
+        local_fs_probe=local_fs_probe,
+        acl_probe=acl_probe,
+        access_probe=access_probe,
+    )
+    if not preflight.get("success"):
+        return preflight
+    if not preflight.get("mutation_allowed"):
+        return _candidate_result(
+            success=False,
+            error="production_mutation_not_enabled",
+            mutation_performed=False,
+            mutation_mode=preflight.get("mutation_mode"),
+        )
+
+    inventory = _enumerate_production_recovery_records(
+        local_fs_probe=local_fs_probe,
+        acl_probe=acl_probe,
+        access_probe=access_probe,
+    )
+    if not inventory.get("success"):
+        return inventory
+    if inventory.get("truncated"):
+        return _candidate_result(
+            success=False,
+            error="production_recovery_inventory_truncated",
+            mutation_performed=False,
+        )
+    if int(inventory.get("attention_count") or 0) > 0:
+        return _candidate_result(
+            success=False,
+            error="production_recovery_attention_required",
+            mutation_performed=False,
+            attention_count=inventory.get("attention_count"),
+        )
+    return preflight
+
+
+def _production_write_manifest(
+    path: Path, payload: Dict[str, Any]
+) -> None:
+    record = dict(payload)
+    record["schema_version"] = 2
+    record["recovery_id"] = record.get("plan_token")
+    _write_candidate_manifest(path, record)
+
+
+def _production_write_receipt_prepared(
+    recovery_dir: Path,
+    *,
+    plan_token: str,
+    plan: Dict[str, Any],
+    approval: Dict[str, Any],
+    backup_file: str,
+    backup_sha256: str,
+) -> None:
+    _write_candidate_receipt_prepared(
+        recovery_dir,
+        plan_token=plan_token,
+        plan=plan,
+        approval=approval,
+        backup_file=backup_file,
+        backup_sha256=backup_sha256,
+        schema_version=2,
+    )
+
+
+def _production_revalidate_plan(
+    plan_token: str,
+    plan: Dict[str, Any],
+    vault_root: Path,
+    inbox_root: Path,
+    recovery_root: Path,
+) -> Dict[str, Any]:
+    action = plan.get("action")
+    if action == "edit_note":
+        return _revalidate_edit_preview_at_roots(plan_token, vault_root)
+    if action == "move_draft":
+        return _revalidate_move_preview_at_roots(
+            plan_token, vault_root, inbox_root
+        )
+    if action in ("restore_edit", "restore_move_source"):
+        return _revalidate_restore_preview_at_roots(
+            plan_token, vault_root, inbox_root, recovery_root
+        )
+    return _candidate_result(success=False, error="unsupported_action")
+
+
+def _execute_production_plan_candidate(
+    plan_token: str,
+    *,
+    approval_request=None,
+    redact=None,
+    failure_hook=None,
+    local_fs_probe=None,
+    acl_probe=None,
+    access_probe=None,
+) -> Dict[str, Any]:
+    """Private P5-02G production-shaped executor.
+
+    This candidate is intentionally unregistered. It never uses the disposable
+    root guard. Mutation is possible only when the explicit production mode is
+    mutation_enabled and recovery-root preflight succeeds.
+    """
+    preflight = _production_preflight(
+        local_fs_probe=local_fs_probe,
+        acl_probe=acl_probe,
+        access_probe=access_probe,
+    )
+    if not preflight.get("success"):
+        return preflight
+
+    vault_root = Path(preflight["vault_root"])
+    inbox_root = Path(preflight["inbox_root"])
+    recovery_root = Path(preflight["recovery_root"])
+
+    plan = _lookup_preview(plan_token)
+    if plan is None:
+        return _candidate_result(
+            success=False, error="unknown_or_expired_plan"
+        )
+    if plan.get("action") not in (
+        "edit_note", "move_draft", "restore_edit", "restore_move_source"
+    ):
+        return _candidate_result(success=False, error="unsupported_action")
+    try:
+        _approval_summary(plan)
+    except Exception as exc:
+        return _candidate_result(success=False, error=str(exc))
+
+    with _CANDIDATE_CONSUMED_LOCK:
+        if plan_token in _CANDIDATE_CONSUMED_PLANS:
+            return _candidate_result(
+                success=False, error="plan_already_consumed"
+            )
+
+    evidence = _fresh_once_approval_evidence(
+        plan_token, approval_request=approval_request, redact=redact
+    )
+    if evidence.get("approved") is not True:
+        return _candidate_result(
+            success=False,
+            error=evidence.get("error", "fresh_once_not_observed"),
+            mutation_performed=False,
+        )
+    if not _candidate_mark_approval_consumed(evidence["attempt_id"]):
+        return _candidate_result(
+            success=False,
+            error="approval_evidence_already_consumed",
+            mutation_performed=False,
+        )
+    try:
+        approval = _validate_candidate_approval_evidence(
+            plan_token, plan, evidence
+        )
+    except Exception as exc:
+        return _candidate_result(success=False, error=str(exc))
+
+    # Required post-human-decision stale check.
+    revalidated = _production_revalidate_plan(
+        plan_token, plan, vault_root, inbox_root, recovery_root
+    )
+    if (
+        not revalidated.get("success")
+        or revalidated.get("valid") is not True
+    ):
+        return _candidate_result(
+            success=False,
+            error=revalidated.get(
+                "error", "production_post_approval_revalidation_failed"
+            ),
+            mutation_performed=False,
+        )
+
+    # Re-run the recovery inventory after the human decision. A concurrent
+    # unresolved transaction appearing while the operator was deciding blocks
+    # this mutation before a new recovery record is created.
+    inventory = _enumerate_production_recovery_records(
+        local_fs_probe=local_fs_probe,
+        acl_probe=acl_probe,
+        access_probe=access_probe,
+    )
+    if not inventory.get("success"):
+        return inventory
+    if inventory.get("truncated"):
+        return _candidate_result(
+            success=False,
+            error="production_recovery_inventory_truncated",
+            mutation_performed=False,
+        )
+    if int(inventory.get("attention_count") or 0) > 0:
+        return _candidate_result(
+            success=False,
+            error="production_recovery_attention_required",
+            mutation_performed=False,
+            attention_count=inventory.get("attention_count"),
+        )
+
+    action = plan["action"]
+    proposed = plan.get("_proposed_bytes")
+    if not isinstance(proposed, bytes):
+        return _candidate_result(
+            success=False, error="proposed_bytes_missing"
+        )
+
+    recovery_dir: Path | None = None
+    mutation_started = False
+    source_guard = None
+
+    try:
+        if action == "edit_note":
+            target, target_rel = _resolve_under_root(
+                vault_root, plan.get("target_relative_path"), must_exist=True
+            )
+            before_bytes = target.read_bytes()
+            if _sha_bytes(before_bytes) != plan.get("original_sha256"):
+                return _candidate_result(
+                    success=False, error="stale_original_hash"
+                )
+            if os.name == "nt":
+                expected_file_id = plan.get("target_file_id")
+                if not expected_file_id:
+                    return _candidate_result(
+                        success=False, error="target_file_id_missing"
+                    )
+                if _windows_path_file_identity(target) != expected_file_id:
+                    return _candidate_result(
+                        success=False, error="target_file_id_changed"
+                    )
+            if _sha_bytes(proposed) != plan.get("proposed_sha256"):
+                return _candidate_result(
+                    success=False, error="proposed_hash_mismatch"
+                )
+
+            recovery_dir = _candidate_recovery_dir(recovery_root, plan_token)
+            backup = recovery_dir / "original.bin"
+            manifest = recovery_dir / "manifest.json"
+            _durable_write_exclusive(backup, before_bytes)
+            _production_write_manifest(manifest, {
+                "state": "prepared",
+                "action": "edit_note",
+                "plan_token": plan_token,
+                "target_relative_path": target_rel,
+                "before_sha256": plan.get("original_sha256"),
+                "after_sha256": plan.get("proposed_sha256"),
+                "backup_file": "original.bin",
+            })
+            _production_write_receipt_prepared(
+                recovery_dir,
+                plan_token=plan_token,
+                plan=plan,
+                approval=approval,
+                backup_file="original.bin",
+                backup_sha256=_sha_bytes(before_bytes),
+            )
+            if not _candidate_mark_consumed(plan_token):
+                return _candidate_result(
+                    success=False,
+                    error="plan_already_consumed",
+                    recovery_dir=str(recovery_dir),
+                )
+            _candidate_checkpoint("production_edit_after_recovery", failure_hook)
+
+            temporary = target.with_name(
+                f".{target.name}.orion-prod-{plan_token[:12]}-"
+                f"{secrets.token_hex(4)}.tmp"
+            )
+            try:
+                _durable_write_exclusive(temporary, proposed)
+                _candidate_checkpoint(
+                    "production_edit_before_replace", failure_hook
+                )
+                # Final object/hash check immediately before the protected call.
+                if os.name == "nt":
+                    if _windows_path_file_identity(target) != plan.get(
+                        "target_file_id"
+                    ):
+                        return _candidate_result(
+                            success=False,
+                            error="target_file_id_changed",
+                            recovery_required=True,
+                            recovery_dir=str(recovery_dir),
+                        )
+                if _sha_bytes(target.read_bytes()) != plan.get(
+                    "original_sha256"
+                ):
+                    return _candidate_result(
+                        success=False,
+                        error="stale_original_hash",
+                        recovery_required=True,
+                        recovery_dir=str(recovery_dir),
+                    )
+                mutation_started = True
+                _candidate_replace_file(target, temporary)
+                _candidate_checkpoint(
+                    "production_edit_after_replace", failure_hook
+                )
+            finally:
+                if temporary.exists():
+                    temporary.unlink()
+
+            if _sha_bytes(target.read_bytes()) != plan.get("proposed_sha256"):
+                return _candidate_result(
+                    success=False,
+                    error="post_write_hash_mismatch",
+                    mutation_performed=True,
+                    recovery_required=True,
+                    recovery_dir=str(recovery_dir),
+                )
+            _production_write_manifest(manifest, {
+                "state": "committed",
+                "action": "edit_note",
+                "plan_token": plan_token,
+                "target_relative_path": target_rel,
+                "before_sha256": plan.get("original_sha256"),
+                "after_sha256": plan.get("proposed_sha256"),
+                "backup_file": "original.bin",
+            })
+            _candidate_checkpoint(
+                "production_edit_before_receipt_commit", failure_hook
+            )
+            _commit_candidate_receipt(
+                recovery_dir, final_classification="committed"
+            )
+            return _candidate_result(
+                success=True,
+                mutation_performed=True,
+                recovery_required=False,
+                recovery_id=plan_token,
+                recovery_dir=str(recovery_dir),
+                action=action,
+                target_relative_path=target_rel,
+            )
+
+        if action == "move_draft":
+            source, source_rel = _resolve_under_root(
+                inbox_root, plan.get("source_draft"), must_exist=True
+            )
+            target, target_rel = _resolve_under_root(
+                vault_root,
+                plan.get("target_relative_path"),
+                allow_missing_leaf=True,
+            )
+            if target.exists() or os.path.lexists(target):
+                return _candidate_result(
+                    success=False, error="target_already_exists"
+                )
+            if not target.parent.is_dir() or _is_reparse_point(target.parent):
+                return _candidate_result(
+                    success=False, error="target_parent_invalid"
+                )
+
+            if os.name == "nt":
+                try:
+                    source_guard = _WindowsSourceGuard(source)
+                except Exception:
+                    return _candidate_result(
+                        success=False, error="source_handle_unavailable"
+                    )
+                if source_guard.file_identity != plan.get("source_file_id"):
+                    source_guard.close()
+                    source_guard = None
+                    return _candidate_result(
+                        success=False, error="source_file_id_changed"
+                    )
+                source_bytes = source_guard.read_bytes()
+                try:
+                    source_text = source_bytes.decode("utf-8")
+                except UnicodeDecodeError:
+                    source_guard.close()
+                    source_guard = None
+                    return _candidate_result(
+                        success=False, error="utf8_required"
+                    )
+            else:
+                source_bytes, source_text = _read_utf8(source)
+
+            if (
+                _sha_bytes(source_bytes) != plan.get("source_sha256")
+                or _sha_bytes(proposed) != plan.get("source_sha256")
+            ):
+                if source_guard is not None:
+                    source_guard.close()
+                    source_guard = None
+                return _candidate_result(
+                    success=False, error="stale_source_hash"
+                )
+            if (
+                "orion_draft: true" not in source_text
+                or "status: draft" not in source_text
+            ):
+                if source_guard is not None:
+                    source_guard.close()
+                    source_guard = None
+                return _candidate_result(
+                    success=False, error="source_is_not_orion_draft"
+                )
+
+            recovery_dir = _candidate_recovery_dir(recovery_root, plan_token)
+            backup = recovery_dir / "source.bin"
+            manifest = recovery_dir / "manifest.json"
+            _durable_write_exclusive(backup, source_bytes)
+            _production_write_manifest(manifest, {
+                "state": "prepared",
+                "action": "move_draft",
+                "plan_token": plan_token,
+                "source_draft": source_rel,
+                "target_relative_path": target_rel,
+                "source_sha256": plan.get("source_sha256"),
+                "backup_file": "source.bin",
+            })
+            _production_write_receipt_prepared(
+                recovery_dir,
+                plan_token=plan_token,
+                plan=plan,
+                approval=approval,
+                backup_file="source.bin",
+                backup_sha256=_sha_bytes(source_bytes),
+            )
+            if not _candidate_mark_consumed(plan_token):
+                if source_guard is not None:
+                    source_guard.close()
+                    source_guard = None
+                return _candidate_result(
+                    success=False,
+                    error="plan_already_consumed",
+                    recovery_dir=str(recovery_dir),
+                )
+            _candidate_checkpoint("production_move_after_recovery", failure_hook)
+
+            if target.exists() or os.path.lexists(target):
+                if source_guard is not None:
+                    source_guard.close()
+                    source_guard = None
+                return _candidate_result(
+                    success=False,
+                    error="target_already_exists",
+                    recovery_required=True,
+                    recovery_dir=str(recovery_dir),
+                )
+
+            mutation_started = True
+            try:
+                _durable_write_exclusive(target, source_bytes)
+            except FileExistsError:
+                mutation_started = False
+                if source_guard is not None:
+                    source_guard.close()
+                    source_guard = None
+                return _candidate_result(
+                    success=False,
+                    error="target_create_race",
+                    mutation_performed=False,
+                    recovery_required=True,
+                    recovery_dir=str(recovery_dir),
+                )
+            _candidate_checkpoint(
+                "production_move_after_target_create", failure_hook
+            )
+
+            if _sha_bytes(target.read_bytes()) != plan.get("source_sha256"):
+                if source_guard is not None:
+                    source_guard.close()
+                    source_guard = None
+                return _candidate_result(
+                    success=False,
+                    error="target_hash_mismatch",
+                    mutation_performed=True,
+                    recovery_required=True,
+                    recovery_dir=str(recovery_dir),
+                )
+
+            latest_source = (
+                source_guard.read_bytes()
+                if source_guard is not None
+                else source.read_bytes()
+            )
+            if _sha_bytes(latest_source) != plan.get("source_sha256"):
+                if source_guard is not None:
+                    try:
+                        source_guard.close()
+                    finally:
+                        source_guard = None
+                return _candidate_result(
+                    success=False,
+                    error="source_changed_before_delete",
+                    mutation_performed=True,
+                    recovery_required=True,
+                    recovery_dir=str(recovery_dir),
+                )
+
+            _candidate_checkpoint(
+                "production_move_before_source_delete", failure_hook
+            )
+            if source_guard is not None:
+                source_guard.mark_delete()
+                _candidate_checkpoint(
+                    "production_move_after_delete_mark", failure_hook
+                )
+                source_guard.close()
+                source_guard = None
+            else:
+                source.unlink()
+
+            if source.exists() or _sha_bytes(target.read_bytes()) != plan.get(
+                "source_sha256"
+            ):
+                return _candidate_result(
+                    success=False,
+                    error="move_postcondition_failed",
+                    mutation_performed=True,
+                    recovery_required=True,
+                    recovery_dir=str(recovery_dir),
+                )
+            _production_write_manifest(manifest, {
+                "state": "committed",
+                "action": "move_draft",
+                "plan_token": plan_token,
+                "source_draft": source_rel,
+                "target_relative_path": target_rel,
+                "source_sha256": plan.get("source_sha256"),
+                "backup_file": "source.bin",
+            })
+            _candidate_checkpoint(
+                "production_move_before_receipt_commit", failure_hook
+            )
+            _commit_candidate_receipt(
+                recovery_dir, final_classification="committed"
+            )
+            return _candidate_result(
+                success=True,
+                mutation_performed=True,
+                recovery_required=False,
+                recovery_id=plan_token,
+                recovery_dir=str(recovery_dir),
+                action=action,
+                source_draft=source_rel,
+                target_relative_path=target_rel,
+            )
+
+        # Historical restore actions already carry exact proposed bytes and
+        # origin linkage. Execute them against production roots directly,
+        # without routing through the disposable-root guard.
+        origin_recovery_id = plan.get("recovery_id")
+        if not re.fullmatch(
+            r"[0-9a-f]{64}", str(origin_recovery_id or "")
+        ):
+            return _candidate_result(
+                success=False, error="restore_origin_invalid"
+            )
+        if _sha_bytes(proposed) != plan.get("restore_sha256"):
+            return _candidate_result(
+                success=False, error="restore_bytes_mismatch"
+            )
+
+        if action == "restore_edit":
+            target, target_rel = _resolve_under_root(
+                vault_root, plan.get("target_relative_path"), must_exist=True
+            )
+            before_bytes = target.read_bytes()
+            if _sha_bytes(before_bytes) != plan.get("current_sha256"):
+                return _candidate_result(
+                    success=False, error="restore_current_state_changed"
+                )
+            if os.name == "nt":
+                if _windows_path_file_identity(target) != plan.get(
+                    "target_file_id"
+                ):
+                    return _candidate_result(
+                        success=False, error="restore_target_file_id_changed"
+                    )
+
+            recovery_dir = _candidate_recovery_dir(recovery_root, plan_token)
+            backup = recovery_dir / "before_restore.bin"
+            manifest = recovery_dir / "manifest.json"
+            _durable_write_exclusive(backup, before_bytes)
+            _production_write_manifest(manifest, {
+                "state": "prepared",
+                "action": "restore_edit",
+                "plan_token": plan_token,
+                "origin_recovery_id": origin_recovery_id,
+                "origin_action": plan.get("recovery_action"),
+                "target_relative_path": target_rel,
+                "before_sha256": plan.get("current_sha256"),
+                "after_sha256": plan.get("restore_sha256"),
+                "backup_file": "before_restore.bin",
+            })
+            _production_write_receipt_prepared(
+                recovery_dir,
+                plan_token=plan_token,
+                plan=plan,
+                approval=approval,
+                backup_file="before_restore.bin",
+                backup_sha256=_sha_bytes(before_bytes),
+            )
+            if not _candidate_mark_consumed(plan_token):
+                return _candidate_result(
+                    success=False,
+                    error="plan_already_consumed",
+                    recovery_dir=str(recovery_dir),
+                )
+            _candidate_checkpoint(
+                "production_restore_edit_after_recovery", failure_hook
+            )
+
+            temporary = target.with_name(
+                f".{target.name}.orion-prod-restore-{plan_token[:12]}-"
+                f"{secrets.token_hex(4)}.tmp"
+            )
+            try:
+                _durable_write_exclusive(temporary, proposed)
+                _candidate_checkpoint(
+                    "production_restore_edit_before_replace", failure_hook
+                )
+                if os.name == "nt":
+                    if _windows_path_file_identity(target) != plan.get(
+                        "target_file_id"
+                    ):
+                        return _candidate_result(
+                            success=False,
+                            error="restore_target_file_id_changed",
+                            recovery_required=True,
+                            recovery_dir=str(recovery_dir),
+                        )
+                if _sha_bytes(target.read_bytes()) != plan.get(
+                    "current_sha256"
+                ):
+                    return _candidate_result(
+                        success=False,
+                        error="restore_current_state_changed",
+                        recovery_required=True,
+                        recovery_dir=str(recovery_dir),
+                    )
+                mutation_started = True
+                _candidate_replace_file(target, temporary)
+                _candidate_checkpoint(
+                    "production_restore_edit_after_replace", failure_hook
+                )
+            finally:
+                if temporary.exists():
+                    temporary.unlink()
+
+            if _sha_bytes(target.read_bytes()) != plan.get("restore_sha256"):
+                return _candidate_result(
+                    success=False,
+                    error="restore_post_write_hash_mismatch",
+                    mutation_performed=True,
+                    recovery_required=True,
+                    recovery_dir=str(recovery_dir),
+                )
+            _production_write_manifest(manifest, {
+                "state": "committed",
+                "action": "restore_edit",
+                "plan_token": plan_token,
+                "origin_recovery_id": origin_recovery_id,
+                "origin_action": plan.get("recovery_action"),
+                "target_relative_path": target_rel,
+                "before_sha256": plan.get("current_sha256"),
+                "after_sha256": plan.get("restore_sha256"),
+                "backup_file": "before_restore.bin",
+            })
+            _candidate_checkpoint(
+                "production_restore_edit_before_receipt_commit", failure_hook
+            )
+            _commit_candidate_receipt(
+                recovery_dir, final_classification="committed"
+            )
+            return _candidate_result(
+                success=True,
+                mutation_performed=True,
+                recovery_required=False,
+                recovery_id=plan_token,
+                origin_recovery_id=origin_recovery_id,
+                recovery_dir=str(recovery_dir),
+                action=action,
+            )
+
+        source, source_rel = _resolve_under_root(
+            inbox_root, plan.get("source_draft"), allow_missing_leaf=True
+        )
+        if source.exists() or os.path.lexists(source):
+            return _candidate_result(
+                success=False, error="restore_source_no_longer_absent"
+            )
+        if not source.parent.is_dir() or _is_reparse_point(source.parent):
+            return _candidate_result(
+                success=False, error="restore_source_parent_changed"
+            )
+
+        recovery_dir = _candidate_recovery_dir(recovery_root, plan_token)
+        evidence_file = recovery_dir / "created_source.bin"
+        manifest = recovery_dir / "manifest.json"
+        _durable_write_exclusive(evidence_file, proposed)
+        _production_write_manifest(manifest, {
+            "state": "prepared",
+            "action": "restore_move_source",
+            "plan_token": plan_token,
+            "origin_recovery_id": origin_recovery_id,
+            "origin_action": plan.get("recovery_action"),
+            "source_draft": source_rel,
+            "before_state": "absent",
+            "after_sha256": plan.get("restore_sha256"),
+            "evidence_file": "created_source.bin",
+        })
+        _production_write_receipt_prepared(
+            recovery_dir,
+            plan_token=plan_token,
+            plan=plan,
+            approval=approval,
+            backup_file="created_source.bin",
+            backup_sha256=plan.get("restore_sha256"),
+        )
+        if not _candidate_mark_consumed(plan_token):
+            return _candidate_result(
+                success=False,
+                error="plan_already_consumed",
+                recovery_dir=str(recovery_dir),
+            )
+        _candidate_checkpoint(
+            "production_restore_move_after_recovery", failure_hook
+        )
+
+        mutation_started = True
+        try:
+            _durable_write_exclusive(source, proposed)
+        except FileExistsError:
+            mutation_started = False
+            return _candidate_result(
+                success=False,
+                error="restore_source_create_race",
+                mutation_performed=False,
+                recovery_required=True,
+                recovery_dir=str(recovery_dir),
+            )
+        _candidate_checkpoint(
+            "production_restore_move_after_create", failure_hook
+        )
+
+        if _sha_bytes(source.read_bytes()) != plan.get("restore_sha256"):
+            return _candidate_result(
+                success=False,
+                error="restore_post_create_hash_mismatch",
+                mutation_performed=True,
+                recovery_required=True,
+                recovery_dir=str(recovery_dir),
+            )
+        _production_write_manifest(manifest, {
+            "state": "committed",
+            "action": "restore_move_source",
+            "plan_token": plan_token,
+            "origin_recovery_id": origin_recovery_id,
+            "origin_action": plan.get("recovery_action"),
+            "source_draft": source_rel,
+            "before_state": "absent",
+            "after_sha256": plan.get("restore_sha256"),
+            "evidence_file": "created_source.bin",
+        })
+        _candidate_checkpoint(
+            "production_restore_move_before_receipt_commit", failure_hook
+        )
+        _commit_candidate_receipt(
+            recovery_dir, final_classification="committed"
+        )
+        return _candidate_result(
+            success=True,
+            mutation_performed=True,
+            recovery_required=False,
+            recovery_id=plan_token,
+            origin_recovery_id=origin_recovery_id,
+            recovery_dir=str(recovery_dir),
+            action=action,
+        )
+
+    except FileExistsError:
+        if source_guard is not None:
+            try:
+                source_guard.close()
+            except Exception:
+                pass
+        return _candidate_result(
+            success=False,
+            error="production_recovery_or_target_exists",
+            mutation_performed=mutation_started,
+            recovery_required=bool(recovery_dir),
+            recovery_dir=str(recovery_dir) if recovery_dir else None,
+        )
+    except Exception as exc:
+        close_failed = False
+        if source_guard is not None:
+            try:
+                source_guard.close()
+            except Exception:
+                close_failed = True
+        return _candidate_result(
+            success=False,
+            error=f"production_candidate_failure:{type(exc).__name__}",
+            mutation_performed=mutation_started,
+            recovery_required=bool(recovery_dir) or mutation_started or close_failed,
+            recovery_dir=str(recovery_dir) if recovery_dir else None,
+        )
+
+
 def register(ctx):
     preview_edit_schema = {
         "name": PREVIEW_EDIT_TOOL,
