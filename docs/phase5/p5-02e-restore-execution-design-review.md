@@ -1,6 +1,6 @@
 # P5-02E Restore Execution Design Review
 
-Status: **DESIGN REVIEW COMPLETE / SOURCE IMPLEMENTATION NOT YET AUTHORIZED / LIVE RESTORE PROHIBITED**
+Status: **DESIGN COMPLETE / PRIVATE DISPOSABLE EXECUTOR CANDIDATE / WINDOWS VERIFICATION PENDING / LIVE RESTORE PROHIBITED**
 Date: 2026-09-22
 Depends on: P5-02A approval integrity, P5-02B Windows mutation hardening, P5-02C recovery + restore preview, P5-02D restart-safe receipts
 
@@ -371,6 +371,122 @@ Do not implement a registered restore executor until all of the following are tr
 - plugin doctor still reports only the expected registered tools/hooks;
 - no live plugin install or real vault mutation has been separately authorized.
 
+## Private source candidate implemented
+
+A private, unregistered `_execute_disposable_restore_candidate()` now implements the reviewed design for explicitly configured disposable roots only.
+
+It requires structured fresh-once approval evidence on every call. The approval attempt is consumed before post-approval stale revalidation can complete, so a failed stale check cannot reuse the same human decision later.
+
+### Restore edit execution
+
+The candidate:
+
+- performs the mandatory post-approval restore revalidation;
+- rechecks canonical target identity, Windows file ID, and current SHA-256;
+- creates a new recovery directory keyed by the restore plan token;
+- preserves current pre-restore bytes as `before_restore.bin`;
+- writes a prepared restore manifest linked by `origin_recovery_id`;
+- writes a prepared non-authorizing receipt containing the exact restore approval card;
+- consumes the restore plan immediately after durable preparation;
+- reuses the same same-directory durable temp + native `ReplaceFileW` primitive as normal edits;
+- verifies the final restore hash;
+- commits manifest and then receipt.
+
+A later restore of a committed `restore_edit` record is supported. It uses that restore transaction's `before_restore.bin` as the historical content, creating another independent restore transaction rather than modifying the parent record.
+
+### Restore move-source execution
+
+The candidate:
+
+- performs the mandatory post-approval restore revalidation;
+- requires the inbox source to remain absent and its parent identity unchanged;
+- creates a new recovery directory linked to the originating move record;
+- stores `created_source.bin` as exact reconciliation/audit evidence;
+- writes a prepared non-authorizing receipt;
+- consumes the plan after durable preparation;
+- reuses exclusive `xb` creation + fsync + SHA-256 verification;
+- never modifies or deletes the reference vault target;
+- commits manifest and receipt only after the created source verifies.
+
+If another process wins the create race, Orion does not overwrite it. The result reports no Orion content mutation but leaves the prepared transaction recovery-required for reconciliation.
+
+### Crash and receipt-finalization behavior
+
+The candidate has deterministic private checkpoints around:
+
+- restore recovery preparation;
+- immediately before edit replacement / source creation;
+- immediately after edit replacement / source creation;
+- immediately before receipt finalization.
+
+The generalized read-only recovery inspector now understands `restore_edit` and `restore_move_source` records.
+
+The generalized receipt inspector now:
+
+- validates restore approval-card text against the immutable restore plan;
+- accepts only the restore transaction artifact names `before_restore.bin` / `created_source.bin`;
+- validates `origin_recovery_id` binding;
+- preserves non-replay semantics;
+- reports a prepared receipt with already-committed filesystem state as `applied_unfinalized`, so receipt-finalization failure cannot trigger a repeated content mutation.
+
+### Approval wording
+
+Restore approval cards now state truthfully that the one-time approval may be used only by the **private disposable restore candidate for the exact displayed plan**, while registered/live apply remains fail-closed.
+
+They no longer claim that no disposable mutation can occur once this private candidate is invoked.
+
+## Source coverage added
+
+New `test_p5_02e_restore_execution.py` adds **24 tests** covering:
+
+- private/unregistered boundary and public apply refusal;
+- fresh approval evidence required;
+- originating approval evidence cannot authorize restore;
+- successful edit restore with independent recovery/receipt;
+- stale content after approval and consumed approval evidence;
+- Windows same-bytes/different-file-ID refusal;
+- prepared/no-effect edit interruption;
+- applied-unfinalized edit interruption;
+- receipt-finalization failure without replay;
+- edit post-write hash mismatch;
+- restore-of-edit-restore as a new independent transaction;
+- move-source approval requirement;
+- successful exclusive-create restore with untouched vault target;
+- source appearance after approval;
+- interruption before create -> prepared/no effect;
+- exclusive-create race with no overwrite;
+- interruption after create -> applied-unfinalized;
+- move receipt-finalization failure and replay refusal;
+- post-create hash mismatch;
+- reference vault target disappearance not blocking source recreation;
+- corrupt origin backup refusal before new transaction creation;
+- corrupt restore artifact reconciliation refusal;
+- durable restore receipt cannot authorize a second restore;
+- restart inspection with no reconstructed approval authority.
+
+Current expected `test_p5*.py` discovery is **86 tests**:
+
+- 16 P5-01;
+- 10 P5-02A;
+- 36 P5-02B/P5-02C/P5-02D;
+- 24 P5-02E restore-execution tests.
+
+The accepted Windows baseline remains **62/62 + dispatcher 2/2 + plugin doctor PASS**. The 86-test private restore-executor delta is pending fresh Windows verification.
+
+## Updated stop condition
+
+Even if all 86 tests pass, the private executor remains unregistered.
+
+A green source gate does **not** authorize:
+
+- wiring restore into `orion_vault_apply_plan`;
+- installing/enabling the plugin in live COMPANION;
+- starting/reconfiguring Hermes services;
+- choosing/creating a production recovery root;
+- mutating the real vault or inbox.
+
+Those remain separate authorization units.
+
 ## Review conclusion
 
 The restore execution design is compatible with the existing P5 safety model.
@@ -382,4 +498,4 @@ No new mutation primitive is needed:
 
 What is new is transaction bookkeeping: every restore is its own approval, recovery record, receipt, replay boundary, and reconciliation lifecycle.
 
-This review authorizes no code execution or live mutation by itself.
+The design review and private disposable implementation authorize no live mutation by themselves.
