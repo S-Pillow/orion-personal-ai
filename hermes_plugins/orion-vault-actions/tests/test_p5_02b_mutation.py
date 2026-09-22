@@ -110,6 +110,7 @@ class DisposableMutationCandidateTests(unittest.TestCase):
         plugin._PREVIEW_TIMES.clear()
         plugin._APPROVAL_ATTEMPTS.clear()
         plugin._CANDIDATE_CONSUMED_PLANS.clear()
+        plugin._CANDIDATE_CONSUMED_APPROVAL_ATTEMPTS.clear()
 
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
