@@ -902,3 +902,11 @@ The following remain separate future gates:
 - production handler activation design and registration;
 - first bounded real-vault mutation with exact fresh approval;
 - restore/delete production acceptance.
+
+## Handoff to remaining Phase 5 work
+
+P5-02I completion now hands off to the source-only execution plan:
+
+`docs/planning/phase5-completion-and-ui-convergence-2026-09-22.md`
+
+The plan links the remaining production recovery/apply/live-write gates directly to the owner-approved HUD visual contract and makes UI/display/action convergence a mandatory Phase 5 closure gate. P5-02I completion does not itself authorize any of those live production changes.
