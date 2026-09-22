@@ -625,6 +625,37 @@ class DisposableMutationCandidateTests(unittest.TestCase):
             draft.read_bytes(), b"someone created this after preview\n"
         )
 
+    def test_restore_preview_cannot_execute_through_existing_mutators(self):
+        note, preview = self._edit_preview()
+        committed = plugin._execute_disposable_plan_candidate(
+            preview["plan_token"]
+        )
+        self.assertTrue(committed["success"])
+        self.assertEqual(note.read_bytes(), b"after\n")
+
+        restore = plugin._preview_disposable_restore_candidate(
+            preview["plan_token"]
+        )
+        self.assertTrue(restore["success"])
+
+        public_result = json.loads(plugin.apply_plan_placeholder({
+            "plan_token": restore["plan_token"],
+        }))
+        self.assertFalse(public_result["success"])
+        self.assertEqual(
+            public_result["error"], "p5_01_mutation_not_authorized"
+        )
+        self.assertTrue(public_result["plan_known"])
+        self.assertFalse(public_result["mutation_performed"])
+
+        private_result = plugin._execute_disposable_plan_candidate(
+            restore["plan_token"]
+        )
+        self.assertFalse(private_result["success"])
+        self.assertEqual(private_result["error"], "unsupported_action")
+        self.assertFalse(private_result["mutation_performed"])
+        self.assertEqual(note.read_bytes(), b"after\n")
+
     def test_restore_preview_rejects_corrupt_recovery_backup(self):
         _note, preview = self._edit_preview()
         committed = plugin._execute_disposable_plan_candidate(
