@@ -346,7 +346,7 @@ The restore-preview gate cannot become an accidental restore mutator merely beca
 
 ### Source tests in this delta
 
-Eight restore-specific tests now cover:
+Nine restore-specific tests now cover:
 
 - exact edit restore preview and approval text;
 - edit stale-content revalidation;
