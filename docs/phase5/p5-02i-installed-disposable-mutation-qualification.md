@@ -178,6 +178,28 @@ Create a disposable Markdown note, then:
 
 A separate DENY attempt must leave the disposable note and recovery root unchanged.
 
+### I3 operator probe
+
+Prepared source pin:
+
+```text
+e559ceba324276abf5e4aa5a72578ce8eb48906b
+scripts/phase5/p5-02i-disposable-move-qualification.py
+```
+
+The probe keeps Hermes manual-off, imports the installed plugin, uses an explicit neutral fixture parent under `D:\Orion`, and requires:
+
+- a real human **DENY** control for a disposable move;
+- a separate fresh-plan real human **ALLOW ONCE**;
+- exact source-byte preservation at the target;
+- source absence after commit;
+- Windows source file-ID binding;
+- committed recovery + receipt;
+- non-reusable approval correlation;
+- replay refusal;
+- registered apply still fail-closed;
+- fixture cleanup only on PASS.
+
 ### I3 — disposable move with fresh-once approval
 
 Create an Orion-marked disposable draft and absent disposable target, then:
