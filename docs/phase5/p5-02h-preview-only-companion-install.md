@@ -306,6 +306,29 @@ plugins:
 
 H3.5 is accepted. The next step is the first lifecycle/load gate. No real vault/inbox mutation has occurred.
 
+## H4 first lifecycle attempt — SAFE FAILURE
+
+Observed operator result:
+
+- the old unversioned launcher path `%LOCALAPPDATA%\Orion\operator\Start-Orion.ps1` is absent;
+- installed plugin doctor still passed at **4 tools / 2 hooks**;
+- live config SHA-256 remained `34D9BD9DDC1BC59783CE2DC80D98FBD66D7AA7CC670DDFB875E0D1C78E8462D7`;
+- plugin remained enabled;
+- gateway remained stopped / no process detected;
+- health endpoint remained unreachable, as expected because Start never occurred.
+
+Accepted Phase 1 transition evidence identifies the current lifecycle publication at:
+
+```text
+%LOCALAPPDATA%\Orion\operator\versions\2.7.4-candidate1
+```
+
+and records that the installed desktop shortcuts target that versioned publication.
+
+Disposition: procedural path mismatch only; no runtime/plugin failure and no vault/inbox mutation.
+
+Before retrying H4, read the actual `Start Orion.lnk` target, arguments, and working directory and confirm the versioned publication files exist. Do not reinstall operator controls.
+
 ## Gate H4 — lifecycle/load
 
 Use the accepted installed one-shot Orion operator lifecycle:
