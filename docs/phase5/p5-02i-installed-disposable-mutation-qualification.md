@@ -77,6 +77,30 @@ Before any disposable mutation:
 7. Create one timestamped temporary fixture parent and three child roots: `vault`, `inbox`, `recovery`.
 8. Record fixture-path identities and initial file hashes before mutation.
 
+## Authorized operator probe
+
+Owner authorization for P5-02I disposable-root qualification was received on 2026-09-22.
+
+The first executable probe is pinned at:
+
+```text
+aaede442c768e31ef6f9744ecfbde70497ac18f1
+scripts/phase5/p5-02i-disposable-edit-qualification.py
+```
+
+It imports the installed plugin, keeps Hermes in manual-off state, creates temporary disposable roots under an explicit neutral parent (use `D:\Orion`), and performs:
+
+- I1 disposable opt-in guard;
+- I1 live-vault-overlap refusal;
+- real Hermes CLI **DENY** control;
+- a new preview followed by real Hermes CLI **ALLOW ONCE**;
+- disposable edit commit with recovery + receipt verification;
+- replay refusal;
+- registered apply fail-closed verification;
+- fixture cleanup on PASS and fixture preservation on FAIL.
+
+The script sets `HERMES_INTERACTIVE=1` only inside its own process so the pinned Hermes approval engine presents its bounded stdin prompt. It clears gateway/cron/single-query routing markers in that same process and does not persist those settings.
+
 ## Required qualification sequence
 
 ### I1 — fail-closed control
