@@ -650,6 +650,61 @@ Using the committed disposable records only:
 - verify originating approval evidence cannot authorize restore;
 - verify stale state after approval consumes that approval and blocks replay.
 
+## I6 observed result — PASS
+
+Installed-runtime I6 disposable historical restore qualification completed
+successfully.
+
+Observed:
+
+- edit origin committed;
+- move origin committed;
+- originating edit/move approval evidence could not authorize restore;
+- historical edit restore committed;
+- edit restore created an independent recovery/receipt transaction;
+- edit origin recovery record remained unchanged;
+- historical move-source restore recreated the disposable inbox source;
+- disposable vault move target remained byte-for-byte unchanged;
+- move restore created an independent recovery/receipt transaction;
+- move origin recovery record remained unchanged;
+- every successful restore used fresh human ALLOW ONCE evidence;
+- stale historical restore refused after approval;
+- stale restore approval was consumed and could not be revived;
+- registered apply remained fail-closed;
+- real vault/inbox untouched;
+- disposable fixture cleaned;
+- COMPANION config SHA-256 remained
+  `34D9BD9DDC1BC59783CE2DC80D98FBD66D7AA7CC670DDFB875E0D1C78E8462D7`;
+- installed `__init__.py` SHA-256 remained
+  `FCFA3DDC4A86B99691FB003CF4421027C5CC3CA22AC99ADBCCEEE8D3B3C7B5DA`;
+- Hermes gateway remained stopped;
+- operator worktree cleaned.
+
+Acceptance markers:
+
+```text
+I6_EDIT_ORIGIN_COMMITTED=true
+I6_MOVE_ORIGIN_COMMITTED=true
+I6_ORIGIN_APPROVAL_CANNOT_AUTHORIZE_RESTORE=true
+I6_EDIT_RESTORE_COMMITTED=true
+I6_EDIT_RESTORE_INDEPENDENT_RECORD=true
+I6_EDIT_ORIGIN_RECORD_UNCHANGED=true
+I6_MOVE_SOURCE_RESTORED=true
+I6_MOVE_VAULT_TARGET_UNCHANGED=true
+I6_MOVE_RESTORE_INDEPENDENT_RECORD=true
+I6_MOVE_ORIGIN_RECORD_UNCHANGED=true
+I6_RESTORE_APPROVAL_FRESH_ONCE=true
+I6_STALE_RESTORE_REFUSED=true
+I6_STALE_RESTORE_APPROVAL_CONSUMED=true
+I6_REGISTERED_APPLY_FAIL_CLOSED=true
+I6_REAL_VAULT_INBOX_TOUCHED=false
+DISPOSABLE_FIXTURE_CLEANED=true
+P5_02I_I6_QUALIFICATION=PASS
+P5_02I_I6_OPERATOR_WORKTREE_CLEANED=true
+```
+
+I6 is accepted.
+
 ### I7 — controlled failure checkpoints
 
 Exercise at least one pre-mutation and one post-mutation failure checkpoint on disposable files and require restart-safe classification:
