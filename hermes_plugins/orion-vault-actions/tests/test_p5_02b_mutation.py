@@ -474,6 +474,8 @@ class DisposableMutationCandidateTests(unittest.TestCase):
         self.assertTrue(inspected["correlation_valid"])
         self.assertFalse(inspected["authorization_reusable"])
         self.assertEqual(inspected["receipt_state"], "committed")
+        self.assertTrue(inspected["receipt_finalized"])
+        self.assertFalse(inspected["receipt_reconciliation_required"])
         self.assertEqual(inspected["final_classification"], "committed")
         self.assertEqual(inspected["current_classification"], "committed")
         self.assertEqual(
@@ -511,6 +513,8 @@ class DisposableMutationCandidateTests(unittest.TestCase):
         self.assertTrue(inspected["success"])
         self.assertTrue(inspected["correlation_valid"])
         self.assertEqual(inspected["receipt_state"], "prepared")
+        self.assertFalse(inspected["receipt_finalized"])
+        self.assertTrue(inspected["receipt_reconciliation_required"])
         self.assertIsNone(inspected["final_classification"])
         self.assertEqual(
             inspected["current_classification"], "applied_unfinalized"
@@ -544,6 +548,40 @@ class DisposableMutationCandidateTests(unittest.TestCase):
         receipt_path = Path(result["recovery_dir"], "receipt.json")
         receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
         receipt["approval"]["authorization_reusable"] = True
+        receipt_path.write_text(
+            json.dumps(receipt, ensure_ascii=False, sort_keys=True, indent=2),
+            encoding="utf-8",
+        )
+
+        plugin._PREVIEWS.clear()
+        plugin._PREVIEW_TIMES.clear()
+        plugin._APPROVAL_ATTEMPTS.clear()
+
+        inspected = plugin._inspect_disposable_receipt_candidate(
+            preview["plan_token"]
+        )
+
+        self.assertFalse(inspected["success"])
+        self.assertEqual(inspected["error"], "receipt_invalid")
+        self.assertFalse(inspected["mutation_performed"])
+
+    def test_receipt_approval_text_tamper_fails_even_with_rehashed_message(self):
+        _note, preview = self._edit_preview()
+        evidence = self._fresh_once_evidence(preview["plan_token"])
+        result = plugin._execute_disposable_plan_candidate(
+            preview["plan_token"], approval_evidence=evidence
+        )
+        self.assertTrue(result["success"])
+
+        receipt_path = Path(result["recovery_dir"], "receipt.json")
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        message = receipt["approval"]["approval_message"]
+        receipt["approval"]["approval_message"] = message.replace(
+            "Target: ", "Target: C:\\tampered\\"
+        )
+        receipt["approval"]["approval_message_sha256"] = plugin._sha_text(
+            receipt["approval"]["approval_message"]
+        )
         receipt_path.write_text(
             json.dumps(receipt, ensure_ascii=False, sort_keys=True, indent=2),
             encoding="utf-8",
