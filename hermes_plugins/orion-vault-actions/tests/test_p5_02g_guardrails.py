@@ -354,6 +354,426 @@ class ProductionGuardrailTests(unittest.TestCase):
         self.assertEqual(note.read_bytes(), b"before\n")
         self.assertEqual(list(self.recovery.iterdir()), [])
 
+    def _production_once_gate(self, after_once=None):
+        def gate(_tool_name, description, *, rule_key):
+            plugin.post_approval_response(
+                pattern_key=f"plugin_rule:{rule_key}",
+                description=description,
+                choice="once",
+                surface="gateway",
+            )
+            if after_once is not None:
+                after_once()
+            return {"approved": True}
+        return gate
+
+    def _production_apply(self, plan_token, *, gate=None, failure_hook=None):
+        return plugin._execute_production_plan_candidate(
+            plan_token,
+            approval_request=gate,
+            redact=lambda text: text,
+            failure_hook=failure_hook,
+            local_fs_probe=self._local,
+            acl_probe=self._acl,
+            access_probe=self._access,
+        )
+
+    def test_mutation_enabled_pretool_validates_without_owning_approval(self):
+        os.environ[plugin.PRODUCTION_MUTATION_MODE_ENV] = (
+            plugin.PRODUCTION_MODE_MUTATION_ENABLED
+        )
+        note = self.vault / "note.md"
+        note.write_bytes(b"before\n")
+        preview = json.loads(plugin.preview_edit({
+            "target_relative_path": "note.md",
+            "new_content": "after\n",
+        }))
+
+        directive = plugin.pre_tool_call(
+            plugin.APPLY_TOOL, {"plan_token": preview["plan_token"]}
+        )
+        blocked = plugin.pre_tool_call(
+            plugin.APPLY_TOOL, {"plan_token": "f" * 64}
+        )
+
+        self.assertIsNone(directive)
+        self.assertEqual(blocked["action"], "block")
+        self.assertEqual(note.read_bytes(), b"before\n")
+
+    def test_preview_only_pretool_keeps_non_mutating_approval_contract(self):
+        os.environ[plugin.PRODUCTION_MUTATION_MODE_ENV] = (
+            plugin.PRODUCTION_MODE_PREVIEW_ONLY
+        )
+        note = self.vault / "note.md"
+        note.write_bytes(b"before\n")
+        preview = json.loads(plugin.preview_edit({
+            "target_relative_path": "note.md",
+            "new_content": "after\n",
+        }))
+
+        directive = plugin.pre_tool_call(
+            plugin.APPLY_TOOL, {"plan_token": preview["plan_token"]}
+        )
+
+        self.assertEqual(directive["action"], "approve")
+        self.assertIn("fail-closed", directive["message"])
+        self.assertEqual(note.read_bytes(), b"before\n")
+
+    def test_production_candidate_is_unregistered_and_public_apply_refuses(self):
+        class Context:
+            def __init__(self):
+                self.tools = {}
+
+            def register_tool(self, *, name, handler, **_kwargs):
+                self.tools[name] = handler
+
+            def register_hook(self, *_args, **_kwargs):
+                pass
+
+        ctx = Context()
+        plugin.register(ctx)
+
+        self.assertIs(ctx.tools[plugin.APPLY_TOOL], plugin.apply_plan_placeholder)
+        self.assertNotIn(
+            plugin._execute_production_plan_candidate, ctx.tools.values()
+        )
+
+    def test_production_candidate_refuses_preview_only_before_approval(self):
+        os.environ[plugin.PRODUCTION_MUTATION_MODE_ENV] = (
+            plugin.PRODUCTION_MODE_PREVIEW_ONLY
+        )
+        note = self.vault / "note.md"
+        note.write_bytes(b"before\n")
+        preview = json.loads(plugin.preview_edit({
+            "target_relative_path": "note.md",
+            "new_content": "after\n",
+        }))
+        called = {"value": False}
+
+        def gate(*_args, **_kwargs):
+            called["value"] = True
+            return {"approved": True}
+
+        result = self._production_apply(preview["plan_token"], gate=gate)
+
+        self.assertFalse(result["success"])
+        self.assertEqual(result["error"], "production_mutation_not_enabled")
+        self.assertFalse(called["value"])
+        self.assertEqual(note.read_bytes(), b"before\n")
+        self.assertEqual(list(self.recovery.iterdir()), [])
+
+    def test_production_edit_deny_has_no_side_effect(self):
+        os.environ[plugin.PRODUCTION_MUTATION_MODE_ENV] = (
+            plugin.PRODUCTION_MODE_MUTATION_ENABLED
+        )
+        note = self.vault / "note.md"
+        note.write_bytes(b"before\n")
+        preview = json.loads(plugin.preview_edit({
+            "target_relative_path": "note.md",
+            "new_content": "after\n",
+        }))
+
+        result = self._production_apply(
+            preview["plan_token"],
+            gate=lambda *_args, **_kwargs: {"approved": False},
+        )
+
+        self.assertFalse(result["success"])
+        self.assertEqual(result["error"], "fresh_once_not_observed")
+        self.assertFalse(result["mutation_performed"])
+        self.assertEqual(note.read_bytes(), b"before\n")
+        self.assertEqual(list(self.recovery.iterdir()), [])
+
+    def test_production_edit_once_commits_schema2_receipt(self):
+        os.environ[plugin.PRODUCTION_MUTATION_MODE_ENV] = (
+            plugin.PRODUCTION_MODE_MUTATION_ENABLED
+        )
+        note = self.vault / "note.md"
+        note.write_bytes(b"before\n")
+        preview = json.loads(plugin.preview_edit({
+            "target_relative_path": "note.md",
+            "new_content": "after\n",
+        }))
+
+        result = self._production_apply(
+            preview["plan_token"],
+            gate=self._production_once_gate(),
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(note.read_bytes(), b"after\n")
+        recovery = self.recovery / preview["plan_token"]
+        manifest = json.loads(
+            (recovery / "manifest.json").read_text(encoding="utf-8")
+        )
+        receipt = json.loads(
+            (recovery / "receipt.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(manifest["schema_version"], 2)
+        self.assertEqual(manifest["recovery_id"], preview["plan_token"])
+        self.assertEqual(manifest["state"], "committed")
+        self.assertEqual(receipt["schema_version"], 2)
+        self.assertEqual(receipt["state"], "committed")
+        self.assertIn(
+            "private production mutation candidate",
+            receipt["approval"]["approval_message"],
+        )
+        inspected = plugin._inspect_receipt_at_roots(
+            self.vault, self.inbox, self.recovery, preview["plan_token"]
+        )
+        self.assertTrue(inspected["success"])
+        self.assertEqual(inspected["current_classification"], "committed")
+        self.assertFalse(inspected["authorization_reusable"])
+
+    def test_production_edit_stale_after_human_once_fails_before_recovery(self):
+        os.environ[plugin.PRODUCTION_MUTATION_MODE_ENV] = (
+            plugin.PRODUCTION_MODE_MUTATION_ENABLED
+        )
+        note = self.vault / "note.md"
+        note.write_bytes(b"before\n")
+        preview = json.loads(plugin.preview_edit({
+            "target_relative_path": "note.md",
+            "new_content": "after\n",
+        }))
+
+        result = self._production_apply(
+            preview["plan_token"],
+            gate=self._production_once_gate(
+                lambda: note.write_bytes(b"changed while deciding\n")
+            ),
+        )
+
+        self.assertFalse(result["success"])
+        self.assertEqual(result["error"], "stale_original_hash")
+        self.assertFalse(result["mutation_performed"])
+        self.assertEqual(note.read_bytes(), b"changed while deciding\n")
+        self.assertEqual(list(self.recovery.iterdir()), [])
+
+    def test_windows_production_edit_same_bytes_swap_after_once_is_stale(self):
+        if os.name != "nt":
+            self.skipTest("Windows file identity is the production target")
+        os.environ[plugin.PRODUCTION_MUTATION_MODE_ENV] = (
+            plugin.PRODUCTION_MODE_MUTATION_ENABLED
+        )
+        note = self.vault / "note.md"
+        note.write_bytes(b"before\n")
+        preview = json.loads(plugin.preview_edit({
+            "target_relative_path": "note.md",
+            "new_content": "after\n",
+        }))
+
+        def replace_same_bytes():
+            replacement = self.vault / "replacement.md"
+            replacement.write_bytes(note.read_bytes())
+            os.replace(replacement, note)
+
+        result = self._production_apply(
+            preview["plan_token"],
+            gate=self._production_once_gate(replace_same_bytes),
+        )
+
+        self.assertFalse(result["success"])
+        self.assertEqual(result["error"], "target_file_id_changed")
+        self.assertFalse(result["mutation_performed"])
+        self.assertEqual(note.read_bytes(), b"before\n")
+        self.assertEqual(list(self.recovery.iterdir()), [])
+
+    def test_production_edit_receipt_finalization_failure_is_reconcilable(self):
+        os.environ[plugin.PRODUCTION_MUTATION_MODE_ENV] = (
+            plugin.PRODUCTION_MODE_MUTATION_ENABLED
+        )
+        note = self.vault / "note.md"
+        note.write_bytes(b"before\n")
+        preview = json.loads(plugin.preview_edit({
+            "target_relative_path": "note.md",
+            "new_content": "after\n",
+        }))
+
+        def fail(name):
+            if name == "production_edit_before_receipt_commit":
+                raise RuntimeError("simulated receipt failure")
+
+        result = self._production_apply(
+            preview["plan_token"],
+            gate=self._production_once_gate(),
+            failure_hook=fail,
+        )
+
+        self.assertFalse(result["success"])
+        self.assertTrue(result["mutation_performed"])
+        self.assertTrue(result["recovery_required"])
+        self.assertEqual(note.read_bytes(), b"after\n")
+        inspected = plugin._inspect_receipt_at_roots(
+            self.vault, self.inbox, self.recovery, preview["plan_token"]
+        )
+        self.assertTrue(inspected["success"])
+        self.assertEqual(inspected["receipt_state"], "prepared")
+        self.assertTrue(inspected["receipt_reconciliation_required"])
+        self.assertEqual(
+            inspected["current_classification"], "applied_unfinalized"
+        )
+
+    def test_production_edit_replay_is_refused_before_second_approval(self):
+        os.environ[plugin.PRODUCTION_MUTATION_MODE_ENV] = (
+            plugin.PRODUCTION_MODE_MUTATION_ENABLED
+        )
+        note = self.vault / "note.md"
+        note.write_bytes(b"before\n")
+        preview = json.loads(plugin.preview_edit({
+            "target_relative_path": "note.md",
+            "new_content": "after\n",
+        }))
+        first = self._production_apply(
+            preview["plan_token"],
+            gate=self._production_once_gate(),
+        )
+        self.assertTrue(first["success"])
+        called = {"value": False}
+
+        def second_gate(*_args, **_kwargs):
+            called["value"] = True
+            return {"approved": True}
+
+        second = self._production_apply(
+            preview["plan_token"], gate=second_gate
+        )
+
+        self.assertFalse(second["success"])
+        self.assertEqual(second["error"], "plan_already_consumed")
+        self.assertFalse(called["value"])
+        self.assertEqual(note.read_bytes(), b"after\n")
+
+    def test_production_move_once_commits_without_disposable_guard(self):
+        os.environ[plugin.PRODUCTION_MUTATION_MODE_ENV] = (
+            plugin.PRODUCTION_MODE_MUTATION_ENABLED
+        )
+        (self.vault / "Folder").mkdir()
+        draft = self.inbox / "draft.md"
+        draft_bytes = (
+            b"---\r\norion_draft: true\r\nstatus: draft\r\n---\r\nbody"
+        )
+        draft.write_bytes(draft_bytes)
+        target = self.vault / "Folder" / "draft.md"
+        preview = json.loads(plugin.preview_move_draft({
+            "source_draft": "draft.md",
+            "target_relative_path": "Folder/draft.md",
+        }))
+
+        # Prove this path is not relying on the disposable opt-in.
+        os.environ.pop(plugin.DISPOSABLE_MUTATION_FLAG, None)
+        result = self._production_apply(
+            preview["plan_token"],
+            gate=self._production_once_gate(),
+        )
+
+        self.assertTrue(result["success"])
+        self.assertFalse(draft.exists())
+        self.assertEqual(target.read_bytes(), draft_bytes)
+        manifest = json.loads(
+            Path(result["recovery_dir"], "manifest.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(manifest["schema_version"], 2)
+        self.assertEqual(manifest["state"], "committed")
+
+    def test_production_move_target_appears_after_approval_is_refused(self):
+        os.environ[plugin.PRODUCTION_MUTATION_MODE_ENV] = (
+            plugin.PRODUCTION_MODE_MUTATION_ENABLED
+        )
+        (self.vault / "Folder").mkdir()
+        draft = self.inbox / "draft.md"
+        draft.write_text(
+            "---\norion_draft: true\nstatus: draft\n---\nbody\n",
+            encoding="utf-8",
+        )
+        target = self.vault / "Folder" / "draft.md"
+        preview = json.loads(plugin.preview_move_draft({
+            "source_draft": "draft.md",
+            "target_relative_path": "Folder/draft.md",
+        }))
+
+        result = self._production_apply(
+            preview["plan_token"],
+            gate=self._production_once_gate(
+                lambda: target.write_bytes(b"competitor\n")
+            ),
+        )
+
+        self.assertFalse(result["success"])
+        self.assertEqual(result["error"], "target_already_exists")
+        self.assertFalse(result["mutation_performed"])
+        self.assertTrue(draft.exists())
+        self.assertEqual(target.read_bytes(), b"competitor\n")
+        self.assertEqual(list(self.recovery.iterdir()), [])
+
+    def test_unresolved_recovery_blocks_new_production_mutation_before_approval(self):
+        os.environ[plugin.PRODUCTION_MUTATION_MODE_ENV] = (
+            plugin.PRODUCTION_MODE_MUTATION_ENABLED
+        )
+        (self.recovery / "not-a-valid-record").mkdir()
+        note = self.vault / "note.md"
+        note.write_bytes(b"before\n")
+        preview = json.loads(plugin.preview_edit({
+            "target_relative_path": "note.md",
+            "new_content": "after\n",
+        }))
+        called = {"value": False}
+
+        def gate(*_args, **_kwargs):
+            called["value"] = True
+            return {"approved": True}
+
+        result = self._production_apply(preview["plan_token"], gate=gate)
+
+        self.assertFalse(result["success"])
+        self.assertEqual(
+            result["error"], "production_recovery_attention_required"
+        )
+        self.assertFalse(called["value"])
+        self.assertEqual(note.read_bytes(), b"before\n")
+
+    def test_production_restore_edit_uses_new_schema2_transaction(self):
+        os.environ[plugin.PRODUCTION_MUTATION_MODE_ENV] = (
+            plugin.PRODUCTION_MODE_MUTATION_ENABLED
+        )
+        note = self.vault / "note.md"
+        note.write_bytes(b"before\n")
+        edit = json.loads(plugin.preview_edit({
+            "target_relative_path": "note.md",
+            "new_content": "after\n",
+        }))
+        first = self._production_apply(
+            edit["plan_token"], gate=self._production_once_gate()
+        )
+        self.assertTrue(first["success"])
+        self.assertEqual(note.read_bytes(), b"after\n")
+
+        restore = plugin._preview_production_restore_candidate(
+            edit["plan_token"],
+            local_fs_probe=self._local,
+            acl_probe=self._acl,
+            access_probe=self._access,
+        )
+        self.assertTrue(restore["success"])
+        second = self._production_apply(
+            restore["plan_token"], gate=self._production_once_gate()
+        )
+
+        self.assertTrue(second["success"])
+        self.assertEqual(note.read_bytes(), b"before\n")
+        self.assertNotEqual(second["recovery_id"], edit["plan_token"])
+        manifest = json.loads(
+            Path(second["recovery_dir"], "manifest.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(manifest["schema_version"], 2)
+        self.assertEqual(manifest["action"], "restore_edit")
+        self.assertEqual(
+            manifest["origin_recovery_id"], edit["plan_token"]
+        )
+
     def test_windows_native_recovery_probes_are_read_only_smoke(self):
         if os.name != "nt":
             self.skipTest("Windows production preflight smoke")
