@@ -262,6 +262,51 @@ P5_02I_MOVE_OPERATOR_WORKTREE_CLEANED=true
 
 I3 is accepted.
 
+### I4 source blocker discovered before live execution
+
+Review before the I4 operator run found that the older disposable edit/move
+prototype validated optional `approval_evidence` but did not consume its
+`attempt_id` before stale-state checks. That behavior was deliberately kept
+for earlier source-prototype compatibility, while disposable restore and the
+production-shaped executor already consume approval before post-human stale
+revalidation.
+
+Running I4 against that older installed path would therefore not prove that a
+stale human ALLOW ONCE cannot later be revived.
+
+P5-02I source hardening adds a qualification-only
+`require_fresh_approval=True` seam to the private disposable executor:
+
+- approval evidence becomes mandatory for the qualification path;
+- valid evidence is consumed before source/target stale revalidation;
+- stale edit or move-target-race rejection consumes the human once;
+- returning fixture state to the earlier bytes/path does not revive that
+  approval;
+- invalid/mismatched evidence still refuses before recovery/mutation;
+- the default remains false only so older source-prototype tests keep their
+  historical semantics;
+- the public registered apply handler is unchanged and remains fail-closed.
+
+Source commits:
+
+```text
+d7d429f333fbe15fbc3a44dcd6c68d0a0435ee93  implementation
+55049f782e43fc48505ad8b1cae53eeaec3ca427  focused P5-02I tests
+```
+
+New focused tests cover:
+
+1. required mode refuses missing approval before recovery;
+2. stale edit consumes approval and same evidence cannot revive;
+3. move target race consumes approval and same evidence cannot revive;
+4. mismatched evidence refuses before recovery/mutation;
+5. valid required-mode once commits and plan replay refuses.
+
+This source change has **not** been copied into the installed COMPANION plugin.
+Source verification must pass first. Updating the installed plugin to this new
+exact source is a separate live-plugin change and requires explicit owner
+authorization before I4 installed-runtime execution.
+
 ### I4 — stale-state and evidence-consumption checks
 
 At minimum:
