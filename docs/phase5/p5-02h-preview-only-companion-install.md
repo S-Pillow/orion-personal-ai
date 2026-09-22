@@ -421,6 +421,24 @@ The PowerShell verification wrapper itself did not run because local PowerShell 
 
 Disposition: the Hermes checkout dirtiness is fully accounted for by the accepted P4-04A compatibility patch. **Do not clean/reset/stash/rollback this checkout.**
 
+## H4 P4-04A verification — PASS
+
+Operator ran the underlying source-controlled Python verifier directly because local PowerShell execution policy blocked the wrapper.
+
+Observed:
+
+```text
+P4-04A VERIFY PASS
+Target=C:\Users\spill\AppData\Local\hermes\hermes-agent\gateway\platforms\api_server.py
+Sha256=ecfd6dd53610c24a81f078650a0b2b3e129478a50fdb5f353313fff6e12e3888
+```
+
+This closes the checkout-classification question: the dirty Hermes checkout is the accepted P4-04A runtime state, not unexpected drift.
+
+Repository cross-check also confirmed that `scripts/operator/Start-Orion.ps1` at local Orion HEAD `cb602e3` is byte-identical to the current P5-02G branch copy. This is the same repo operator lifecycle path referenced by P4-04A runtime acceptance after the compatibility patch was installed.
+
+H4 should therefore use the repository operator Start script rather than the stale versioned v2.7.4 wrapper that enforces a clean Hermes checkout.
+
 ## Gate H4 — lifecycle/load
 
 Use the accepted installed one-shot Orion operator lifecycle:
