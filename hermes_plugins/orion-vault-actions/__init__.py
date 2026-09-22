@@ -1301,15 +1301,127 @@ def _inspect_disposable_recovery_candidate(plan_token: str) -> Dict[str, Any]:
             success=False, error=f"recovery_manifest_error:{type(exc).__name__}"
         )
 
+    action = manifest.get("action")
     if (
         manifest.get("schema_version") != 1
         or manifest.get("plan_token") != plan_token
         or manifest.get("state") not in ("prepared", "committed")
-        or manifest.get("action") not in ("edit_note", "move_draft")
+        or action not in (
+            "edit_note", "move_draft", "restore_edit", "restore_move_source"
+        )
     ):
         return _candidate_result(success=False, error="recovery_manifest_invalid")
 
-    action = manifest["action"]
+    if action == "restore_edit":
+        origin_recovery_id = manifest.get("origin_recovery_id")
+        before_sha = manifest.get("before_sha256")
+        after_sha = manifest.get("after_sha256")
+        target_rel = manifest.get("target_relative_path")
+        artifact_name = manifest.get("backup_file")
+        if (
+            not re.fullmatch(r"[0-9a-f]{64}", str(origin_recovery_id or ""))
+            or artifact_name != "before_restore.bin"
+            or not isinstance(before_sha, str)
+            or not isinstance(after_sha, str)
+        ):
+            return _candidate_result(success=False, error="recovery_manifest_invalid")
+        artifact = recovery_dir / artifact_name
+        if not artifact.is_file() or _is_reparse_point(artifact):
+            return _candidate_result(success=False, error="recovery_backup_missing")
+        backup_sha = _sha_bytes(artifact.read_bytes())
+        if backup_sha != before_sha:
+            return _candidate_result(success=False, error="recovery_backup_hash_mismatch")
+
+        target_sha, target_error = _candidate_hash_under_root(vault_root, target_rel)
+        if target_error:
+            return _candidate_result(success=False, error=target_error)
+        if manifest["state"] == "committed":
+            classification = (
+                "committed" if target_sha == after_sha else "committed_then_changed"
+            )
+            recovery_required = False
+        elif target_sha == before_sha:
+            classification = "prepared_no_effect"
+            recovery_required = False
+        elif target_sha == after_sha:
+            classification = "applied_unfinalized"
+            recovery_required = True
+        else:
+            classification = "divergent_unresolved"
+            recovery_required = True
+
+        return _candidate_result(
+            success=True,
+            mutation_performed=False,
+            recovery_required=recovery_required,
+            recovery_id=plan_token,
+            origin_recovery_id=origin_recovery_id,
+            action=action,
+            manifest_state=manifest["state"],
+            classification=classification,
+            backup_sha256=backup_sha,
+            target_sha256=target_sha,
+            before_sha256=before_sha,
+            after_sha256=after_sha,
+            target_relative_path=target_rel,
+        )
+
+    if action == "restore_move_source":
+        origin_recovery_id = manifest.get("origin_recovery_id")
+        source_rel = manifest.get("source_draft")
+        after_sha = manifest.get("after_sha256")
+        artifact_name = manifest.get("evidence_file")
+        if (
+            not re.fullmatch(r"[0-9a-f]{64}", str(origin_recovery_id or ""))
+            or manifest.get("before_state") != "absent"
+            or artifact_name != "created_source.bin"
+            or not isinstance(after_sha, str)
+        ):
+            return _candidate_result(success=False, error="recovery_manifest_invalid")
+        artifact = recovery_dir / artifact_name
+        if not artifact.is_file() or _is_reparse_point(artifact):
+            return _candidate_result(success=False, error="recovery_backup_missing")
+        backup_sha = _sha_bytes(artifact.read_bytes())
+        if backup_sha != after_sha:
+            return _candidate_result(success=False, error="recovery_backup_hash_mismatch")
+
+        source_current, source_error = _candidate_hash_under_root(
+            inbox_root, source_rel
+        )
+        if source_error:
+            return _candidate_result(success=False, error=source_error)
+        if manifest["state"] == "committed":
+            classification = (
+                "committed"
+                if source_current == after_sha
+                else "committed_then_changed"
+            )
+            recovery_required = False
+        elif source_current is None:
+            classification = "prepared_no_effect"
+            recovery_required = False
+        elif source_current == after_sha:
+            classification = "applied_unfinalized"
+            recovery_required = True
+        else:
+            classification = "divergent_unresolved"
+            recovery_required = True
+
+        return _candidate_result(
+            success=True,
+            mutation_performed=False,
+            recovery_required=recovery_required,
+            recovery_id=plan_token,
+            origin_recovery_id=origin_recovery_id,
+            action=action,
+            manifest_state=manifest["state"],
+            classification=classification,
+            backup_sha256=backup_sha,
+            source_sha256=source_current,
+            after_sha256=after_sha,
+            source_draft=source_rel,
+        )
+
     backup_name = manifest.get("backup_file")
     expected_backup = "original.bin" if action == "edit_note" else "source.bin"
     if backup_name != expected_backup:
@@ -1829,6 +1941,8 @@ def _candidate_receipt_payload(
         "created_at_utc": created_at_utc,
         "updated_at_utc": _utc_now_iso(),
     }
+    if plan.get("action") in ("restore_edit", "restore_move_source"):
+        payload["origin_recovery_id"] = plan.get("recovery_id")
     if final_classification:
         payload["final_classification"] = final_classification
     return payload
@@ -1907,6 +2021,26 @@ def _receipt_approval_message_matches_plan(
             "Exact unified diff:\n"
         )
         suffix = "\nCurrent apply handler remains fail-closed and will not mutate."
+    elif action == "restore_edit":
+        prefix = (
+            "Approve Orion historical edit restore preview? "
+            f"Recovery record: {plan.get('recovery_id')}. "
+            f"Target: {plan.get('target_canonical_path')}. "
+            f"Current SHA-256: {plan.get('current_sha256')}. "
+            f"Restore SHA-256: {plan.get('restore_sha256')}.\n"
+            "Exact unified diff:\n"
+        )
+        suffix = "\nRestore execution is not registered and will not mutate."
+    elif action == "restore_move_source":
+        prefix = (
+            "Approve Orion historical move-source restore preview? "
+            f"Recovery record: {plan.get('recovery_id')}. "
+            f"Inbox source to recreate: {plan.get('target_canonical_path')}. "
+            f"Source state: absent. Restore SHA-256: {plan.get('restore_sha256')}. "
+            f"Reference vault target: {plan.get('reference_target_canonical_path')}.\n"
+            "Exact unified diff:\n"
+        )
+        suffix = "\nRestore execution is not registered and will not mutate."
     else:
         return False
 
@@ -1988,13 +2122,19 @@ def _inspect_disposable_receipt_candidate(recovery_id: str) -> Dict[str, Any]:
             receipt.get("state") == "prepared"
             and receipt.get("final_classification") is not None
         )
+        or (
+            plan.get("action") in ("restore_edit", "restore_move_source")
+            and receipt.get("origin_recovery_id") != plan.get("recovery_id")
+        )
     ):
         return _candidate_result(success=False, error="receipt_invalid")
 
     backup_name = receipt.get("backup_file")
     backup = recovery_dir / str(backup_name or "")
     if (
-        backup_name not in ("original.bin", "source.bin")
+        backup_name not in (
+            "original.bin", "source.bin", "before_restore.bin", "created_source.bin"
+        )
         or not backup.is_file()
         or _is_reparse_point(backup)
     ):
@@ -2019,10 +2159,17 @@ def _inspect_disposable_receipt_candidate(recovery_id: str) -> Dict[str, Any]:
             success=False, error="receipt_recovery_correlation_mismatch"
         )
 
+    current_classification = recovery.get("classification")
+    receipt_reconciliation_required = receipt.get("state") != "committed"
+    recovery_required = bool(recovery.get("recovery_required"))
+    if receipt_reconciliation_required and current_classification == "committed":
+        current_classification = "applied_unfinalized"
+        recovery_required = True
+
     return _candidate_result(
         success=True,
         mutation_performed=False,
-        recovery_required=bool(recovery.get("recovery_required")),
+        recovery_required=recovery_required,
         correlation_valid=True,
         authorization_reusable=False,
         recovery_id=recovery_id,
@@ -2030,9 +2177,9 @@ def _inspect_disposable_receipt_candidate(recovery_id: str) -> Dict[str, Any]:
         action=plan.get("action"),
         receipt_state=receipt.get("state"),
         receipt_finalized=receipt.get("state") == "committed",
-        receipt_reconciliation_required=receipt.get("state") != "committed",
+        receipt_reconciliation_required=receipt_reconciliation_required,
         final_classification=receipt.get("final_classification"),
-        current_classification=recovery.get("classification"),
+        current_classification=current_classification,
         approval_message_sha256=approval.get("approval_message_sha256"),
         approval_attempt_id=approval.get("attempt_id"),
         approval_surface=approval.get("surface"),
