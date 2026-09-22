@@ -279,6 +279,33 @@ mcp_allowlist: ["iai-mcp"]
 
 No other plugin capability is authorized.
 
+## H3.5 observed result — PASS
+
+Operator H3.5 evidence:
+
+- mutation-related Phase 5 environment settings remained absent;
+- exact manual config edit succeeded with `MCP_ALLOWLIST_ADDED=true`;
+- live config SHA-256 after allowlist edit: `34D9BD9DDC1BC59783CE2DC80D98FBD66D7AA7CC670DDFB875E0D1C78E8462D7`;
+- plugin remains enabled as a user plugin;
+- declared capabilities remain none;
+- installed-location doctor remains PASS at **4 tools / 2 hooks**;
+- live plugin config is now:
+
+```yaml
+plugins:
+  enabled:
+    - orion-vault-actions
+  disabled: []
+  entries:
+    orion-vault-actions:
+      allow_tool_override: false
+      mcp_allowlist: ["iai-mcp"]
+```
+
+- managed gateway remained stopped / no process detected.
+
+H3.5 is accepted. The next step is the first lifecycle/load gate. No real vault/inbox mutation has occurred.
+
 ## Gate H4 — lifecycle/load
 
 Use only the accepted manual-off Hermes lifecycle.
