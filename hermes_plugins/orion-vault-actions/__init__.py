@@ -1174,6 +1174,178 @@ def _candidate_recovery_dir(recovery_root: Path, token: str) -> Path:
     return path
 
 
+def _candidate_hash_under_root(
+    root: Path, relative: Any
+) -> tuple[str | None, str | None]:
+    """Return (sha256, error) for one contained regular file, or (None, None) if absent."""
+    try:
+        path, _ = _resolve_under_root(root, relative, must_exist=True)
+    except FileNotFoundError:
+        return None, None
+    except Exception as exc:
+        return None, f"path_error:{type(exc).__name__}"
+    try:
+        return _sha_bytes(path.read_bytes()), None
+    except Exception as exc:
+        return None, f"read_error:{type(exc).__name__}"
+
+
+def _inspect_disposable_recovery_candidate(plan_token: str) -> Dict[str, Any]:
+    """Read-only reconciliation of one disposable recovery record.
+
+    The manifest is evidence, not truth. Prepared records are classified from
+    current source/target hashes so restart/crash recovery does not assume
+    whether the protected filesystem step happened.
+    """
+    try:
+        vault_root, inbox_root, recovery_root = _candidate_disposable_roots()
+    except Exception as exc:
+        return _candidate_result(success=False, error=str(exc))
+
+    if not isinstance(plan_token, str) or not re.fullmatch(r"[0-9a-f]{64}", plan_token):
+        return _candidate_result(success=False, error="invalid_recovery_id")
+
+    recovery_dir = recovery_root / plan_token
+    try:
+        if not recovery_dir.is_dir() or _is_reparse_point(recovery_dir):
+            return _candidate_result(success=False, error="recovery_record_missing")
+        recovery_real = recovery_dir.resolve(strict=True)
+        _ensure_contained(recovery_root.resolve(strict=True), recovery_real)
+
+        manifest_path = recovery_dir / "manifest.json"
+        if (not manifest_path.is_file() or _is_reparse_point(manifest_path)):
+            return _candidate_result(success=False, error="recovery_manifest_missing")
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if not isinstance(manifest, dict):
+            raise ValueError("manifest_not_object")
+    except json.JSONDecodeError:
+        return _candidate_result(success=False, error="recovery_manifest_invalid_json")
+    except Exception as exc:
+        return _candidate_result(
+            success=False, error=f"recovery_manifest_error:{type(exc).__name__}"
+        )
+
+    if (
+        manifest.get("schema_version") != 1
+        or manifest.get("plan_token") != plan_token
+        or manifest.get("state") not in ("prepared", "committed")
+        or manifest.get("action") not in ("edit_note", "move_draft")
+    ):
+        return _candidate_result(success=False, error="recovery_manifest_invalid")
+
+    action = manifest["action"]
+    backup_name = manifest.get("backup_file")
+    expected_backup = "original.bin" if action == "edit_note" else "source.bin"
+    if backup_name != expected_backup:
+        return _candidate_result(success=False, error="recovery_backup_name_invalid")
+    backup = recovery_dir / backup_name
+    if not backup.is_file() or _is_reparse_point(backup):
+        return _candidate_result(success=False, error="recovery_backup_missing")
+
+    try:
+        backup_sha = _sha_bytes(backup.read_bytes())
+    except Exception as exc:
+        return _candidate_result(
+            success=False, error=f"recovery_backup_error:{type(exc).__name__}"
+        )
+
+    if action == "edit_note":
+        before_sha = manifest.get("before_sha256")
+        after_sha = manifest.get("after_sha256")
+        target_rel = manifest.get("target_relative_path")
+        if (
+            not isinstance(before_sha, str)
+            or not isinstance(after_sha, str)
+            or backup_sha != before_sha
+        ):
+            return _candidate_result(success=False, error="recovery_backup_hash_mismatch")
+
+        target_sha, target_error = _candidate_hash_under_root(vault_root, target_rel)
+        if target_error:
+            return _candidate_result(success=False, error=target_error)
+
+        if manifest["state"] == "committed":
+            classification = (
+                "committed"
+                if target_sha == after_sha
+                else "committed_then_changed"
+            )
+            recovery_required = False
+        elif target_sha == before_sha:
+            classification = "prepared_no_effect"
+            recovery_required = False
+        elif target_sha == after_sha:
+            classification = "applied_unfinalized"
+            recovery_required = True
+        else:
+            classification = "divergent_unresolved"
+            recovery_required = True
+
+        return _candidate_result(
+            success=True,
+            mutation_performed=False,
+            recovery_required=recovery_required,
+            recovery_id=plan_token,
+            action=action,
+            manifest_state=manifest["state"],
+            classification=classification,
+            backup_sha256=backup_sha,
+            target_sha256=target_sha,
+            before_sha256=before_sha,
+            after_sha256=after_sha,
+            target_relative_path=target_rel,
+        )
+
+    source_sha = manifest.get("source_sha256")
+    source_rel = manifest.get("source_draft")
+    target_rel = manifest.get("target_relative_path")
+    if not isinstance(source_sha, str) or backup_sha != source_sha:
+        return _candidate_result(success=False, error="recovery_backup_hash_mismatch")
+
+    source_current, source_error = _candidate_hash_under_root(inbox_root, source_rel)
+    target_current, target_error = _candidate_hash_under_root(vault_root, target_rel)
+    if source_error:
+        return _candidate_result(success=False, error=source_error)
+    if target_error:
+        return _candidate_result(success=False, error=target_error)
+
+    if manifest["state"] == "committed":
+        classification = (
+            "committed"
+            if source_current is None and target_current == source_sha
+            else "committed_then_changed"
+        )
+        recovery_required = False
+    elif source_current == source_sha and target_current is None:
+        classification = "prepared_no_effect"
+        recovery_required = False
+    elif source_current == source_sha and target_current == source_sha:
+        classification = "duplicate_unresolved"
+        recovery_required = True
+    elif source_current is None and target_current == source_sha:
+        classification = "applied_unfinalized"
+        recovery_required = True
+    else:
+        classification = "divergent_unresolved"
+        recovery_required = True
+
+    return _candidate_result(
+        success=True,
+        mutation_performed=False,
+        recovery_required=recovery_required,
+        recovery_id=plan_token,
+        action=action,
+        manifest_state=manifest["state"],
+        classification=classification,
+        backup_sha256=backup_sha,
+        source_sha256=source_current,
+        target_sha256=target_current,
+        approved_source_sha256=source_sha,
+        source_draft=source_rel,
+        target_relative_path=target_rel,
+    )
+
+
 def _execute_disposable_plan_candidate(
     plan_token: str, *, failure_hook=None
 ) -> Dict[str, Any]:
