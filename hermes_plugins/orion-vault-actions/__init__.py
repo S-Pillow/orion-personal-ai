@@ -2657,6 +2657,12 @@ def _execute_disposable_restore_candidate(
                 backup_file="before_restore.bin",
                 backup_sha256=before_sha,
             )
+            if not _candidate_mark_consumed(plan_token):
+                return _candidate_result(
+                    success=False,
+                    error="plan_already_consumed",
+                    recovery_dir=str(recovery_dir),
+                )
             _candidate_checkpoint("restore_edit_after_recovery", failure_hook)
 
             temporary = target.with_name(
@@ -2666,12 +2672,6 @@ def _execute_disposable_restore_candidate(
             try:
                 _durable_write_exclusive(temporary, proposed)
                 _candidate_checkpoint("restore_edit_before_replace", failure_hook)
-                if not _candidate_mark_consumed(plan_token):
-                    return _candidate_result(
-                        success=False,
-                        error="plan_already_consumed",
-                        recovery_dir=str(recovery_dir),
-                    )
                 mutation_started = True
                 _candidate_replace_file(target, temporary)
                 _candidate_checkpoint("restore_edit_after_replace", failure_hook)
@@ -2762,15 +2762,15 @@ def _execute_disposable_restore_candidate(
             backup_file="created_source.bin",
             backup_sha256=plan.get("restore_sha256"),
         )
-        _candidate_checkpoint("restore_move_after_recovery", failure_hook)
-
-        _candidate_checkpoint("restore_move_before_create", failure_hook)
         if not _candidate_mark_consumed(plan_token):
             return _candidate_result(
                 success=False,
                 error="plan_already_consumed",
                 recovery_dir=str(recovery_dir),
             )
+        _candidate_checkpoint("restore_move_after_recovery", failure_hook)
+
+        _candidate_checkpoint("restore_move_before_create", failure_hook)
         mutation_started = True
         try:
             _durable_write_exclusive(source, proposed)
