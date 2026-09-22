@@ -50,19 +50,31 @@ The HUD source now renders both fields completely using `textContent`, preserves
 
 Local verification: **3/3 executable JavaScript renderer tests** passed, including a long exact diff, CRLF, Unicode, literal HTML, command-only/description-only events, and choice filtering. The complete Python HUD suite passed **74/74**, including a new real-bridge test that forwards the full simulated approval description through SSE and posts simulated `deny` and `once` decisions. These are source/transport tests. The isolated Windows browser fixture has now completed both simulated DENY and ALLOW ONCE with `mutation_performed=false`, and after the Ctrl+C fixture correction it returned cleanly to PowerShell. That closes isolated decision-routing/shutdown behavior. Exact visual-display acceptance is now **PASS** by operator confirmation on Windows. The operator explicitly verified that the approval card visibly showed `orion_vault_apply_plan`, the fictional canonical target `C:\Orion-Disposable-Fixture\vault\note.md`, literal `<b>literal markup</b>` text without HTML interpretation, `+END-OF-DIFF-100`, and the final `\\ No newline at end of file` marker. This closes the isolated human visual-inspection gate; terminal logs alone were not used as substitute evidence. Full installed-Hermes approval-to-HUD delivery remains the next no-write gate.
 
-### Next operator check: isolated HUD fixture
+### Next operator check: real Hermes no-write HUD approval
 
-Run from any PowerShell directory after pulling this branch:
+The isolated visual gate is accepted. The next gate uses the installed Hermes approval engine's real `request_tool_approval -> _await_gateway_decision -> resolve_gateway_approval` path and the candidate's real fresh-once observer logic, while still keeping the registered apply tool and the disposable mutation candidate completely out of execution.
+
+Run after pulling this branch:
 
 ```powershell
 git -C "D:\Orion\orion-personal-ai" pull --ff-only
+
 & "C:\Users\spill\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe" `
-  "D:\Orion\orion-personal-ai\hud\tests\probe_approval_surface.py"
+  "D:\Orion\orion-personal-ai\hud\tests\probe_real_hermes_approval_surface.py"
 ```
 
-Open the loopback URL printed as `ISOLATED HUD FIXTURE`. Under **SESSION**, change `No session selected` to **`orion-hud-main`**, then send `probe` in the HUD composer. The normal HUD requires a selected session before Send works. Check that the card shows `orion_vault_apply_plan`, the fictional canonical target, line 100, literal `<b>` tags, `END-OF-DIFF-100`, and the final no-newline marker. Scroll inside the details, then choose **DENY**. Send `probe` again and choose **ALLOW ONCE**. The terminal should report `SIMULATED result: deny; mutation_performed=false` followed by the corresponding `once` result. Each request expires after 120 seconds; send `probe` again if needed. Press Ctrl+C to close the fixture.
+The normal COMPANION gateway/service does **not** need to be started for this isolated probe.
 
-The fixture serves the real HUD and bridge against an in-memory fake Hermes API on two automatically assigned loopback ports. It directly constructs bridge state with a dummy credential; it never imports Hermes, reads COMPANION credentials, connects to the accepted Hermes port, or reads/writes the vault. It creates no durable server-side session or document. The browser may retain ordinary HUD UI preferences for that temporary origin. All decisions are simulated, including session/always. This proves only the HUD fixture surface, not a real Hermes decision, installed plugin lifecycle, concurrent approval safety, gateway privacy, or mutation authorization. Do not start the live bridge or install the plugin for this check.
+Open the printed loopback URL. Select `orion-hud-main` under **SESSION** and send `probe`.
+
+1. First run: choose **DENY**. The terminal must report `fresh_once=false; mutation_performed=false; note_unchanged=true`.
+2. Send `probe` again.
+3. Second run: choose **ALLOW ONCE**. The terminal must report `fresh_once=true; mutation_performed=false; note_unchanged=true`.
+4. Press Ctrl+C to close the fixture.
+
+The fixture intentionally exposes only `once` and `deny`; session/always are rejected at the fixture HTTP boundary and persistence callbacks are forbidden as a second safety belt. It imports the installed Hermes approval engine and uses its real gateway approval queue/resolver, but it does not install/discover the Orion plugin, start COMPANION, load a model, call the registered apply handler, invoke the disposable mutator, or touch the live vault/inbox. The approval lifecycle hook is routed directly to the candidate observer in-process so this test covers the candidate's private fresh-once marker without changing the installed plugin set.
+
+A PASS here closes the real Hermes approval-engine -> Orion HUD -> human decision -> fresh-once marker path. It still does not authorize filesystem mutation.
 
 ## Blockers before a mutating handler
 
