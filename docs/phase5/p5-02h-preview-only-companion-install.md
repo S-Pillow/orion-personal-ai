@@ -364,6 +364,21 @@ Observed operator result:
 
 Disposition: safe invocation-contract failure before lifecycle start. Do not patch/reinstall the accepted operator package. Read the installed `Start-Orion.ps1` and `Invoke-Orion.ps1` parameter/forwarding contract, then retry only with an invocation directly supported by those installed scripts.
 
+## H4 launcher contract correction
+
+The installed `Start-Orion.ps1` wrapper accepts an explicit `-ConfigPath` and forwards it unchanged to `Invoke-Orion.ps1 -Action start`:
+
+```powershell
+[CmdletBinding()]
+param([string]$ConfigPath = (Join-Path $PSScriptRoot 'orion-config.json'))
+& (Join-Path $PSScriptRoot 'Invoke-Orion.ps1') -Action start -ConfigPath $ConfigPath
+exit $LASTEXITCODE
+```
+
+`Invoke-Orion.ps1` likewise accepts `-ConfigPath` and resolves the configured Hermes Python before invoking `orion.py start --config <resolved>`.
+
+The earlier failure came from the default parameter expression evaluating `Join-Path $PSScriptRoot ...` before `$PSScriptRoot` was usable in that invocation context. No source/runtime patch is needed. The H4 retry must pass the installed `orion-config.json` explicitly.
+
 ## Gate H4 — lifecycle/load
 
 Use the accepted installed one-shot Orion operator lifecycle:
