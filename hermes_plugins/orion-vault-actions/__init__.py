@@ -758,6 +758,16 @@ def pre_tool_call(tool_name: str = "", args: Dict[str, Any] | None = None, **_: 
             "message": "P5-01 blocked: missing, unknown, or expired vault preview plan.",
         }
 
+    production_mode = _production_mutation_mode()
+    if (
+        production_mode.get("valid")
+        and production_mode.get("mode") == PRODUCTION_MODE_MUTATION_ENABLED
+    ):
+        # In production mutation mode the final handler owns the one human
+        # generic approval. The pre-tool hook remains only a fail-closed
+        # plan validator so one action does not generate two approval prompts.
+        return None
+
     return {
         "action": "approve",
         "message": message,
@@ -2320,6 +2330,155 @@ def _preview_production_restore_candidate(
     )
 
 
+def _revalidate_edit_preview_at_roots(
+    plan_token: str, vault_root: Path
+) -> Dict[str, Any]:
+    plan = _lookup_preview(plan_token)
+    if plan is None:
+        return _candidate_result(success=False, error="unknown_or_expired_plan")
+    if plan.get("action") != "edit_note":
+        return _candidate_result(success=False, error="not_edit_preview")
+    try:
+        _approval_summary(plan)
+        target, target_rel = _resolve_under_root(
+            vault_root, plan.get("target_relative_path"), must_exist=True
+        )
+        if (
+            target_rel != plan.get("target_relative_path")
+            or str(target.resolve(strict=True)) != plan.get("target_canonical_path")
+        ):
+            return _candidate_result(
+                success=False, error="target_identity_changed"
+            )
+        if os.name == "nt":
+            expected_file_id = plan.get("target_file_id")
+            if not expected_file_id:
+                return _candidate_result(
+                    success=False, error="target_file_id_missing"
+                )
+            try:
+                current_file_id = _windows_path_file_identity(target)
+            except Exception:
+                return _candidate_result(
+                    success=False, error="target_file_identity_unavailable"
+                )
+            if current_file_id != expected_file_id:
+                return _candidate_result(
+                    success=False, error="target_file_id_changed"
+                )
+        current = target.read_bytes()
+        if _sha_bytes(current) != plan.get("original_sha256"):
+            return _candidate_result(
+                success=False, error="stale_original_hash"
+            )
+        proposed = plan.get("_proposed_bytes")
+        if (
+            not isinstance(proposed, bytes)
+            or _sha_bytes(proposed) != plan.get("proposed_sha256")
+        ):
+            return _candidate_result(
+                success=False, error="proposed_hash_mismatch"
+            )
+        return _candidate_result(
+            success=True,
+            mutation_performed=False,
+            valid=True,
+            action="edit_note",
+            target_relative_path=target_rel,
+        )
+    except Exception as exc:
+        return _candidate_result(
+            success=False, error=f"edit_revalidation_error:{type(exc).__name__}"
+        )
+
+
+def _revalidate_move_preview_at_roots(
+    plan_token: str, vault_root: Path, inbox_root: Path
+) -> Dict[str, Any]:
+    plan = _lookup_preview(plan_token)
+    if plan is None:
+        return _candidate_result(success=False, error="unknown_or_expired_plan")
+    if plan.get("action") != "move_draft":
+        return _candidate_result(success=False, error="not_move_preview")
+    try:
+        _approval_summary(plan)
+        source, source_rel = _resolve_under_root(
+            inbox_root, plan.get("source_draft"), must_exist=True
+        )
+        target, target_rel = _resolve_under_root(
+            vault_root,
+            plan.get("target_relative_path"),
+            allow_missing_leaf=True,
+        )
+        if (
+            source_rel != plan.get("source_draft")
+            or str(source.resolve(strict=True)) != plan.get("source_canonical_path")
+        ):
+            return _candidate_result(
+                success=False, error="source_identity_changed"
+            )
+        if str(target.resolve(strict=False)) != plan.get("target_canonical_path"):
+            return _candidate_result(
+                success=False, error="target_identity_changed"
+            )
+        if not target.parent.is_dir() or _is_reparse_point(target.parent):
+            return _candidate_result(
+                success=False, error="target_parent_invalid"
+            )
+        if target.exists() or os.path.lexists(target):
+            return _candidate_result(
+                success=False, error="target_already_exists"
+            )
+        if os.name == "nt":
+            expected_file_id = plan.get("source_file_id")
+            if not expected_file_id:
+                return _candidate_result(
+                    success=False, error="source_file_id_missing"
+                )
+            try:
+                current_file_id = _windows_path_file_identity(source)
+            except Exception:
+                return _candidate_result(
+                    success=False, error="source_file_identity_unavailable"
+                )
+            if current_file_id != expected_file_id:
+                return _candidate_result(
+                    success=False, error="source_file_id_changed"
+                )
+        source_bytes, source_text = _read_utf8(source)
+        if _sha_bytes(source_bytes) != plan.get("source_sha256"):
+            return _candidate_result(
+                success=False, error="stale_source_hash"
+            )
+        if (
+            "orion_draft: true" not in source_text
+            or "status: draft" not in source_text
+        ):
+            return _candidate_result(
+                success=False, error="source_is_not_orion_draft"
+            )
+        proposed = plan.get("_proposed_bytes")
+        if (
+            not isinstance(proposed, bytes)
+            or _sha_bytes(proposed) != plan.get("source_sha256")
+        ):
+            return _candidate_result(
+                success=False, error="source_content_mismatch"
+            )
+        return _candidate_result(
+            success=True,
+            mutation_performed=False,
+            valid=True,
+            action="move_draft",
+            source_draft=source_rel,
+            target_relative_path=target_rel,
+        )
+    except Exception as exc:
+        return _candidate_result(
+            success=False, error=f"move_revalidation_error:{type(exc).__name__}"
+        )
+
+
 def _revalidate_restore_preview_at_roots(
     plan_token: str,
     vault_root: Path,
@@ -2512,9 +2671,10 @@ def _candidate_receipt_payload(
     state: str,
     created_at_utc: str,
     final_classification: str | None = None,
+    schema_version: int = 1,
 ) -> Dict[str, Any]:
     payload: Dict[str, Any] = {
-        "schema_version": 1,
+        "schema_version": schema_version,
         "receipt_type": "orion_vault_action",
         "recovery_id": recovery_id,
         "plan_token": plan_token,
@@ -2541,6 +2701,7 @@ def _write_candidate_receipt_prepared(
     approval: Dict[str, Any],
     backup_file: str,
     backup_sha256: str,
+    schema_version: int = 1,
 ) -> None:
     path = recovery_dir / "receipt.json"
     created = _utc_now_iso()
@@ -2553,6 +2714,7 @@ def _write_candidate_receipt_prepared(
         backup_sha256=backup_sha256,
         state="prepared",
         created_at_utc=created,
+        schema_version=schema_version,
     )
     data = json.dumps(
         payload, ensure_ascii=False, sort_keys=True, indent=2
@@ -2572,7 +2734,7 @@ def _commit_candidate_receipt(
         raise RuntimeError("receipt_invalid_json") from exc
     if (
         not isinstance(current, dict)
-        or current.get("schema_version") != 1
+        or current.get("schema_version") not in (1, 2)
         or current.get("state") != "prepared"
     ):
         raise RuntimeError("receipt_invalid_state")
