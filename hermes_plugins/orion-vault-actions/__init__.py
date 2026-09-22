@@ -3013,13 +3013,23 @@ def _inspect_disposable_receipt_candidate(recovery_id: str) -> Dict[str, Any]:
 
 
 def _execute_disposable_plan_candidate(
-    plan_token: str, *, failure_hook=None, approval_evidence=None
+    plan_token: str,
+    *,
+    failure_hook=None,
+    approval_evidence=None,
+    require_fresh_approval: bool = False,
 ) -> Dict[str, Any]:
     """P5-02B unregistered mutation prototype for disposable roots only.
 
     The public APPLY_TOOL does not call this function. It exists so edit/move
     durability, stale-state, recovery, and race behavior can be exercised
     before any live mutation handler is authorized.
+
+    require_fresh_approval is the stricter P5-02I qualification seam. When
+    true, approval evidence is mandatory and its attempt id is consumed before
+    any post-approval source/target revalidation. This mirrors the production
+    and restore candidates so a stale human decision cannot be revived later.
+    The default stays false only to preserve the older source-prototype tests.
     """
     try:
         vault_root, inbox_root, recovery_root = _candidate_disposable_roots()
@@ -3041,6 +3051,22 @@ def _execute_disposable_plan_candidate(
             )
         except Exception as exc:
             return _candidate_result(success=False, error=str(exc))
+    elif require_fresh_approval:
+        return _candidate_result(
+            success=False,
+            error="approval_evidence_required",
+            mutation_performed=False,
+        )
+
+    if require_fresh_approval:
+        if not _candidate_mark_approval_consumed(
+            receipt_approval["attempt_id"]
+        ):
+            return _candidate_result(
+                success=False,
+                error="approval_evidence_already_consumed",
+                mutation_performed=False,
+            )
 
     action = plan.get("action")
     recovery_dir: Path | None = None
