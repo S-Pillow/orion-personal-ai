@@ -193,6 +193,11 @@ class PlanBindingTests(unittest.TestCase):
         self.assertRegex(
             evidence["approval_message_sha256"], r"^[0-9a-f]{64}$"
         )
+        self.assertIn("Exact unified diff:", evidence["approval_message"])
+        self.assertEqual(
+            plugin._sha_text(evidence["approval_message"]),
+            evidence["approval_message_sha256"],
+        )
         self.assertNotIn("rule_key", evidence)
         self.assertNotIn("pattern_key", evidence)
         self.assertFalse(plugin._APPROVAL_ATTEMPTS)
