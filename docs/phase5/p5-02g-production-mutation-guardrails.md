@@ -1,6 +1,6 @@
 # P5-02G Production Mutation Guardrails
 
-Status: **SOURCE-ONLY CANDIDATE / WINDOWS VERIFICATION PENDING / LIVE MUTATION PROHIBITED**
+Status: **SOURCE-ONLY / WINDOWS-VERIFIED / LIVE MUTATION PROHIBITED**
 Date: 2026-09-22
 Branch: `feature/orion-phase5-p5-02g-production-guardrails`
 Depends on: P5-02A through P5-02F
@@ -305,34 +305,42 @@ Expected full discovery:
 
 **Total: 116 tests.**
 
-This 116-test state is pending fresh Windows verification.
+Windows operator verification is now **PASS**:
 
-## Verification gate
+- full `test_p5*.py`: **116/116 passed** in 2.281s;
+- installed-Hermes dispatcher probe: **2/2 passed** in 0.079s;
+- plugin doctor: **PASS**, manifest `orion-vault-actions 0.1.0`, 4 tools / 2 hooks;
+- no gateway/HUD fixture or persistent probe process was started by these commands.
 
-Run:
+The known Hermes SQLite 3.40.1 WAL-reset warning remained non-fatal and Hermes continued to use `journal_mode=DELETE`. It remains separate runtime hygiene.
 
-1. full `test_p5*.py` discovery;
-2. installed-Hermes dispatcher probe;
-3. plugin doctor against the source directory.
+This accepts the P5-02G production-shaped source guardrails on Windows.
 
-Expected structural doctor result remains:
+## Accepted boundary after PASS
 
-```text
-4 tool(s), 2 hook(s)
-```
+The following are now source-qualified:
 
-No gateway/HUD fixture is needed for this source gate.
+- fail-closed production mutation-mode parsing;
+- explicit production recovery-root validation;
+- fixed-local/access/DACL checks;
+- bounded unresolved-recovery discovery;
+- Windows edit file-ID parity;
+- single handler-side approval ownership in mutation-enabled mode;
+- post-approval stale revalidation;
+- schema-v2 recovery/receipt generation;
+- private production-shaped edit/move/restore execution against temporary roots;
+- replay refusal and restart reconciliation.
 
-## What a PASS will mean
+Still **not** authorized or activated:
 
-A clean Windows gate will mean the production-shaped source guardrails are qualified on the local platform.
+- live COMPANION plugin installation;
+- persistent mutation-mode configuration;
+- creation/ACL modification of a real production recovery root;
+- replacing `apply_plan_placeholder` in the registered tool surface;
+- Hermes lifecycle changes for this plugin;
+- any real vault/inbox mutation.
 
-It will **not** mean the live plugin is installed or mutation-enabled.
-
-After PASS, the next decision is between:
-
-- a separately authorized **preview-only COMPANION install**, or
-- additional source review/qualification before any install.
+The next live-facing gate, if separately authorized, is a **preview-only COMPANION installation** of an exact approved source commit with mutation mode disabled/preview-only and rollback captured before any restart.
 
 A real-vault mutation remains a later explicit authorization unit after installed-runtime disposable qualification.
 
