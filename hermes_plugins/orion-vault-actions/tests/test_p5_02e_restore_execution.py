@@ -547,6 +547,40 @@ class DisposableRestoreExecutionTests(unittest.TestCase):
             retry["error"], "approval_evidence_already_consumed"
         )
 
+    def test_restore_move_source_failure_before_create_is_prepared_no_effect(self):
+        draft, target, _source_bytes, _origin, _origin_result, _oe, restore = (
+            self._move_restore_preview()
+        )
+        evidence = self._fresh_once_evidence(restore["plan_token"])
+
+        def fail(name):
+            if name == "restore_move_before_create":
+                raise RuntimeError("simulated before exclusive create")
+
+        result = plugin._execute_disposable_restore_candidate(
+            restore["plan_token"],
+            approval_evidence=evidence,
+            failure_hook=fail,
+        )
+
+        self.assertFalse(result["success"])
+        self.assertFalse(result["mutation_performed"])
+        self.assertFalse(draft.exists())
+        self.assertTrue(target.exists())
+        recovery = plugin._inspect_disposable_recovery_candidate(
+            restore["plan_token"]
+        )
+        self.assertTrue(recovery["success"])
+        self.assertEqual(recovery["classification"], "prepared_no_effect")
+        receipt = plugin._inspect_disposable_receipt_candidate(
+            restore["plan_token"]
+        )
+        self.assertTrue(receipt["success"])
+        self.assertTrue(receipt["receipt_reconciliation_required"])
+        self.assertEqual(
+            receipt["current_classification"], "prepared_no_effect"
+        )
+
     def test_restore_move_source_exclusive_create_race_never_overwrites(self):
         draft, target, _source_bytes, _origin, _origin_result, _oe, restore = (
             self._move_restore_preview()
@@ -732,6 +766,39 @@ class DisposableRestoreExecutionTests(unittest.TestCase):
         )
         self.assertFalse(receipt["success"])
         self.assertEqual(receipt["error"], "receipt_backup_hash_mismatch")
+
+    def test_restore_receipt_cannot_authorize_a_second_restore(self):
+        note, _origin, _origin_result, _oe, restore = (
+            self._edit_restore_preview()
+        )
+        evidence = self._fresh_once_evidence(restore["plan_token"])
+        first = plugin._execute_disposable_restore_candidate(
+            restore["plan_token"], approval_evidence=evidence
+        )
+        self.assertTrue(first["success"])
+        self.assertEqual(note.read_bytes(), b"before\n")
+
+        second_preview = plugin._preview_disposable_restore_candidate(
+            restore["plan_token"]
+        )
+        self.assertTrue(second_preview["success"])
+        receipt = json.loads(
+            Path(first["recovery_dir"], "receipt.json").read_text(
+                encoding="utf-8"
+            )
+        )
+
+        misuse = plugin._execute_disposable_restore_candidate(
+            second_preview["plan_token"],
+            approval_evidence=receipt["approval"],
+        )
+
+        self.assertFalse(misuse["success"])
+        self.assertEqual(misuse["error"], "approval_evidence_invalid")
+        self.assertEqual(note.read_bytes(), b"before\n")
+        self.assertFalse(
+            (self.recovery / second_preview["plan_token"]).exists()
+        )
 
     def test_restore_receipt_survives_memory_reset_without_recreating_authority(self):
         note, _origin, _origin_result, _oe, restore = (
