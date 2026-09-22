@@ -151,36 +151,81 @@ The first mutating step will still keep the plugin disabled while installed-loca
 
 ## Gate H1 — rollback capture
 
-H1 is intentionally deferred until H0 output identifies the live config filename(s) and current plugin inventory.
+H1 now has a concrete rollback target:
 
-Before any copy/config mutation, H1 must capture:
+- live config: `%LOCALAPPDATA%\hermes\profiles\companion\config.yaml`;
+- plugin destination absent before install;
+- gateway already stopped.
 
-- exact source commit;
-- existing plugin destination state;
-- relevant COMPANION config file(s);
-- gateway state;
-- backup directory path;
-- file hashes for every config/plugin artifact that will be changed.
+Create a timestamped backup below the existing COMPANION `orion\backups` directory. Record the full config SHA-256, source pin, plugin inventory, and gateway status without copying or printing `.env` contents.
 
-No secret values should be printed into evidence.
+Before any install mutation, fail closed if either `ORION_P5_MUTATION_MODE` or `ORION_P5_PRODUCTION_RECOVERY_ROOT` is already set in the current process or declared in the profile `.env`. For this preview-only gate the desired state is to leave both absent, which makes source mutation mode default to `disabled`.
 
-## Gate H2 — preview-only install
+## Gate H2 — install exact pinned plugin while disabled
 
-After H1 is accepted:
+Do not use `hermes plugins install` against the Orion monorepo because the accepted plugin is a repository subdirectory and the observed installer exposes no subdirectory selector.
 
-- copy only the approved `orion-vault-actions` source directory to the exact COMPANION plugin destination;
-- configure only the required plugin entry / `mcp_allowlist: ["iai-mcp"]` seam;
-- set or preserve production mutation mode as `disabled` or `preview_only`;
-- do not configure `ORION_P5_PRODUCTION_RECOVERY_ROOT`;
-- do not register the private production executor.
+Create a temporary detached Git worktree at the exact approved commit:
 
-## Gate H3 — lifecycle/load
+```text
+b8cbb63c3db20c38543220956d3f776bffecf432
+```
+
+Copy only:
+
+```text
+hermes_plugins\orion-vault-actions
+```
+
+into:
+
+```text
+%LOCALAPPDATA%\hermes\profiles\companion\plugins\orion-vault-actions
+```
+
+Then, before enablement:
+
+- run installed-location plugin doctor;
+- run compact user-plugin list;
+- run `plugins show orion-vault-actions`;
+- run `plugins capabilities orion-vault-actions`;
+- confirm the gateway remains stopped.
+
+Any mismatch stops the gate and rolls back the copied plugin directory.
+
+## Gate H3 — enable with gateway still stopped
+
+If H2 passes, enable through Hermes with:
+
+```text
+--no-allow-tool-override
+```
+
+Do not start the gateway yet.
+
+After enablement, inspect only the resulting `plugins:` section of `config.yaml` plus `plugins show` / `plugins capabilities`.
+
+This observation determines the exact live plugin-entry schema before adding the `mcp_allowlist: ["iai-mcp"]` seam. Do not guess or hand-edit that structure before Hermes has written its native enablement shape.
+
+A second config SHA-256 is captured after enablement.
+
+## Gate H3.5 — MCP allowlist config
+
+Only after H3 reveals Hermes's native plugin-entry shape may the existing source-documented iai seam be added:
+
+```yaml
+mcp_allowlist: ["iai-mcp"]
+```
+
+No other plugin capability is authorized.
+
+## Gate H4 — lifecycle/load
 
 Use only the accepted manual-off Hermes lifecycle.
 
 Do not enable login startup.
 
-Any gateway stop/start needed solely to load the plugin is covered by this install authorization, but must happen only after rollback artifacts exist.
+Any gateway start needed solely to load the preview-only plugin is covered by this install authorization, but must happen only after rollback artifacts exist and H3/H3.5 configuration is accepted.
 
 ## Gate H4 — no-write acceptance
 
