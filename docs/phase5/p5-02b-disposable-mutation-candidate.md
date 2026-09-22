@@ -1,6 +1,6 @@
 # P5-02B Disposable Mutation Candidate
 
-Status: **SOURCE-ONLY / UNREGISTERED / WINDOWS HANDLE-HARDENING RE-VERIFICATION PENDING**  
+Status: **SOURCE-ONLY / UNREGISTERED / WINDOWS HANDLE-HARDENING VERIFIED**  
 Date: 2026-09-21  
 Depends on: accepted P5-01 merge `33c39d4` and P5-02A approval-integrity branch
 
@@ -135,41 +135,34 @@ P5-02B adds tests for:
 - Windows refusal when a writer handle already holds conflicting write access;
 - Windows interruption immediately after handle-based delete marking.
 
-The prior Windows baseline at `e45bc95` passed **37/37** source tests, the installed-Hermes dispatcher probe passed **2/2**, and plugin doctor passed with 4 tools / 2 hooks. The isolated exact-display gate and the real-Hermes no-write fresh-once gate also passed afterward. Those results remain valid for their tested commits.
+Windows verification at branch head `2e97019` is now **PASS**:
 
-The new handle-identity delta (`b0ce2f2`, cleanup correction `e8ccc40`, and tests `4081b6a`) has **not yet been executed on Windows**. The current full `test_p5*.py` discovery is expected to contain **40 tests** (16 P5-01 + 9 P5-02A + 15 P5-02B). A fresh Windows run is required before this hardening delta is PASS.
+- `test_p5*.py`: **40/40 passed** in 0.412s;
+- installed-Hermes dispatcher probe: **2/2 passed** in 0.083s;
+- plugin doctor: **PASS**, manifest `orion-vault-actions 0.1.0`, 4 tools / 2 hooks;
+- Windows-specific file-ID replacement rejection passed;
+- pre-existing writer refusal before mutation passed;
+- handle-based delete interruption classification passed;
+- existing edit/move recovery, replay, containment, alias, and approval-integrity tests remained green.
 
-## Tomorrow: Windows source verification
+The Hermes probe still emits the known SQLite 3.40.1 WAL-reset warning and falls back to `journal_mode=DELETE`; it did not cause a P5 test failure and is tracked separately from this source gate.
 
-From PowerShell:
+This closes the Windows handle-hardening verification gate. The registered `orion_vault_apply_plan` handler remains the refusing placeholder; no live vault/inbox mutation is enabled.
 
-```powershell
-git -C "D:\Orion\orion-personal-ai" pull --ff-only
+## Next gate: production recovery/restore design
 
-& "C:\Users\spill\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe" `
-  -m unittest discover `
-  -s "D:\Orion\orion-personal-ai\hermes_plugins\orion-vault-actions\tests" `
-  -p "test_p5*.py" -v
-```
+Windows source verification is complete. The next source-only gate is to turn the disposable recovery bytes/manifests into an explicit production recovery contract before any live mutator is wired:
 
-Expected discovery count: **40**.
+- choose a recovery root outside both vault and inbox;
+- define owner-only ACL expectations and startup validation;
+- define immutable receipt fields that survive process restart;
+- classify prepared/committed/recovery-required states deterministically;
+- implement read-only recovery inspection;
+- implement restore as a separately previewed and approval-gated action;
+- test edit restore, move duplicate-state recovery, missing/corrupt artifact refusal, stale target/source state, replay, and crash/interruption;
+- define retention/pruning without automatic deletion of unresolved recovery-required artifacts.
 
-Then run the installed-runtime no-write dispatcher probe:
-
-```powershell
-& "C:\Users\spill\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe" `
-  "D:\Orion\orion-personal-ai\hermes_plugins\orion-vault-actions\tests\probe_hermes_dispatch.py"
-```
-
-Then doctor only:
-
-```powershell
-& "C:\Users\spill\AppData\Local\hermes\hermes-agent\venv\Scripts\hermes.exe" `
-  -p companion plugins doctor `
-  "D:\Orion\orion-personal-ai\hermes_plugins\orion-vault-actions" --ci
-```
-
-These operations use source/disposable fixtures. Do not start/install/enable the live plugin for this verification.
+No live plugin install or real vault mutation is part of this gate.
 
 ## Stop conditions before any live mutator
 
