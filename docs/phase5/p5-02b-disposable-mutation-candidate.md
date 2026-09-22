@@ -1,6 +1,6 @@
 # P5-02B Disposable Mutation Candidate
 
-Status: **SOURCE-ONLY / UNREGISTERED / WINDOWS VERIFICATION PENDING**  
+Status: **SOURCE-ONLY / UNREGISTERED / WINDOWS HANDLE-HARDENING RE-VERIFICATION PENDING**  
 Date: 2026-09-21  
 Depends on: accepted P5-01 merge `33c39d4` and P5-02A approval-integrity branch
 
@@ -60,10 +60,21 @@ For an inbox-to-vault move plan the executor:
 6. consumes the plan;
 7. creates the destination with exclusive `xb` creation so a target race cannot overwrite another file;
 8. fsyncs and verifies the destination hash;
-9. re-reads the source immediately before deletion;
-10. if the source changed, removes the just-created target only when that target still exactly matches Orion's approved bytes;
-11. otherwise removes the source;
-12. verifies source absence + target hash and marks the manifest `committed`.
+9. on Windows, binds the preview to the source's volume + 128-bit file ID and later reopens that exact source with `GENERIC_READ | DELETE`, `FILE_SHARE_READ` only, and `FILE_FLAG_OPEN_REPARSE_POINT`;
+10. rejects a same-path/same-bytes replacement whose file ID no longer matches the approved preview;
+11. keeps that source handle open while the destination is created and verified, blocking new conflicting write/delete/rename opens;
+12. re-reads the source through the held handle immediately before deletion so a writer that was already open before Orion started is still detected;
+13. if the source changed, removes the just-created target only when that target still exactly matches Orion's approved bytes;
+14. otherwise marks the held source object for deletion with `SetFileInformationByHandle(FileDispositionInfo)` and closes the same handle;
+15. verifies source-path absence + target hash and marks the manifest `committed`.
+
+On non-Windows fixture execution the earlier path-based re-read/unlink behavior remains so the source logic stays testable cross-platform. The production target is Windows, where the held handle materially narrows the final read-to-delete TOCTOU window.
+
+Microsoft documents that `FILE_ID_INFO` combines the volume serial with a 128-bit file ID to identify a file on one computer, and that `FileDispositionInfo` requires a handle opened with DELETE access. The guard intentionally opens with only `FILE_SHARE_READ`: new conflicting write/delete/rename opens fail while the operation is in flight. An already-open broadly shared writer is still possible, which is why the source is re-read through the held handle immediately before deletion.
+
+References:
+https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-file_id_info
+https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-setfileinformationbyhandle
 
 The protocol intentionally makes the crash window visible. If interruption occurs after target creation but before source deletion, both copies can exist and `recovery_required=true` is returned. The source is never silently deleted merely because a target exists.
 
@@ -79,6 +90,7 @@ The source candidate exposes a private test hook at:
 - `move_after_recovery`;
 - `move_after_target_create`;
 - `move_before_source_delete`;
+- `move_after_delete_mark` (Windows only);
 - `move_after_source_delete`.
 
 The hook is not a Hermes/tool argument. It exists only to inject deterministic test failures.
@@ -92,7 +104,10 @@ Expected classifications:
 | target appears before move create | source unchanged; no overwrite |
 | edit interrupted after replacement | new target may exist; original recovery bytes retained; recovery required |
 | move interrupted after target create | source + target may both exist; recovery required |
-| source changes after target creation | do not delete source; remove target only if it is still exactly ours |
+| source path is replaced with same bytes after preview | Windows file-ID mismatch; refuse before recovery/mutation |
+| new write/rename/delete open after source guard is held | sharing violation; approved source remains protected |
+| pre-existing broadly shared writer changes source after target creation | held-handle re-read detects drift; do not delete source; remove target only if it is still exactly ours |
+| interruption after Windows delete mark but before normal completion | fail/recovery-required; recovery manifest remains prepared even if handle close completes deletion |
 | replay after protected mutation attempt | refused |
 | recovery-root collision | fail closed |
 | ReplaceFileW/sharing failure | conservatively classify as mutation/recovery required once protected replace was attempted |
@@ -114,11 +129,15 @@ P5-02B adds tests for:
 - committed move + recovery bytes + replay refusal;
 - target race;
 - source drift after target creation with safe target cleanup;
-- interruption before source deletion with explicit recovery-required duplicate state.
+- interruption before source deletion with explicit recovery-required duplicate state;
+- Windows preview binding to source file ID and rejection of a same-path/same-bytes replacement;
+- Windows blocking of a new conflicting source writer while the held guard is active;
+- Windows detection of source drift through a writer handle that existed before Orion acquired its guard;
+- Windows interruption immediately after handle-based delete marking.
 
-The full `test_p5*.py` discovery is expected to contain **37 tests** (16 accepted P5-01 + 9 P5-02A + 12 P5-02B). This number is **not acceptance evidence until the Windows run passes**.
+The prior Windows baseline at `e45bc95` passed **37/37** source tests, the installed-Hermes dispatcher probe passed **2/2**, and plugin doctor passed with 4 tools / 2 hooks. The isolated exact-display gate and the real-Hermes no-write fresh-once gate also passed afterward. Those results remain valid for their tested commits.
 
-No GitHub Actions workflow currently executes this branch, and the ChatGPT container used during source review had no outbound DNS, so it could not clone/run the repository independently. Treat the code as pending execution.
+The new handle-identity delta (`b0ce2f2`, cleanup correction `e8ccc40`, and tests `4081b6a`) has **not yet been executed on Windows**. The current full `test_p5*.py` discovery is expected to contain **40 tests** (16 P5-01 + 9 P5-02A + 15 P5-02B). A fresh Windows run is required before this hardening delta is PASS.
 
 ## Tomorrow: Windows source verification
 
@@ -133,7 +152,7 @@ git -C "D:\Orion\orion-personal-ai" pull --ff-only
   -p "test_p5*.py" -v
 ```
 
-Expected discovery count: **37**.
+Expected discovery count: **40**.
 
 Then run the installed-runtime no-write dispatcher probe:
 
@@ -156,7 +175,7 @@ These operations use source/disposable fixtures. Do not start/install/enable the
 
 Do not wire `_execute_disposable_plan_candidate` into `orion_vault_apply_plan` until all of these are separately satisfied:
 
-- Windows tests pass, including native `ReplaceFileW`;
+- the current 40-test Windows suite passes, including native `ReplaceFileW`, source file-ID binding, held-handle sharing behavior, pre-existing-writer drift detection, and handle-based source deletion;
 - P5-02A fresh-once approval concurrency/replay tests pass;
 - exact visual approval content is explicitly confirmed by the operator;
 - full installed-Hermes approval-to-HUD no-write flow passes;
