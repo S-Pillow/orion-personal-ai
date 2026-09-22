@@ -1,6 +1,6 @@
 # P5-02C Production Recovery / Restore Contract
 
-Status: **SOURCE-ONLY / READ-ONLY INSPECTOR WINDOWS-VERIFIED / RESTORE PREVIEW CANDIDATE / NO LIVE RESTORE**
+Status: **SOURCE-ONLY / READ-ONLY INSPECTOR + RESTORE PREVIEW WINDOWS-VERIFIED / NO LIVE RESTORE**
 Date: 2026-09-22
 Depends on: P5-01 accepted baseline, P5-02A approval integrity, P5-02B Windows mutation/recovery candidate
 
@@ -364,13 +364,22 @@ Together with the previous suite, current expected `test_p5*.py` discovery is **
 - 9 P5-02A;
 - 30 P5-02B/P5-02C tests.
 
-The accepted Windows baseline remains 46/46. This 55-test restore-preview delta is pending a fresh Windows run.
+Windows operator verification is now **PASS** for the restore-preview delta:
 
-## Next verification
+- full `test_p5*.py` discovery: **55/55 passed** in 0.725s;
+- installed-Hermes dispatcher probe: **2/2 passed** in 0.078s;
+- plugin doctor: **PASS**, manifest `orion-vault-actions 0.1.0`, 4 tools / 2 hooks;
+- no gateway/HUD fixture or persistent probe process was started by these commands.
 
-Run the 55-test Windows suite only. No gateway, HUD fixture, plugin install, or persistent service is needed.
+The known Hermes SQLite 3.40.1 WAL-reset warning remained non-fatal and Hermes used `journal_mode=DELETE`. It is runtime hygiene, not a P5 restore-preview failure.
 
-If 55/55 passes, the next source task is **production receipt schema + restore execution design review**, not immediate restore mutation. The source should first gain restart-safe receipt semantics and exact authorization correlation before any restore executor is considered.
+This closes the restore-preview + stale-revalidation gate. Restore execution remains disabled.
+
+## Next source gate
+
+Implement **production receipt schema + restart-safe authorization/recovery correlation** without enabling restore execution.
+
+The receipt must record what was proposed, what one-time approval attempt occurred, what filesystem/recovery identity was involved, and the final observed classification. It must remain non-authorizing: replaying or editing a receipt can never satisfy the final human approval gate.
 
 ## Stop conditions before live mutation
 
