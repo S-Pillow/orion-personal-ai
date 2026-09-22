@@ -28,6 +28,17 @@ MAX_APPROVAL_MESSAGE_CHARS = 16_000
 APPROVAL_ATTEMPT_LIMIT = 32
 DISPOSABLE_MUTATION_FLAG = "ORION_P5_ALLOW_DISPOSABLE_MUTATION"
 RECOVERY_ROOT_ENV = "ORION_P5_RECOVERY_ROOT"
+PRODUCTION_MUTATION_MODE_ENV = "ORION_P5_MUTATION_MODE"
+PRODUCTION_RECOVERY_ROOT_ENV = "ORION_P5_PRODUCTION_RECOVERY_ROOT"
+PRODUCTION_MODE_DISABLED = "disabled"
+PRODUCTION_MODE_PREVIEW_ONLY = "preview_only"
+PRODUCTION_MODE_MUTATION_ENABLED = "mutation_enabled"
+PRODUCTION_MUTATION_MODES = {
+    PRODUCTION_MODE_DISABLED,
+    PRODUCTION_MODE_PREVIEW_ONLY,
+    PRODUCTION_MODE_MUTATION_ENABLED,
+}
+PRODUCTION_RECOVERY_SCAN_LIMIT = 128
 
 DEFAULT_VAULT_ROOT = r"C:\Personal\Me"
 DEFAULT_INBOX_ROOT = r"C:\Personal\Orion-Inbox"
@@ -513,6 +524,16 @@ def preview_edit(params: Dict[str, Any], **_: Any) -> str:
         )
 
     old_bytes, old_text = _read_utf8(target)
+    target_file_id = None
+    if os.name == "nt":
+        try:
+            target_file_id = _windows_path_file_identity(target)
+        except Exception:
+            return _json({
+                "success": False,
+                "error": "target_file_identity_unavailable",
+                "mutation_performed": False,
+            })
     old_sha = _sha_bytes(old_bytes)
     new_sha = _sha_text(new_text)
     diff = _unified_diff(
@@ -525,6 +546,7 @@ def preview_edit(params: Dict[str, Any], **_: Any) -> str:
         "action": "edit_note",
         "target_relative_path": target_rel,
         "target_canonical_path": str(target.resolve(strict=True)),
+        **({"target_file_id": target_file_id} if target_file_id else {}),
         "original_sha256": old_sha,
         "proposed_sha256": new_sha,
         "diff_sha256": _sha_text(diff),
@@ -875,6 +897,485 @@ def _candidate_result(
         payload["error"] = error
     payload.update(extra)
     return payload
+
+
+def _production_mutation_mode() -> Dict[str, Any]:
+    raw = os.environ.get(PRODUCTION_MUTATION_MODE_ENV)
+    if raw is None or not raw.strip():
+        return {
+            "valid": True,
+            "configured": False,
+            "mode": PRODUCTION_MODE_DISABLED,
+            "mutation_allowed": False,
+        }
+    mode = raw.strip().lower()
+    if mode not in PRODUCTION_MUTATION_MODES:
+        return {
+            "valid": False,
+            "configured": True,
+            "mode": PRODUCTION_MODE_DISABLED,
+            "mutation_allowed": False,
+            "error": "invalid_production_mutation_mode",
+        }
+    return {
+        "valid": True,
+        "configured": True,
+        "mode": mode,
+        "mutation_allowed": mode == PRODUCTION_MODE_MUTATION_ENABLED,
+    }
+
+
+def _path_has_reparse_component(path: Path) -> bool:
+    current = path.absolute()
+    chain = [current]
+    while current.parent != current:
+        current = current.parent
+        chain.append(current)
+    for component in reversed(chain):
+        if os.path.lexists(component) and _is_reparse_point(component):
+            return True
+    return False
+
+
+def _resolved_paths_overlap(first: Path, second: Path) -> bool:
+    a = first.resolve(strict=True)
+    b = second.resolve(strict=True)
+    for child, parent in ((a, b), (b, a)):
+        try:
+            child.relative_to(parent)
+            return True
+        except ValueError:
+            continue
+    return False
+
+
+def _windows_raw_paths_overlap(first: str, second: str) -> bool:
+    a = PureWindowsPath(first)
+    b = PureWindowsPath(second)
+    for child, parent in ((a, b), (b, a)):
+        try:
+            child.relative_to(parent)
+            return True
+        except ValueError:
+            continue
+    return False
+
+
+def _windows_path_is_fixed_local(path: Path) -> bool:
+    if os.name != "nt":
+        raise RuntimeError("windows_local_volume_probe_requires_windows")
+    import ctypes
+
+    volume_buffer = ctypes.create_unicode_buffer(32768)
+    get_volume_path = ctypes.WinDLL(
+        "kernel32", use_last_error=True
+    ).GetVolumePathNameW
+    get_volume_path.argtypes = [
+        ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint32
+    ]
+    get_volume_path.restype = ctypes.c_int
+    if not get_volume_path(
+        str(path), volume_buffer, len(volume_buffer)
+    ):
+        raise OSError(ctypes.get_last_error(), "GetVolumePathNameW failed")
+
+    get_drive_type = ctypes.WinDLL(
+        "kernel32", use_last_error=True
+    ).GetDriveTypeW
+    get_drive_type.argtypes = [ctypes.c_wchar_p]
+    get_drive_type.restype = ctypes.c_uint32
+    # DRIVE_FIXED == 3. Reject remote/removable/CD/unknown volumes.
+    return int(get_drive_type(volume_buffer.value)) == 3
+
+
+def _windows_directory_access_probe(path: Path) -> None:
+    if os.name != "nt":
+        raise RuntimeError("windows_directory_access_probe_requires_windows")
+    import ctypes
+    from ctypes import wintypes
+
+    create_file = ctypes.WinDLL("kernel32", use_last_error=True).CreateFileW
+    create_file.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    ]
+    create_file.restype = wintypes.HANDLE
+    handle = create_file(
+        str(path),
+        0x00000001 | 0x00000004,  # LIST_DIRECTORY | ADD_SUBDIRECTORY
+        0x1 | 0x2 | 0x4,
+        None,
+        3,  # OPEN_EXISTING
+        0x02000000 | 0x00200000,  # BACKUP_SEMANTICS | OPEN_REPARSE_POINT
+        None,
+    )
+    invalid = ctypes.c_void_p(-1).value
+    if handle == invalid:
+        raise OSError(
+            ctypes.get_last_error(), "production recovery root access denied"
+        )
+    try:
+        if _windows_handle_is_reparse_point(handle):
+            raise PathPolicyError("reparse_point_rejected")
+    finally:
+        _windows_close_file_handle(handle)
+
+
+def _windows_recovery_acl_broad_writers(path: Path) -> list[str]:
+    """Return broad Windows principals that have allowed write-like rights."""
+    if os.name != "nt":
+        raise RuntimeError("windows_acl_probe_requires_windows")
+
+    import ctypes
+    from ctypes import wintypes
+
+    class ACL_SIZE_INFORMATION(ctypes.Structure):
+        _fields_ = [
+            ("AceCount", wintypes.DWORD),
+            ("AclBytesInUse", wintypes.DWORD),
+            ("AclBytesFree", wintypes.DWORD),
+        ]
+
+    class ACE_HEADER(ctypes.Structure):
+        _fields_ = [
+            ("AceType", ctypes.c_ubyte),
+            ("AceFlags", ctypes.c_ubyte),
+            ("AceSize", wintypes.WORD),
+        ]
+
+    class ACCESS_ALLOWED_ACE(ctypes.Structure):
+        _fields_ = [
+            ("Header", ACE_HEADER),
+            ("Mask", wintypes.DWORD),
+            ("SidStart", wintypes.DWORD),
+        ]
+
+    advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+
+    get_security = advapi32.GetNamedSecurityInfoW
+    get_security.argtypes = [
+        wintypes.LPWSTR,
+        ctypes.c_int,
+        wintypes.DWORD,
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(ctypes.c_void_p),
+    ]
+    get_security.restype = wintypes.DWORD
+
+    get_acl_info = advapi32.GetAclInformation
+    get_acl_info.argtypes = [
+        ctypes.c_void_p, ctypes.c_void_p, wintypes.DWORD, ctypes.c_int
+    ]
+    get_acl_info.restype = wintypes.BOOL
+    get_ace = advapi32.GetAce
+    get_ace.argtypes = [
+        ctypes.c_void_p, wintypes.DWORD, ctypes.POINTER(ctypes.c_void_p)
+    ]
+    get_ace.restype = wintypes.BOOL
+    convert_sid = advapi32.ConvertSidToStringSidW
+    convert_sid.argtypes = [
+        ctypes.c_void_p, ctypes.POINTER(ctypes.c_wchar_p)
+    ]
+    convert_sid.restype = wintypes.BOOL
+    local_free = kernel32.LocalFree
+    local_free.argtypes = [ctypes.c_void_p]
+    local_free.restype = ctypes.c_void_p
+
+    dacl = ctypes.c_void_p()
+    security_descriptor = ctypes.c_void_p()
+    result = get_security(
+        str(path),
+        1,  # SE_FILE_OBJECT
+        0x00000004,  # DACL_SECURITY_INFORMATION
+        None,
+        None,
+        ctypes.byref(dacl),
+        None,
+        ctypes.byref(security_descriptor),
+    )
+    if result != 0:
+        raise OSError(int(result), "GetNamedSecurityInfoW failed")
+
+    try:
+        if not dacl.value:
+            return ["NULL_DACL"]
+
+        info = ACL_SIZE_INFORMATION()
+        if not get_acl_info(
+            dacl, ctypes.byref(info), ctypes.sizeof(info), 2
+        ):
+            raise OSError(ctypes.get_last_error(), "GetAclInformation failed")
+
+        broad = {
+            "S-1-1-0",       # Everyone
+            "S-1-5-11",      # Authenticated Users
+            "S-1-5-32-545",  # BUILTIN\\Users
+        }
+        write_mask = (
+            0x40000000  # GENERIC_WRITE
+            | 0x10000000  # GENERIC_ALL
+            | 0x00000002  # FILE_ADD_FILE / FILE_WRITE_DATA
+            | 0x00000004  # FILE_ADD_SUBDIRECTORY / FILE_APPEND_DATA
+            | 0x00000010  # FILE_WRITE_EA
+            | 0x00000100  # FILE_WRITE_ATTRIBUTES
+            | 0x00000040  # FILE_DELETE_CHILD
+            | 0x00040000  # WRITE_DAC
+            | 0x00080000  # WRITE_OWNER
+        )
+        offenders: set[str] = set()
+
+        for index in range(int(info.AceCount)):
+            ace_ptr = ctypes.c_void_p()
+            if not get_ace(dacl, index, ctypes.byref(ace_ptr)):
+                raise OSError(ctypes.get_last_error(), "GetAce failed")
+            header = ctypes.cast(
+                ace_ptr, ctypes.POINTER(ACE_HEADER)
+            ).contents
+            if int(header.AceType) != 0:  # ACCESS_ALLOWED_ACE_TYPE
+                continue
+            ace = ctypes.cast(
+                ace_ptr, ctypes.POINTER(ACCESS_ALLOWED_ACE)
+            ).contents
+            if not (int(ace.Mask) & write_mask):
+                continue
+            sid_ptr = ctypes.c_void_p(
+                int(ace_ptr.value)
+                + ACCESS_ALLOWED_ACE.SidStart.offset
+            )
+            sid_text = ctypes.c_wchar_p()
+            if not convert_sid(sid_ptr, ctypes.byref(sid_text)):
+                raise OSError(
+                    ctypes.get_last_error(), "ConvertSidToStringSidW failed"
+                )
+            try:
+                sid = sid_text.value
+                if sid in broad:
+                    offenders.add(sid)
+            finally:
+                local_free(ctypes.cast(sid_text, ctypes.c_void_p))
+
+        return sorted(offenders)
+    finally:
+        if security_descriptor.value:
+            local_free(security_descriptor)
+
+
+def _validate_production_roots(
+    *,
+    local_fs_probe=None,
+    acl_probe=None,
+    access_probe=None,
+) -> Dict[str, Any]:
+    mode = _production_mutation_mode()
+    vault_root, inbox_root = _roots()
+    raw_recovery = os.environ.get(PRODUCTION_RECOVERY_ROOT_ENV)
+    if not raw_recovery or not raw_recovery.strip():
+        return _candidate_result(
+            success=False,
+            error="production_recovery_root_required",
+            mutation_performed=False,
+            mutation_mode=mode["mode"],
+        )
+
+    recovery_root = Path(raw_recovery)
+    for name, root in (
+        ("vault", vault_root),
+        ("inbox", inbox_root),
+        ("recovery", recovery_root),
+    ):
+        if not root.is_dir():
+            return _candidate_result(
+                success=False,
+                error=f"production_{name}_root_missing",
+                mutation_mode=mode["mode"],
+            )
+        if _path_has_reparse_component(root):
+            return _candidate_result(
+                success=False,
+                error=f"production_{name}_root_reparse_rejected",
+                mutation_mode=mode["mode"],
+            )
+
+    try:
+        if (
+            _resolved_paths_overlap(vault_root, inbox_root)
+            or _resolved_paths_overlap(vault_root, recovery_root)
+            or _resolved_paths_overlap(inbox_root, recovery_root)
+        ):
+            return _candidate_result(
+                success=False,
+                error="production_root_overlap_rejected",
+                mutation_mode=mode["mode"],
+            )
+        if os.name == "nt" and (
+            _windows_raw_paths_overlap(str(vault_root), str(inbox_root))
+            or _windows_raw_paths_overlap(str(vault_root), str(recovery_root))
+            or _windows_raw_paths_overlap(str(inbox_root), str(recovery_root))
+        ):
+            return _candidate_result(
+                success=False,
+                error="production_root_overlap_rejected",
+                mutation_mode=mode["mode"],
+            )
+    except Exception:
+        return _candidate_result(
+            success=False,
+            error="production_root_identity_unavailable",
+            mutation_mode=mode["mode"],
+        )
+
+    if not mode.get("valid"):
+        return _candidate_result(
+            success=False,
+            error=mode.get("error", "invalid_production_mutation_mode"),
+            mutation_mode=mode["mode"],
+        )
+
+    if os.name != "nt" and (
+        local_fs_probe is None or acl_probe is None or access_probe is None
+    ):
+        return _candidate_result(
+            success=False,
+            error="production_windows_validation_required",
+            mutation_mode=mode["mode"],
+        )
+
+    local_fs_probe = local_fs_probe or _windows_path_is_fixed_local
+    acl_probe = acl_probe or _windows_recovery_acl_broad_writers
+    access_probe = access_probe or _windows_directory_access_probe
+    try:
+        if not bool(local_fs_probe(recovery_root)):
+            return _candidate_result(
+                success=False,
+                error="production_recovery_root_not_fixed_local",
+                mutation_mode=mode["mode"],
+            )
+        offenders = list(acl_probe(recovery_root) or [])
+        if offenders:
+            return _candidate_result(
+                success=False,
+                error="production_recovery_acl_too_broad",
+                mutation_mode=mode["mode"],
+                broad_write_principals=offenders,
+            )
+        access_probe(recovery_root)
+    except Exception as exc:
+        return _candidate_result(
+            success=False,
+            error=f"production_recovery_validation_failed:{type(exc).__name__}",
+            mutation_mode=mode["mode"],
+        )
+
+    return _candidate_result(
+        success=True,
+        mutation_performed=False,
+        recovery_required=False,
+        mutation_mode=mode["mode"],
+        mutation_allowed=bool(mode["mutation_allowed"]),
+        vault_root=str(vault_root.resolve(strict=True)),
+        inbox_root=str(inbox_root.resolve(strict=True)),
+        recovery_root=str(recovery_root.resolve(strict=True)),
+    )
+
+
+def _enumerate_production_recovery_records(
+    *,
+    limit: int = PRODUCTION_RECOVERY_SCAN_LIMIT,
+    local_fs_probe=None,
+    acl_probe=None,
+    access_probe=None,
+) -> Dict[str, Any]:
+    preflight = _validate_production_roots(
+        local_fs_probe=local_fs_probe,
+        acl_probe=acl_probe,
+        access_probe=access_probe,
+    )
+    if not preflight.get("success"):
+        return preflight
+
+    if not isinstance(limit, int) or limit < 1:
+        return _candidate_result(
+            success=False, error="invalid_recovery_scan_limit"
+        )
+    limit = min(limit, PRODUCTION_RECOVERY_SCAN_LIMIT)
+
+    vault_root = Path(preflight["vault_root"])
+    inbox_root = Path(preflight["inbox_root"])
+    recovery_root = Path(preflight["recovery_root"])
+    records = []
+    truncated = False
+
+    try:
+        children = sorted(recovery_root.iterdir(), key=lambda p: p.name)
+    except Exception as exc:
+        return _candidate_result(
+            success=False,
+            error=f"production_recovery_enumeration_failed:{type(exc).__name__}",
+        )
+
+    for child in children:
+        if len(records) >= limit:
+            truncated = True
+            break
+        record = {
+            "recovery_id": child.name,
+            "needs_attention": False,
+        }
+        if (
+            not child.is_dir()
+            or _is_reparse_point(child)
+            or not re.fullmatch(r"[0-9a-f]{64}", child.name)
+        ):
+            record.update({
+                "valid": False,
+                "needs_attention": True,
+                "error": "invalid_recovery_record_entry",
+            })
+            records.append(record)
+            continue
+
+        recovery = _inspect_recovery_record_at_roots(
+            vault_root, inbox_root, recovery_root, child.name
+        )
+        receipt = _inspect_receipt_at_roots(
+            vault_root, inbox_root, recovery_root, child.name
+        )
+        record["recovery"] = recovery
+        record["receipt"] = receipt
+        record["valid"] = bool(recovery.get("success") and receipt.get("success"))
+        classification = recovery.get("classification")
+        record["needs_attention"] = bool(
+            not record["valid"]
+            or recovery.get("recovery_required")
+            or receipt.get("receipt_reconciliation_required")
+            or classification in (
+                "applied_unfinalized",
+                "divergent_unresolved",
+                "duplicate_unresolved",
+            )
+        )
+        records.append(record)
+
+    return _candidate_result(
+        success=True,
+        mutation_performed=False,
+        mutation_mode=preflight["mutation_mode"],
+        mutation_allowed=preflight["mutation_allowed"],
+        record_count=len(records),
+        scan_limit=limit,
+        truncated=truncated,
+        attention_count=sum(1 for r in records if r["needs_attention"]),
+        records=records,
+    )
 
 
 def _candidate_disposable_roots() -> tuple[Path, Path, Path]:
@@ -1279,17 +1780,18 @@ def _candidate_hash_under_root(
         return None, f"read_error:{type(exc).__name__}"
 
 
-def _inspect_disposable_recovery_candidate(plan_token: str) -> Dict[str, Any]:
-    """Read-only reconciliation of one disposable recovery record.
+def _inspect_recovery_record_at_roots(
+    vault_root: Path,
+    inbox_root: Path,
+    recovery_root: Path,
+    plan_token: str,
+) -> Dict[str, Any]:
+    """Read-only reconciliation of one recovery record at validated roots.
 
     The manifest is evidence, not truth. Prepared records are classified from
     current source/target hashes so restart/crash recovery does not assume
     whether the protected filesystem step happened.
     """
-    try:
-        vault_root, inbox_root, recovery_root = _candidate_disposable_roots()
-    except Exception as exc:
-        return _candidate_result(success=False, error=str(exc))
 
     if not isinstance(plan_token, str) or not re.fullmatch(r"[0-9a-f]{64}", plan_token):
         return _candidate_result(success=False, error="invalid_recovery_id")
@@ -1544,6 +2046,16 @@ def _inspect_disposable_recovery_candidate(plan_token: str) -> Dict[str, Any]:
         approved_source_sha256=source_sha,
         source_draft=source_rel,
         target_relative_path=target_rel,
+    )
+
+
+def _inspect_disposable_recovery_candidate(plan_token: str) -> Dict[str, Any]:
+    try:
+        vault_root, inbox_root, recovery_root = _candidate_disposable_roots()
+    except Exception as exc:
+        return _candidate_result(success=False, error=str(exc))
+    return _inspect_recovery_record_at_roots(
+        vault_root, inbox_root, recovery_root, plan_token
     )
 
 
@@ -2081,12 +2593,13 @@ def _receipt_approval_message_matches_plan(
     return _sha_text(diff) == plan.get("diff_sha256")
 
 
-def _inspect_disposable_receipt_candidate(recovery_id: str) -> Dict[str, Any]:
+def _inspect_receipt_at_roots(
+    vault_root: Path,
+    inbox_root: Path,
+    recovery_root: Path,
+    recovery_id: str,
+) -> Dict[str, Any]:
     """Read-only restart-safe validation of a durable correlation receipt."""
-    try:
-        _vault_root, _inbox_root, recovery_root = _candidate_disposable_roots()
-    except Exception as exc:
-        return _candidate_result(success=False, error=str(exc))
 
     if not isinstance(recovery_id, str) or not re.fullmatch(
         r"[0-9a-f]{64}", recovery_id
@@ -2176,7 +2689,9 @@ def _inspect_disposable_receipt_candidate(recovery_id: str) -> Dict[str, Any]:
             success=False, error="receipt_backup_hash_mismatch"
         )
 
-    recovery = _inspect_disposable_recovery_candidate(recovery_id)
+    recovery = _inspect_recovery_record_at_roots(
+        vault_root, inbox_root, recovery_root, recovery_id
+    )
     if not recovery.get("success"):
         return _candidate_result(
             success=False,
@@ -2216,6 +2731,16 @@ def _inspect_disposable_receipt_candidate(recovery_id: str) -> Dict[str, Any]:
         approval_surface=approval.get("surface"),
         approval_choice=approval.get("choice"),
         backup_sha256=backup_sha,
+    )
+
+
+def _inspect_disposable_receipt_candidate(recovery_id: str) -> Dict[str, Any]:
+    try:
+        vault_root, inbox_root, recovery_root = _candidate_disposable_roots()
+    except Exception as exc:
+        return _candidate_result(success=False, error=str(exc))
+    return _inspect_receipt_at_roots(
+        vault_root, inbox_root, recovery_root, recovery_id
     )
 
 
@@ -2261,6 +2786,17 @@ def _execute_disposable_plan_candidate(
             )
             if str(target.resolve(strict=True)) != plan.get("target_canonical_path"):
                 return _candidate_result(success=False, error="target_identity_changed")
+            if os.name == "nt" and plan.get("target_file_id"):
+                try:
+                    current_file_id = _windows_path_file_identity(target)
+                except Exception:
+                    return _candidate_result(
+                        success=False, error="target_file_identity_unavailable"
+                    )
+                if current_file_id != plan.get("target_file_id"):
+                    return _candidate_result(
+                        success=False, error="target_file_id_changed"
+                    )
             old_bytes, _ = _read_utf8(target)
             if _sha_bytes(old_bytes) != plan.get("original_sha256"):
                 return _candidate_result(success=False, error="stale_original_hash")
