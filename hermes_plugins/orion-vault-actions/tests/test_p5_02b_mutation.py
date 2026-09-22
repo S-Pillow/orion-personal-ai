@@ -314,6 +314,123 @@ class DisposableMutationCandidateTests(unittest.TestCase):
             "prepared",
         )
 
+    def test_recovery_inspector_classifies_committed_edit(self):
+        note, preview = self._edit_preview()
+        result = plugin._execute_disposable_plan_candidate(preview["plan_token"])
+        self.assertTrue(result["success"])
+
+        inspected = plugin._inspect_disposable_recovery_candidate(
+            preview["plan_token"]
+        )
+
+        self.assertTrue(inspected["success"])
+        self.assertEqual(inspected["classification"], "committed")
+        self.assertFalse(inspected["recovery_required"])
+        self.assertFalse(inspected["mutation_performed"])
+        self.assertEqual(inspected["target_sha256"], preview["plan"]["proposed_sha256"])
+        self.assertEqual(note.read_bytes(), b"after\n")
+
+    def test_recovery_inspector_classifies_prepared_edit_without_effect(self):
+        note, preview = self._edit_preview()
+
+        def fail(name):
+            if name == "edit_after_recovery":
+                raise RuntimeError("simulated before replace")
+
+        result = plugin._execute_disposable_plan_candidate(
+            preview["plan_token"], failure_hook=fail
+        )
+        self.assertFalse(result["success"])
+
+        inspected = plugin._inspect_disposable_recovery_candidate(
+            preview["plan_token"]
+        )
+
+        self.assertTrue(inspected["success"])
+        self.assertEqual(inspected["classification"], "prepared_no_effect")
+        self.assertFalse(inspected["recovery_required"])
+        self.assertEqual(note.read_bytes(), b"before\n")
+
+    def test_recovery_inspector_classifies_applied_unfinalized_edit(self):
+        note, preview = self._edit_preview()
+
+        def fail(name):
+            if name == "edit_after_replace":
+                raise RuntimeError("simulated after replace")
+
+        result = plugin._execute_disposable_plan_candidate(
+            preview["plan_token"], failure_hook=fail
+        )
+        self.assertFalse(result["success"])
+
+        inspected = plugin._inspect_disposable_recovery_candidate(
+            preview["plan_token"]
+        )
+
+        self.assertTrue(inspected["success"])
+        self.assertEqual(inspected["classification"], "applied_unfinalized")
+        self.assertTrue(inspected["recovery_required"])
+        self.assertEqual(note.read_bytes(), b"after\n")
+
+    def test_recovery_inspector_classifies_duplicate_unresolved_move(self):
+        draft, target, preview = self._draft_preview()
+
+        def fail(name):
+            if name == "move_before_source_delete":
+                raise RuntimeError("simulated duplicate state")
+
+        result = plugin._execute_disposable_plan_candidate(
+            preview["plan_token"], failure_hook=fail
+        )
+        self.assertFalse(result["success"])
+
+        inspected = plugin._inspect_disposable_recovery_candidate(
+            preview["plan_token"]
+        )
+
+        self.assertTrue(inspected["success"])
+        self.assertEqual(inspected["classification"], "duplicate_unresolved")
+        self.assertTrue(inspected["recovery_required"])
+        self.assertTrue(draft.exists())
+        self.assertTrue(target.exists())
+
+    def test_recovery_inspector_classifies_committed_move(self):
+        draft, target, preview = self._draft_preview()
+        result = plugin._execute_disposable_plan_candidate(preview["plan_token"])
+        self.assertTrue(result["success"])
+
+        inspected = plugin._inspect_disposable_recovery_candidate(
+            preview["plan_token"]
+        )
+
+        self.assertTrue(inspected["success"])
+        self.assertEqual(inspected["classification"], "committed")
+        self.assertFalse(inspected["recovery_required"])
+        self.assertFalse(draft.exists())
+        self.assertTrue(target.exists())
+
+    def test_recovery_inspector_rejects_corrupt_backup(self):
+        _note, preview = self._edit_preview()
+
+        def fail(name):
+            if name == "edit_after_recovery":
+                raise RuntimeError("prepared record")
+
+        result = plugin._execute_disposable_plan_candidate(
+            preview["plan_token"], failure_hook=fail
+        )
+        self.assertFalse(result["success"])
+        recovery = Path(result["recovery_dir"])
+        (recovery / "original.bin").write_bytes(b"corrupt")
+
+        inspected = plugin._inspect_disposable_recovery_candidate(
+            preview["plan_token"]
+        )
+
+        self.assertFalse(inspected["success"])
+        self.assertEqual(inspected["error"], "recovery_backup_hash_mismatch")
+        self.assertFalse(inspected["mutation_performed"])
+
     def test_move_commit_is_exclusive_verified_and_replay_fails(self):
         draft, target, preview = self._draft_preview()
         source_bytes = draft.read_bytes()
