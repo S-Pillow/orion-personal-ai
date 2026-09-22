@@ -1,6 +1,6 @@
 # P5-02I Installed-Runtime Disposable Mutation Qualification
 
-Status: **OWNER AUTHORIZED / DISPOSABLE ROOTS ONLY / I1-I2 OPERATOR QUALIFICATION PENDING**
+Status: **OWNER AUTHORIZED / I1-I3 PASS / I4 SOURCE HARDENING VERIFIED / INSTALLED UPDATE AUTHORIZATION REQUIRED**
 
 Base: P5-02H preview-only COMPANION install accepted on 2026-09-22.
 
@@ -306,6 +306,31 @@ This source change has **not** been copied into the installed COMPANION plugin.
 Source verification must pass first. Updating the installed plugin to this new
 exact source is a separate live-plugin change and requires explicit owner
 authorization before I4 installed-runtime execution.
+
+### I4 source verification — PASS
+
+Owner-run Windows verification of the hardened P5-02I source at
+`ce676a263f3dd2c18a7d7700b17a6023c6845904` completed successfully:
+
+- focused approval-consumption tests: **5/5 passed** in 0.066s;
+- full Phase-5 source suite: **121/121 passed** in 2.534s;
+- source plugin doctor: **PASS**, runtime discovery/import/registration;
+- registrations remain **4 tools / 2 hooks**;
+- verification worktree cleaned.
+
+No installed COMPANION plugin files were changed by this verification.
+
+The next required step before installed-runtime I4 execution is an exact live-plugin
+source update from the P5-02H installed pin
+`b8cbb63c3db20c38543220956d3f776bffecf432` to the verified P5-02I pin
+`ce676a263f3dd2c18a7d7700b17a6023c6845904`.
+
+That update is a persistent COMPANION plugin change and therefore requires
+separate explicit owner authorization. The update must occur with Hermes
+manual-off, capture an exact rollback copy of the currently installed plugin,
+replace only the Orion plugin directory from the verified source pin, preserve
+COMPANION config unchanged, and re-run installed-location doctor before any
+I4 mutation probe.
 
 ### I4 — stale-state and evidence-consumption checks
 
