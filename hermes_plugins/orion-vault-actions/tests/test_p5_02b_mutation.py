@@ -28,6 +28,83 @@ SPEC.loader.exec_module(plugin)
 
 
 class DisposableMutationCandidateTests(unittest.TestCase):
+    def _open_windows_shared_writer(self, path):
+        if os.name != "nt":
+            self.skipTest("Windows-only shared-handle fixture")
+
+        import ctypes
+        from ctypes import wintypes
+
+        create_file = ctypes.WinDLL("kernel32", use_last_error=True).CreateFileW
+        create_file.argtypes = [
+            wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p,
+            wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE,
+        ]
+        create_file.restype = wintypes.HANDLE
+        handle = create_file(
+            str(path),
+            0x40000000,  # GENERIC_WRITE
+            0x1 | 0x2 | 0x4,  # FILE_SHARE_READ | WRITE | DELETE
+            None,
+            3,  # OPEN_EXISTING
+            0,
+            None,
+        )
+        invalid = ctypes.c_void_p(-1).value
+        if handle == invalid:
+            raise OSError(ctypes.get_last_error(), "CreateFileW writer fixture failed")
+        return handle
+
+    def _write_windows_handle(self, handle, data):
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        set_pointer = kernel32.SetFilePointerEx
+        set_pointer.argtypes = [
+            wintypes.HANDLE, ctypes.c_longlong,
+            ctypes.POINTER(ctypes.c_longlong), wintypes.DWORD,
+        ]
+        set_pointer.restype = wintypes.BOOL
+        write_file = kernel32.WriteFile
+        write_file.argtypes = [
+            wintypes.HANDLE, ctypes.c_void_p, wintypes.DWORD,
+            ctypes.POINTER(wintypes.DWORD), ctypes.c_void_p,
+        ]
+        write_file.restype = wintypes.BOOL
+        set_eof = kernel32.SetEndOfFile
+        set_eof.argtypes = [wintypes.HANDLE]
+        set_eof.restype = wintypes.BOOL
+        flush = kernel32.FlushFileBuffers
+        flush.argtypes = [wintypes.HANDLE]
+        flush.restype = wintypes.BOOL
+
+        position = ctypes.c_longlong()
+        if not set_pointer(handle, 0, ctypes.byref(position), 0):
+            raise OSError(ctypes.get_last_error(), "SetFilePointerEx writer failed")
+        buffer = ctypes.create_string_buffer(data)
+        written = wintypes.DWORD()
+        if not write_file(
+            handle, buffer, len(data), ctypes.byref(written), None
+        ):
+            raise OSError(ctypes.get_last_error(), "WriteFile fixture failed")
+        if int(written.value) != len(data):
+            raise OSError("short_write_in_windows_fixture")
+        if not set_eof(handle):
+            raise OSError(ctypes.get_last_error(), "SetEndOfFile fixture failed")
+        if not flush(handle):
+            raise OSError(ctypes.get_last_error(), "FlushFileBuffers fixture failed")
+
+    def _close_windows_handle(self, handle):
+        import ctypes
+        from ctypes import wintypes
+
+        close = ctypes.WinDLL("kernel32", use_last_error=True).CloseHandle
+        close.argtypes = [wintypes.HANDLE]
+        close.restype = wintypes.BOOL
+        if not close(handle):
+            raise OSError(ctypes.get_last_error(), "CloseHandle fixture failed")
+
     def setUp(self):
         plugin._PREVIEWS.clear()
         plugin._PREVIEW_TIMES.clear()
@@ -275,6 +352,26 @@ class DisposableMutationCandidateTests(unittest.TestCase):
     def test_move_source_change_after_target_create_cleans_our_target(self):
         draft, target, preview = self._draft_preview()
 
+        if os.name == "nt":
+            blocked = {"value": False}
+
+            def change_source(name):
+                if name == "move_after_target_create":
+                    try:
+                        draft.write_bytes(b"external source change\n")
+                    except OSError:
+                        blocked["value"] = True
+
+            result = plugin._execute_disposable_plan_candidate(
+                preview["plan_token"], failure_hook=change_source
+            )
+
+            self.assertTrue(blocked["value"])
+            self.assertTrue(result["success"])
+            self.assertFalse(draft.exists())
+            self.assertTrue(target.is_file())
+            return
+
         def change_source(name):
             if name == "move_after_target_create":
                 draft.write_bytes(b"external source change\n")
@@ -290,6 +387,83 @@ class DisposableMutationCandidateTests(unittest.TestCase):
         self.assertEqual(draft.read_bytes(), b"external source change\n")
         self.assertFalse(target.exists())
         self.assertTrue(Path(result["recovery_dir"], "source.bin").is_file())
+
+    def test_windows_move_binds_file_id_and_rejects_same_bytes_replacement(self):
+        if os.name != "nt":
+            self.skipTest("Windows file identity is the hardening target")
+
+        draft, target, preview = self._draft_preview()
+        self.assertIn("source_file_id", preview["plan"])
+        original_bytes = draft.read_bytes()
+        replacement = self.inbox / "replacement.md"
+        replacement.write_bytes(original_bytes)
+        os.replace(replacement, draft)
+
+        result = plugin._execute_disposable_plan_candidate(preview["plan_token"])
+
+        self.assertFalse(result["success"])
+        self.assertEqual(result["error"], "source_file_id_changed")
+        self.assertFalse(result["mutation_performed"])
+        self.assertEqual(draft.read_bytes(), original_bytes)
+        self.assertFalse(target.exists())
+        self.assertEqual(list(self.recovery.iterdir()), [])
+
+    def test_windows_move_detects_drift_from_preexisting_shared_writer(self):
+        if os.name != "nt":
+            self.skipTest("Windows shared-handle drift fixture")
+
+        draft, target, preview = self._draft_preview()
+        writer = self._open_windows_shared_writer(draft)
+        changed = b"external source change from existing writer\n"
+
+        try:
+            def change_source(name):
+                if name == "move_after_target_create":
+                    self._write_windows_handle(writer, changed)
+
+            result = plugin._execute_disposable_plan_candidate(
+                preview["plan_token"], failure_hook=change_source
+            )
+        finally:
+            self._close_windows_handle(writer)
+
+        self.assertFalse(result["success"])
+        self.assertEqual(result["error"], "source_changed_before_delete")
+        self.assertTrue(result["mutation_performed"])
+        self.assertFalse(result["recovery_required"])
+        self.assertEqual(draft.read_bytes(), changed)
+        self.assertFalse(target.exists())
+        self.assertTrue(Path(result["recovery_dir"], "source.bin").is_file())
+
+    def test_windows_move_failure_after_delete_mark_stays_recovery_required(self):
+        if os.name != "nt":
+            self.skipTest("Windows handle-delete checkpoint")
+
+        draft, target, preview = self._draft_preview()
+        source_bytes = draft.read_bytes()
+
+        def fail(name):
+            if name == "move_after_delete_mark":
+                raise RuntimeError("simulated interruption after delete mark")
+
+        result = plugin._execute_disposable_plan_candidate(
+            preview["plan_token"], failure_hook=fail
+        )
+
+        self.assertFalse(result["success"])
+        self.assertTrue(result["mutation_performed"])
+        self.assertTrue(result["recovery_required"])
+        # The finally/exception cleanup closes the marked handle, so Windows
+        # may have completed the delete even though the operation did not get
+        # far enough to record a committed manifest.
+        self.assertFalse(draft.exists())
+        self.assertEqual(target.read_bytes(), source_bytes)
+        self.assertEqual(
+            json.loads(Path(result["recovery_dir"], "manifest.json").read_text(
+                encoding="utf-8"
+            ))["state"],
+            "prepared",
+        )
 
     def test_move_failure_before_source_delete_reports_recovery_state(self):
         draft, target, preview = self._draft_preview()
