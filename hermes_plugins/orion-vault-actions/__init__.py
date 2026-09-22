@@ -657,6 +657,26 @@ def apply_plan_placeholder(params: Dict[str, Any], **_: Any) -> str:
     )
 
 
+def _approval_execution_suffix(action: str) -> str:
+    mode = _production_mutation_mode()
+    if (
+        mode.get("valid")
+        and mode.get("mode") == PRODUCTION_MODE_MUTATION_ENABLED
+    ):
+        return (
+            "This one-time approval may be used only by the private production "
+            "mutation candidate for this exact plan. Registered/live apply "
+            "remains fail-closed."
+        )
+    if action in ("restore_edit", "restore_move_source"):
+        return (
+            "This one-time approval may be used only by the private disposable "
+            "restore candidate for this exact plan. Registered/live apply remains "
+            "fail-closed."
+        )
+    return "Current apply handler remains fail-closed and will not mutate."
+
+
 def _approval_summary(plan: Dict[str, Any]) -> str:
     action = plan.get("action", "vault_action")
     target = plan.get("target_canonical_path")
@@ -676,7 +696,7 @@ def _approval_summary(plan: Dict[str, Any]) -> str:
             f"Original SHA-256: {plan.get('original_sha256')}. "
             f"Proposed SHA-256: {plan.get('proposed_sha256')}.\n"
             f"Exact unified diff:\n{diff}\n"
-            "Current apply handler remains fail-closed and will not mutate."
+            f"{_approval_execution_suffix(action)}"
         )
 
     if action == "move_draft":
@@ -688,7 +708,7 @@ def _approval_summary(plan: Dict[str, Any]) -> str:
             f"Target: {target}. "
             f"Source SHA-256: {plan.get('source_sha256')}.\n"
             f"Exact unified diff:\n{diff}\n"
-            "Current apply handler remains fail-closed and will not mutate."
+            f"{_approval_execution_suffix(action)}"
         )
 
     if action == "restore_edit":
@@ -705,9 +725,7 @@ def _approval_summary(plan: Dict[str, Any]) -> str:
             f"Current SHA-256: {plan.get('current_sha256')}. "
             f"Restore SHA-256: {restore_sha}.\n"
             f"Exact unified diff:\n{diff}\n"
-            "This one-time approval may be used only by the private disposable "
-            "restore candidate for this exact plan. Registered/live apply remains "
-            "fail-closed."
+            f"{_approval_execution_suffix(action)}"
         )
 
     if action == "restore_move_source":
@@ -725,9 +743,7 @@ def _approval_summary(plan: Dict[str, Any]) -> str:
             f"Source state: absent. Restore SHA-256: {restore_sha}. "
             f"Reference vault target: {plan.get('reference_target_canonical_path')}.\n"
             f"Exact unified diff:\n{diff}\n"
-            "This one-time approval may be used only by the private disposable "
-            "restore candidate for this exact plan. Registered/live apply remains "
-            "fail-closed."
+            f"{_approval_execution_suffix(action)}"
         )
 
     raise ValueError("unknown_vault_action")
@@ -2746,7 +2762,7 @@ def _commit_candidate_receipt(
 
 
 def _receipt_approval_message_matches_plan(
-    plan: Dict[str, Any], message: str
+    plan: Dict[str, Any], message: str, *, schema_version: int = 1
 ) -> bool:
     """Bind persisted approval text back to the immutable public plan."""
     action = plan.get("action")
@@ -2758,7 +2774,7 @@ def _receipt_approval_message_matches_plan(
             f"Proposed SHA-256: {plan.get('proposed_sha256')}.\n"
             "Exact unified diff:\n"
         )
-        suffix = "\nCurrent apply handler remains fail-closed and will not mutate."
+        suffix_kind = "ordinary"
     elif action == "move_draft":
         prefix = (
             "Approve Orion draft move preview? "
@@ -2767,7 +2783,7 @@ def _receipt_approval_message_matches_plan(
             f"Source SHA-256: {plan.get('source_sha256')}.\n"
             "Exact unified diff:\n"
         )
-        suffix = "\nCurrent apply handler remains fail-closed and will not mutate."
+        suffix_kind = "ordinary"
     elif action == "restore_edit":
         prefix = (
             "Approve Orion historical edit restore preview? "
@@ -2777,11 +2793,7 @@ def _receipt_approval_message_matches_plan(
             f"Restore SHA-256: {plan.get('restore_sha256')}.\n"
             "Exact unified diff:\n"
         )
-        suffix = (
-            "\nThis one-time approval may be used only by the private disposable "
-            "restore candidate for this exact plan. Registered/live apply remains "
-            "fail-closed."
-        )
+        suffix_kind = "restore"
     elif action == "restore_move_source":
         prefix = (
             "Approve Orion historical move-source restore preview? "
@@ -2791,13 +2803,24 @@ def _receipt_approval_message_matches_plan(
             f"Reference vault target: {plan.get('reference_target_canonical_path')}.\n"
             "Exact unified diff:\n"
         )
+        suffix_kind = "restore"
+    else:
+        return False
+
+    if schema_version == 2:
+        suffix = (
+            "\nThis one-time approval may be used only by the private production "
+            "mutation candidate for this exact plan. Registered/live apply "
+            "remains fail-closed."
+        )
+    elif suffix_kind == "restore":
         suffix = (
             "\nThis one-time approval may be used only by the private disposable "
             "restore candidate for this exact plan. Registered/live apply remains "
             "fail-closed."
         )
     else:
-        return False
+        suffix = "\nCurrent apply handler remains fail-closed and will not mutate."
 
     if not message.startswith(prefix) or not message.endswith(suffix):
         return False
@@ -2868,7 +2891,9 @@ def _inspect_receipt_at_roots(
         or _sha_text(approval.get("approval_message", ""))
             != approval.get("approval_message_sha256")
         or not _receipt_approval_message_matches_plan(
-            plan, approval.get("approval_message", "")
+            plan,
+            approval.get("approval_message", ""),
+            schema_version=int(receipt.get("schema_version") or 0),
         )
         or (
             receipt.get("state") == "committed"
