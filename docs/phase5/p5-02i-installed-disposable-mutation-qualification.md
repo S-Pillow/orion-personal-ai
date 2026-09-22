@@ -374,6 +374,38 @@ Update procedure requirements:
 8. leave Hermes manual-off after update;
 9. do not run I4 mutation checks until the update evidence is accepted.
 
+### Installed P5-02I plugin update — PASS / temporary swap cleanup pending
+
+Owner executed the authorized installed-plugin update from
+`b8cbb63c3db20c38543220956d3f776bffecf432` to
+`ce676a263f3dd2c18a7d7700b17a6023c6845904`.
+
+Verified before/after replacement:
+
+- old installed tracked files matched the accepted P5-02H pin: **10 tracked files**;
+- rollback copy matched the old pin: **10 tracked files**;
+- rollback backup preserved at
+  `C:\Users\spill\AppData\Local\hermes\profiles\companion\orion\backups\p5-02i-plugin-update-20260922-034043`;
+- staged new plugin matched the P5-02I pin: **11 tracked files**;
+- installed new plugin matched the P5-02I pin: **11 tracked files**;
+- installed-location doctor PASS: **4 tools / 2 hooks**;
+- plugin remains enabled as user plugin version 0.1.0;
+- COMPANION config SHA-256 remained
+  `34D9BD9DDC1BC59783CE2DC80D98FBD66D7AA7CC670DDFB875E0D1C78E8462D7`;
+- installed `__init__.py` SHA-256:
+  `FCFA3DDC4A86B99691FB003CF4421027C5CC3CA22AC99ADBCCEEE8D3B3C7B5DA`;
+- update marker: `P5_02I_INSTALLED_PLUGIN_UPDATE=PASS`;
+- manual-off marker: `HERMES_MANUAL_OFF_PRESERVED=true`;
+- both temporary source worktrees were removed;
+- rollback backup remains preserved.
+
+The only operator-script issue was cleanup syntax: the `finally { ... }` clause
+was pasted/executed as a new top-level PowerShell statement after the
+`try/catch` had already completed, so PowerShell rejected the standalone
+`finally`. This does not invalidate the plugin replacement evidence. It means
+the temporary old-plugin swap directory may still exist and must be removed in
+a separate bounded cleanup step before I4.
+
 ### I4 — stale-state and evidence-consumption checks
 
 At minimum:
