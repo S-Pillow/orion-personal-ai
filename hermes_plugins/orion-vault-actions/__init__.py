@@ -683,7 +683,9 @@ def _approval_summary(plan: Dict[str, Any]) -> str:
             f"Current SHA-256: {plan.get('current_sha256')}. "
             f"Restore SHA-256: {restore_sha}.\n"
             f"Exact unified diff:\n{diff}\n"
-            "Restore execution is not registered and will not mutate."
+            "This one-time approval may be used only by the private disposable "
+            "restore candidate for this exact plan. Registered/live apply remains "
+            "fail-closed."
         )
 
     if action == "restore_move_source":
@@ -701,7 +703,9 @@ def _approval_summary(plan: Dict[str, Any]) -> str:
             f"Source state: absent. Restore SHA-256: {restore_sha}. "
             f"Reference vault target: {plan.get('reference_target_canonical_path')}.\n"
             f"Exact unified diff:\n{diff}\n"
-            "Restore execution is not registered and will not mutate."
+            "This one-time approval may be used only by the private disposable "
+            "restore candidate for this exact plan. Registered/live apply remains "
+            "fail-closed."
         )
 
     raise ValueError("unknown_vault_action")
@@ -2049,7 +2053,11 @@ def _receipt_approval_message_matches_plan(
             f"Restore SHA-256: {plan.get('restore_sha256')}.\n"
             "Exact unified diff:\n"
         )
-        suffix = "\nRestore execution is not registered and will not mutate."
+        suffix = (
+            "\nThis one-time approval may be used only by the private disposable "
+            "restore candidate for this exact plan. Registered/live apply remains "
+            "fail-closed."
+        )
     elif action == "restore_move_source":
         prefix = (
             "Approve Orion historical move-source restore preview? "
@@ -2059,7 +2067,11 @@ def _receipt_approval_message_matches_plan(
             f"Reference vault target: {plan.get('reference_target_canonical_path')}.\n"
             "Exact unified diff:\n"
         )
-        suffix = "\nRestore execution is not registered and will not mutate."
+        suffix = (
+            "\nThis one-time approval may be used only by the private disposable "
+            "restore candidate for this exact plan. Registered/live apply remains "
+            "fail-closed."
+        )
     else:
         return False
 
