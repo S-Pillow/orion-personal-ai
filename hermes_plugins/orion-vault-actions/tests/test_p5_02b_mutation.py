@@ -408,32 +408,28 @@ class DisposableMutationCandidateTests(unittest.TestCase):
         self.assertFalse(target.exists())
         self.assertEqual(list(self.recovery.iterdir()), [])
 
-    def test_windows_move_detects_drift_from_preexisting_shared_writer(self):
+    def test_windows_move_refuses_preexisting_writer_before_mutation(self):
         if os.name != "nt":
-            self.skipTest("Windows shared-handle drift fixture")
+            self.skipTest("Windows shared-handle fixture")
 
         draft, target, preview = self._draft_preview()
+        source_bytes = draft.read_bytes()
         writer = self._open_windows_shared_writer(draft)
-        changed = b"external source change from existing writer\n"
 
         try:
-            def change_source(name):
-                if name == "move_after_target_create":
-                    self._write_windows_handle(writer, changed)
-
             result = plugin._execute_disposable_plan_candidate(
-                preview["plan_token"], failure_hook=change_source
+                preview["plan_token"]
             )
         finally:
             self._close_windows_handle(writer)
 
         self.assertFalse(result["success"])
-        self.assertEqual(result["error"], "source_changed_before_delete")
-        self.assertTrue(result["mutation_performed"])
+        self.assertEqual(result["error"], "source_handle_unavailable")
+        self.assertFalse(result["mutation_performed"])
         self.assertFalse(result["recovery_required"])
-        self.assertEqual(draft.read_bytes(), changed)
+        self.assertEqual(draft.read_bytes(), source_bytes)
         self.assertFalse(target.exists())
-        self.assertTrue(Path(result["recovery_dir"], "source.bin").is_file())
+        self.assertEqual(list(self.recovery.iterdir()), [])
 
     def test_windows_move_failure_after_delete_mark_stays_recovery_required(self):
         if os.name != "nt":
