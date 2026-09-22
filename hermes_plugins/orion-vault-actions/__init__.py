@@ -1198,6 +1198,7 @@ def _execute_disposable_plan_candidate(
     action = plan.get("action")
     recovery_dir: Path | None = None
     mutation_started = False
+    source_guard = None
 
     try:
         if action == "edit_note":
@@ -1294,7 +1295,6 @@ def _execute_disposable_plan_candidate(
             if target.exists() or os.path.lexists(target):
                 return _candidate_result(success=False, error="target_already_exists")
 
-            source_guard = None
             if os.name == "nt":
                 try:
                     source_guard = _WindowsSourceGuard(source)
@@ -1349,6 +1349,9 @@ def _execute_disposable_plan_candidate(
             _candidate_checkpoint("move_after_recovery", failure_hook)
 
             if not _candidate_mark_consumed(plan_token):
+                if source_guard is not None:
+                    source_guard.close()
+                    source_guard = None
                 return _candidate_result(
                     success=False, error="plan_already_consumed",
                     recovery_dir=str(recovery_dir),
@@ -1358,6 +1361,9 @@ def _execute_disposable_plan_candidate(
             _candidate_checkpoint("move_after_target_create", failure_hook)
 
             if _sha_bytes(target.read_bytes()) != plan.get("source_sha256"):
+                if source_guard is not None:
+                    source_guard.close()
+                    source_guard = None
                 return _candidate_result(
                     success=False,
                     error="target_hash_mismatch",
@@ -1441,11 +1447,13 @@ def _execute_disposable_plan_candidate(
 
         return _candidate_result(success=False, error="unsupported_action")
     except FileExistsError:
+        close_failed = False
         try:
-            if "source_guard" in locals() and source_guard is not None:
+            if source_guard is not None:
                 source_guard.close()
+                source_guard = None
         except Exception:
-            pass
+            close_failed = True
         return _candidate_result(
             success=False,
             error="exclusive_target_or_recovery_exists",
@@ -1456,15 +1464,16 @@ def _execute_disposable_plan_candidate(
     except Exception as exc:
         close_failed = False
         try:
-            if "source_guard" in locals() and source_guard is not None:
+            if source_guard is not None:
                 source_guard.close()
+                source_guard = None
         except Exception:
             close_failed = True
         return _candidate_result(
             success=False,
             error=f"candidate_failure:{type(exc).__name__}",
             mutation_performed=mutation_started,
-            recovery_required=mutation_started,
+            recovery_required=mutation_started or close_failed,
             recovery_dir=str(recovery_dir) if recovery_dir else None,
         )
 
