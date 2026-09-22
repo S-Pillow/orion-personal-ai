@@ -586,6 +586,48 @@ The preview-only install remains in place while runtime is returned to manual-of
 
 One acceptance item remains before closing P5-02H: exercise installed preview-edit, preview-move, and destination-recommendation handlers against disposable temporary roots and verify byte-for-byte fixture stability plus known-plan apply refusal. No live vault/inbox paths may be used.
 
+## Final disposable-root no-write acceptance — PASS
+
+Operator final probe against the **installed** plugin completed successfully with Hermes stopped and only temporary disposable roots in use.
+
+Observed:
+
+- `PRODUCTION_MUTATION_MODE=disabled`;
+- preview edit succeeded with `mutation_performed=false`;
+- preview move succeeded with `mutation_performed=false`;
+- destination recommendation succeeded with `mutation_performed=false`;
+- deterministic fixture recommendation count: 1;
+- recommended target: `Projects/draft.md`;
+- known-plan apply returned `p5_01_mutation_not_authorized`;
+- known-plan apply reported `plan_known=true`;
+- known-plan apply reported `mutation_performed=false`;
+- fixture file hashes were unchanged before/after;
+- preview move created no target file;
+- only disposable roots were used;
+- final marker: `P5_02H_FINAL_NO_WRITE_PROBE=PASS`.
+
+### P5-02H disposition
+
+**PASS / PREVIEW-ONLY COMPANION INSTALL ACCEPTED**
+
+Accepted installed state:
+
+- user plugin `orion-vault-actions` installed and enabled;
+- `allow_tool_override: false`;
+- `mcp_allowlist: ["iai-mcp"]`;
+- live config SHA-256: `34D9BD9DDC1BC59783CE2DC80D98FBD66D7AA7CC670DDFB875E0D1C78E8462D7`;
+- installed plugin doctor: **4 tools / 2 hooks**;
+- live gateway exposure verified for enabled/configured `orion_vault` toolset with all 4 expected tools;
+- registered apply surface remains `apply_plan_placeholder` and fail-closed;
+- mutation mode remains disabled;
+- no production recovery root was created;
+- no real vault/inbox mutation occurred;
+- runtime returned to accepted manual-off state after smoke.
+
+This acceptance does **not** authorize disposable mutation mode, production mutation mode, production recovery-root creation/configuration, or any real vault/inbox edit/move/restore/delete.
+
+The next mutation step is a separate installed-runtime disposable-mutation qualification gate and requires explicit owner authorization.
+
 ## Gate H5 — rollback
 
 Rollback triggers include:
