@@ -406,6 +406,28 @@ was pasted/executed as a new top-level PowerShell statement after the
 the temporary old-plugin swap directory may still exist and must be removed in
 a separate bounded cleanup step before I4.
 
+### Installed-plugin cleanup — PASS
+
+The post-update cleanup completed successfully after the earlier interactive
+PowerShell `finally` issue.
+
+Observed:
+
+- Hermes gateway remained manual-off / no process detected;
+- old timestamped swap directory removed;
+- no `.orion-vault-actions-p5-*` temporary plugin directories remained;
+- COMPANION config remained unchanged;
+- rollback backup remained preserved;
+- final marker: `P5_02I_PLUGIN_UPDATE_CLEANUP=PASS`.
+
+Two standalone `else` clauses were rejected by PowerShell because the matching
+`if` blocks had already completed as separate interactive submissions. This
+did not affect the cleanup state: the final leftover enumeration was empty and
+the explicit PASS marker was reached.
+
+The installed P5-02I plugin update is therefore fully accepted and I4 may run
+against the hardened installed code.
+
 ### I4 — stale-state and evidence-consumption checks
 
 At minimum:
