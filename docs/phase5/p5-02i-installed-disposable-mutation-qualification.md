@@ -101,6 +101,51 @@ It imports the installed plugin, keeps Hermes in manual-off state, creates tempo
 
 The script sets `HERMES_INTERACTIVE=1` only inside its own process so the pinned Hermes approval engine presents its bounded stdin prompt. It clears gateway/cron/single-query routing markers in that same process and does not persist those settings.
 
+## I1/I2 observed result — PASS
+
+Operator execution of the installed-runtime disposable edit probe completed successfully.
+
+Observed:
+
+- disposable fixture: `D:\Orion\orion-p5-02i-edit-2ynfq5u_`;
+- real Hermes human **DENY** control was presented and selected;
+- DENY left the disposable note unchanged and created no recovery data;
+- a new preview was generated for the allow path;
+- real Hermes human **ALLOW ONCE** was presented and selected;
+- disposable edit committed successfully;
+- before SHA-256: `c158e2b9b16d664b91a74ecceb44faa020db1e8c3072b2c069ab25bce656c702`;
+- after SHA-256: `fa288ca7e1fb041e282f2ec69c02eb4578cb6dc10d6bcb57c4071e17b25cc7ae`;
+- recovery classification: `committed`;
+- receipt state: `committed`;
+- `authorization_reusable=false`;
+- replay refused;
+- registered apply remained fail-closed;
+- real vault/inbox untouched;
+- disposable fixture cleaned on PASS;
+- Hermes gateway remained stopped;
+- COMPANION config SHA-256 remained exactly `34D9BD9DDC1BC59783CE2DC80D98FBD66D7AA7CC670DDFB875E0D1C78E8462D7`;
+- temporary operator worktree cleaned.
+
+Acceptance markers:
+
+```text
+P5_02I_I1_GUARDS=PASS
+P5_02I_DENY_CONTROL=PASS
+P5_02I_FRESH_ONCE=PASS
+DISPOSABLE_EDIT_MUTATION_PERFORMED=true
+RECOVERY_CLASSIFICATION=committed
+RECEIPT_STATE=committed
+AUTHORIZATION_REUSABLE=false
+PLAN_REPLAY_REFUSED=true
+REGISTERED_APPLY_FAIL_CLOSED=true
+REAL_VAULT_INBOX_TOUCHED=false
+DISPOSABLE_FIXTURE_CLEANED=true
+P5_02I_EDIT_QUALIFICATION=PASS
+P5_02I_OPERATOR_WORKTREE_CLEANED=true
+```
+
+I1 and the disposable-edit portion of I2 are accepted.
+
 ## Required qualification sequence
 
 ### I1 — fail-closed control
