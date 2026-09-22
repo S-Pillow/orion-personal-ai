@@ -207,6 +207,15 @@ def main() -> int:
             plugin.DISPOSABLE_MUTATION_FLAG: "1",
             plugin.PRODUCTION_MUTATION_MODE_ENV: None,
             plugin.PRODUCTION_RECOVERY_ROOT_ENV: None,
+            # Bare scripts are fail-closed by Hermes unless they explicitly
+            # declare an interactive human CLI. Keep this process-scoped and
+            # clear gateway/cron/single-query routing markers so the real
+            # approval engine uses its bounded stdin prompt.
+            "HERMES_INTERACTIVE": "1",
+            "HERMES_GATEWAY_SESSION": None,
+            "HERMES_SESSION_PLATFORM": None,
+            "HERMES_CRON_SESSION": None,
+            "HERMES_SINGLE_QUERY_SESSION": None,
         }):
             resolved = plugin._candidate_disposable_roots()
             if tuple(path.resolve() for path in resolved) != (
