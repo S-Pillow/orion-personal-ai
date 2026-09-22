@@ -439,6 +439,25 @@ Repository cross-check also confirmed that `scripts/operator/Start-Orion.ps1` at
 
 H4 should therefore use the repository operator Start script rather than the stale versioned v2.7.4 wrapper that enforces a clean Hermes checkout.
 
+## H4.5 first no-write runtime probe — PARTIAL PASS / TOOLSET PARSER ERROR
+
+Observed:
+
+- H4.5A authenticated `GET /v1/toolsets` request itself succeeded, but the operator probe incorrectly treated the response as a bare array;
+- pinned Hermes returns a wrapper object with `object`, `platform`, and `data`; toolset rows live under `data`;
+- therefore the H4.5A Orion-toolset assertion is invalid and must be rerun against `$Toolsets.data`;
+- any subsequent `LIVE_ORION_TOOLSET_FOUND=true` / tool-count lines from that failed block are not acceptance evidence because PowerShell execution continued after the thrown assertion;
+- H4.5B installed registration probe **PASS**:
+  - 4 registered tools;
+  - 2 registered hooks;
+  - registered apply handler is `apply_plan_placeholder`;
+  - unknown plan token returns `p5_01_mutation_not_authorized`;
+  - `plan_known=false`;
+  - `mutation_performed=false`;
+- gateway remained healthy after the probe with HTTP 200.
+
+Disposition: H4.5 is not closed until the corrected read-only live-toolset query confirms whether `orion_vault` is present and enabled for the `api_server` platform.
+
 ## H4 observed result — PASS
 
 Operator H4 evidence:
