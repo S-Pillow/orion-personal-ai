@@ -26,6 +26,12 @@ The apply handler still always returns `p5_01_mutation_not_authorized`. Private 
 
 Production activation readiness is reviewed in `docs/phase5/p5-02f-production-activation-readiness-review.md`. Preview-only installation may be considered only under a separate explicit owner authorization. Live mutation remains NO-GO until the P5-02F blockers are closed.
 
+### P5-02G production guardrails candidate
+
+Branch `feature/orion-phase5-p5-02g-production-guardrails` now contains a source-only production-shaped guardrail candidate. It adds explicit disabled/preview-only/mutation-enabled mode parsing, an explicit production recovery-root seam, Windows fixed-volume/access/DACL validation, bounded restart recovery enumeration, normal-edit Windows file-ID parity, schema-v2 production recovery/receipts, and a private unregistered production apply candidate with one handler-owned fresh ALLOW ONCE and post-approval stale revalidation.
+
+The registered apply handler is unchanged and still refuses mutation. The P5-02G candidate expects **116** `test_p5*.py` tests and is **pending Windows verification**. See `docs/phase5/p5-02g-production-mutation-guardrails.md`.
+
 ## P5-02A source candidate
 
 The source candidate on the P5-02A review branch is still non-mutating. Each preview now uses a fresh random nonce, so an identical second preview receives a distinct plan token and Hermes rule key. The bounded in-memory cache binds the exact proposed bytes and unified diff to the plan's hashes without adding replacement content to the public plan or apply-tool arguments. The approval hook includes the canonical target and exact diff and blocks missing, inconsistent, or oversized approval content. Internal hook errors return a block directive. The apply handler still always refuses mutation.
