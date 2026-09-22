@@ -1,6 +1,6 @@
 # P5-02C Production Recovery / Restore Contract
 
-Status: **SOURCE-ONLY DESIGN / READ-ONLY INSPECTOR CANDIDATE / NO LIVE RESTORE**
+Status: **SOURCE-ONLY / READ-ONLY INSPECTOR WINDOWS-VERIFIED / RESTORE PREVIEW IN PROGRESS / NO LIVE RESTORE**
 Date: 2026-09-22
 Depends on: P5-01 accepted baseline, P5-02A approval integrity, P5-02B Windows mutation/recovery candidate
 
@@ -262,13 +262,20 @@ That raises expected `test_p5*.py` discovery to **46 tests**:
 - 9 P5-02A;
 - 21 P5-02B/P5-02C candidate tests.
 
-The 46-test state is not yet Windows-accepted until a fresh run passes.
+Windows operator verification is now **PASS**: the full `test_p5*.py` discovery ran **46/46 tests successfully in 0.505s**. No Hermes gateway, HUD fixture, or persistent process was started by that run.
 
-## Next verification
+## Next source gate
 
-Run the 46-test Windows suite only. No HUD fixture or gateway start is needed for this read-only inspector delta.
+Implement **restore preview only**:
 
-If 46/46 passes, the next source task is to design and implement **restore preview only**. Do not wire a restore mutator until exact restore preview and stale-state tests pass.
+- historical edit restore: exact current -> backup diff;
+- historical move restore: exact absent-source -> backup creation diff, leaving the vault target untouched;
+- bind the new preview to recovery ID, verified backup hash, current state, canonical path/parent identity, and a fresh nonce;
+- add a read-only revalidator that fails if the current target/source state changes after preview;
+- extend approval presentation so the operator can see that the action is a restore and which recovery record/target is involved;
+- keep every restore mutator unregistered/unimplemented.
+
+Do not wire restore execution until this preview/revalidation gate passes on Windows.
 
 ## Stop conditions before live mutation
 
