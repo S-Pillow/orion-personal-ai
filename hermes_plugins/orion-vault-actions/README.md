@@ -30,7 +30,7 @@ Production activation readiness is reviewed in `docs/phase5/p5-02f-production-ac
 
 Branch `feature/orion-phase5-p5-02g-production-guardrails` now contains a source-only production-shaped guardrail candidate. It adds explicit disabled/preview-only/mutation-enabled mode parsing, an explicit production recovery-root seam, Windows fixed-volume/access/DACL validation, bounded restart recovery enumeration, normal-edit Windows file-ID parity, schema-v2 production recovery/receipts, and a private unregistered production apply candidate with one handler-owned fresh ALLOW ONCE and post-approval stale revalidation.
 
-The registered apply handler is unchanged and still refuses mutation. The P5-02G candidate expects **116** `test_p5*.py` tests and is **pending Windows verification**. See `docs/phase5/p5-02g-production-mutation-guardrails.md`.
+The registered apply handler is unchanged and still refuses mutation. P5-02G is now **Windows-verified**: 116/116 `test_p5*.py` tests passed, the installed-Hermes dispatcher probe passed 2/2, and plugin doctor passed with 4 tools / 2 hooks. See `docs/phase5/p5-02g-production-mutation-guardrails.md`.
 
 ## P5-02A source candidate
 
