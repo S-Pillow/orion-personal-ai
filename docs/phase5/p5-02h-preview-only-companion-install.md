@@ -212,6 +212,22 @@ Then, before enablement:
 
 Any mismatch stops the gate and rolls back the copied plugin directory.
 
+## H2 observed result — PASS
+
+Operator H2 evidence:
+
+- exact pin resolved: `b8cbb63c3db20c38543220956d3f776bffecf432`;
+- detached staging worktree HEAD matched the exact approved pin;
+- plugin staged successfully at the COMPANION user-plugin destination;
+- installed-location plugin doctor: PASS;
+- installed-location registrations: **4 tools / 2 hooks**;
+- compact user-plugin list: `orion-vault-actions` 0.1.0, user source, **not enabled**;
+- `plugins show`: status **not enabled**, source user;
+- live `config.yaml` SHA-256 remained exactly `13C7CBA513A260659A2859A6F60289483C657DDBC0686E9E1EB2EEBF156A504D`;
+- managed gateway remained stopped.
+
+H2 is accepted. No plugin enablement, config mutation, gateway start, production recovery-root creation, or vault/inbox mutation occurred.
+
 ## Gate H3 — enable with gateway still stopped
 
 If H2 passes, enable through Hermes with:
