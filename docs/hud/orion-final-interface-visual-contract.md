@@ -317,3 +317,12 @@ Stop and re-scope if achieving the visual design would require:
 - collapsing future phase capabilities into cosmetic placeholders that imply they already exist.
 
 Core Intent Preservation: **PRESERVED**.
+
+## Phase 5 closure linkage — 2026-09-22
+
+The remaining Phase 5 execution and UI convergence sequence is now tracked in:
+
+`docs/planning/phase5-completion-and-ui-convergence-2026-09-22.md`
+
+That plan makes this visual contract a required Phase 5 closure input rather than optional post-phase polish. Phase 5 is not complete from backend mutation safety alone; the accepted action/display capabilities must also converge into the approved Orion interaction model before phase closure.
+
