@@ -131,6 +131,22 @@ class DisposableMutationCandidateTests(unittest.TestCase):
         self.env.stop()
         self.tmp.cleanup()
 
+    def _fresh_once_evidence(self, plan_token, surface="gateway"):
+        def gate(_tool_name, description, *, rule_key):
+            plugin.post_approval_response(
+                pattern_key=f"plugin_rule:{rule_key}",
+                description=description,
+                choice="once",
+                surface=surface,
+            )
+            return {"approved": True}
+
+        evidence = plugin._fresh_once_approval_evidence(
+            plan_token, approval_request=gate, redact=lambda text: text,
+        )
+        self.assertTrue(evidence["approved"])
+        return evidence
+
     def _edit_preview(self, before=b"before\n", after="after\n"):
         note = self.vault / "note.md"
         note.write_bytes(before)
@@ -430,6 +446,141 @@ class DisposableMutationCandidateTests(unittest.TestCase):
         self.assertFalse(inspected["success"])
         self.assertEqual(inspected["error"], "recovery_backup_hash_mismatch")
         self.assertFalse(inspected["mutation_performed"])
+
+    def test_receipt_survives_memory_reset_and_correlates_committed_edit(self):
+        note, preview = self._edit_preview()
+        evidence = self._fresh_once_evidence(preview["plan_token"])
+
+        result = plugin._execute_disposable_plan_candidate(
+            preview["plan_token"], approval_evidence=evidence
+        )
+
+        self.assertTrue(result["success"])
+        recovery = Path(result["recovery_dir"])
+        self.assertTrue((recovery / "receipt.json").is_file())
+        self.assertEqual(note.read_bytes(), b"after\n")
+
+        # Simulate a process restart: receipt/recovery inspection must not
+        # depend on the in-memory preview or approval-attempt caches.
+        plugin._PREVIEWS.clear()
+        plugin._PREVIEW_TIMES.clear()
+        plugin._APPROVAL_ATTEMPTS.clear()
+
+        inspected = plugin._inspect_disposable_receipt_candidate(
+            preview["plan_token"]
+        )
+
+        self.assertTrue(inspected["success"])
+        self.assertTrue(inspected["correlation_valid"])
+        self.assertFalse(inspected["authorization_reusable"])
+        self.assertEqual(inspected["receipt_state"], "committed")
+        self.assertEqual(inspected["final_classification"], "committed")
+        self.assertEqual(inspected["current_classification"], "committed")
+        self.assertEqual(
+            inspected["approval_attempt_id"], evidence["attempt_id"]
+        )
+        self.assertEqual(inspected["approval_choice"], "once")
+        self.assertEqual(inspected["approval_surface"], "gateway")
+
+    def test_receipt_prepared_survives_applied_unfinalized_failure(self):
+        note, preview = self._edit_preview()
+        evidence = self._fresh_once_evidence(preview["plan_token"])
+
+        def fail(name):
+            if name == "edit_after_replace":
+                raise RuntimeError("simulated crash after protected replace")
+
+        result = plugin._execute_disposable_plan_candidate(
+            preview["plan_token"],
+            failure_hook=fail,
+            approval_evidence=evidence,
+        )
+
+        self.assertFalse(result["success"])
+        self.assertTrue(result["mutation_performed"])
+        self.assertEqual(note.read_bytes(), b"after\n")
+
+        plugin._PREVIEWS.clear()
+        plugin._PREVIEW_TIMES.clear()
+        plugin._APPROVAL_ATTEMPTS.clear()
+
+        inspected = plugin._inspect_disposable_receipt_candidate(
+            preview["plan_token"]
+        )
+
+        self.assertTrue(inspected["success"])
+        self.assertTrue(inspected["correlation_valid"])
+        self.assertEqual(inspected["receipt_state"], "prepared")
+        self.assertIsNone(inspected["final_classification"])
+        self.assertEqual(
+            inspected["current_classification"], "applied_unfinalized"
+        )
+        self.assertTrue(inspected["recovery_required"])
+
+    def test_invalid_approval_evidence_blocks_before_recovery_or_mutation(self):
+        note, preview = self._edit_preview()
+        evidence = self._fresh_once_evidence(preview["plan_token"])
+        bad = dict(evidence)
+        bad["approval_message_sha256"] = "0" * 64
+
+        result = plugin._execute_disposable_plan_candidate(
+            preview["plan_token"], approval_evidence=bad
+        )
+
+        self.assertFalse(result["success"])
+        self.assertEqual(result["error"], "approval_evidence_message_mismatch")
+        self.assertFalse(result["mutation_performed"])
+        self.assertEqual(note.read_bytes(), b"before\n")
+        self.assertEqual(list(self.recovery.iterdir()), [])
+
+    def test_receipt_tamper_fails_closed_after_restart(self):
+        _note, preview = self._edit_preview()
+        evidence = self._fresh_once_evidence(preview["plan_token"])
+        result = plugin._execute_disposable_plan_candidate(
+            preview["plan_token"], approval_evidence=evidence
+        )
+        self.assertTrue(result["success"])
+
+        receipt_path = Path(result["recovery_dir"], "receipt.json")
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        receipt["approval"]["authorization_reusable"] = True
+        receipt_path.write_text(
+            json.dumps(receipt, ensure_ascii=False, sort_keys=True, indent=2),
+            encoding="utf-8",
+        )
+
+        plugin._PREVIEWS.clear()
+        plugin._PREVIEW_TIMES.clear()
+        plugin._APPROVAL_ATTEMPTS.clear()
+
+        inspected = plugin._inspect_disposable_receipt_candidate(
+            preview["plan_token"]
+        )
+
+        self.assertFalse(inspected["success"])
+        self.assertEqual(inspected["error"], "receipt_invalid")
+        self.assertFalse(inspected["mutation_performed"])
+
+    def test_valid_receipt_cannot_authorize_a_later_attempt(self):
+        note, preview = self._edit_preview()
+        evidence = self._fresh_once_evidence(preview["plan_token"])
+        result = plugin._execute_disposable_plan_candidate(
+            preview["plan_token"], approval_evidence=evidence
+        )
+        self.assertTrue(result["success"])
+        self.assertTrue(Path(result["recovery_dir"], "receipt.json").is_file())
+
+        # A gate result without a fresh matching post-approval ONCE callback
+        # must still fail even though a valid durable receipt exists.
+        later = plugin._probe_fresh_once_approval(
+            preview["plan_token"],
+            approval_request=lambda *_args, **_kwargs: {"approved": True},
+            redact=lambda text: text,
+        )
+
+        self.assertFalse(later)
+        self.assertFalse(plugin._APPROVAL_ATTEMPTS)
+        self.assertEqual(note.read_bytes(), b"after\n")
 
     def test_restore_edit_preview_binds_recovery_current_hash_and_exact_diff(self):
         note, preview = self._edit_preview()
