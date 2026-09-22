@@ -332,6 +332,48 @@ replace only the Orion plugin directory from the verified source pin, preserve
 COMPANION config unchanged, and re-run installed-location doctor before any
 I4 mutation probe.
 
+### Installed plugin update authorization
+
+Owner explicitly authorized updating only the installed COMPANION
+`orion-vault-actions` plugin from the accepted P5-02H source pin
+
+```text
+b8cbb63c3db20c38543220956d3f776bffecf432
+```
+
+to the verified P5-02I source pin
+
+```text
+ce676a263f3dd2c18a7d7700b17a6023c6845904
+```
+
+for disposable-root qualification only.
+
+The authorization does not extend to production mutation mode, production
+recovery-root configuration, ACL changes, public production-executor
+registration, or real vault/inbox mutation.
+
+GitHub compare confirms the installed plugin directory delta is limited to:
+
+- modified `hermes_plugins/orion-vault-actions/__init__.py`;
+- added `hermes_plugins/orion-vault-actions/tests/test_p5_02i_disposable_approval.py`.
+
+`plugin.yaml` is unchanged. Other files in the commit are docs/operator
+scripts outside the plugin directory and are not part of the COMPANION plugin
+copy.
+
+Update procedure requirements:
+
+1. Hermes gateway remains stopped;
+2. accepted COMPANION config hash must match before and after;
+3. current tracked installed plugin files must match the old P5-02H pin before replacement;
+4. capture an exact rollback copy of the installed plugin directory first;
+5. replace only the Orion plugin directory from the exact P5-02I source pin;
+6. verify all tracked installed plugin files against the new pin;
+7. run installed-location doctor and require 4 tools / 2 hooks;
+8. leave Hermes manual-off after update;
+9. do not run I4 mutation checks until the update evidence is accepted.
+
 ### I4 — stale-state and evidence-consumption checks
 
 At minimum:
