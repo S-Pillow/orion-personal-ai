@@ -439,7 +439,38 @@ Repository cross-check also confirmed that `scripts/operator/Start-Orion.ps1` at
 
 H4 should therefore use the repository operator Start script rather than the stale versioned v2.7.4 wrapper that enforces a clean Hermes checkout.
 
-## H4.5 first no-write runtime probe — PARTIAL PASS / TOOLSET PARSER ERROR
+## H4.5 installed-runtime no-write smoke — PASS
+
+The first H4.5A attempt exposed two PowerShell response-shape issues in the operator probe, not runtime failures:
+
+1. pinned Hermes `GET /v1/toolsets` returns a wrapper object with rows under `.data`;
+2. after filtering to exactly one matching `PSCustomObject`, PowerShell unwraps the single pipeline result to a scalar, so using `$OrionToolset.Count -ne 1` was not a reliable cardinality assertion.
+
+The corrected read-only query produced the actual live runtime object:
+
+- toolset name: `orion_vault`;
+- `enabled: True`;
+- `configured: True`;
+- resolved tools:
+  - `orion_vault_apply_plan`
+  - `orion_vault_preview_edit`
+  - `orion_vault_preview_move_draft`
+  - `orion_vault_recommend_destination`;
+- live tool count: 4;
+- gateway health after toolset inspection: HTTP 200.
+
+The separately executed H4.5B installed registration probe also passed:
+
+- 4 registered tools;
+- 2 registered hooks;
+- registered apply handler is exactly `apply_plan_placeholder`;
+- unknown plan token returns `p5_01_mutation_not_authorized`;
+- `plan_known=false`;
+- `mutation_performed=false`;
+- gateway remained healthy with HTTP 200.
+
+H4.5 is accepted. This proves the running COMPANION gateway exposes the enabled Orion vault toolset while the installed registered apply surface remains fail-closed and no protected filesystem mutation occurs.
+
 
 Observed:
 
