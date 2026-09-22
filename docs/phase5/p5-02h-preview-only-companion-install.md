@@ -346,6 +346,24 @@ Read-only operator inspection confirmed:
 
 Therefore the corrected H4 retry must mirror this exact installed invocation contract. No operator reinstall or lifecycle-script modification is required.
 
+## H4 second lifecycle attempt — SAFE FAILURE
+
+Observed operator result:
+
+- exact versioned Start shortcut invocation was mirrored;
+- installed `Start-Orion.ps1` failed during parameter binding before any runtime start;
+- failure:
+  `Join-Path : Cannot bind argument to parameter 'Path' because it is an empty string.`
+- failing expression is the wrapper's default `ConfigPath` construction using `$PSScriptRoot`;
+- Start returned exit code 1;
+- Hermes health remained unavailable;
+- gateway remained stopped;
+- Orion plugin remained enabled;
+- installed plugin doctor remained PASS at **4 tools / 2 hooks**;
+- live config SHA-256 remained exactly `34D9BD9DDC1BC59783CE2DC80D98FBD66D7AA7CC670DDFB875E0D1C78E8462D7`.
+
+Disposition: safe invocation-contract failure before lifecycle start. Do not patch/reinstall the accepted operator package. Read the installed `Start-Orion.ps1` and `Invoke-Orion.ps1` parameter/forwarding contract, then retry only with an invocation directly supported by those installed scripts.
+
 ## Gate H4 — lifecycle/load
 
 Use the accepted installed one-shot Orion operator lifecycle:
