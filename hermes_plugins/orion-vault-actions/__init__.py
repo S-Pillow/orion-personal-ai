@@ -1370,55 +1370,57 @@ def _enumerate_production_recovery_records(
     truncated = False
 
     try:
-        children = sorted(recovery_root.iterdir(), key=lambda p: p.name)
+        with os.scandir(recovery_root) as entries:
+            for entry in entries:
+                if len(records) >= limit:
+                    truncated = True
+                    break
+                child = Path(entry.path)
+                record = {
+                    "recovery_id": entry.name,
+                    "needs_attention": False,
+                }
+                if (
+                    not entry.is_dir(follow_symlinks=False)
+                    or _is_reparse_point(child)
+                    or not re.fullmatch(r"[0-9a-f]{64}", entry.name)
+                ):
+                    record.update({
+                        "valid": False,
+                        "needs_attention": True,
+                        "error": "invalid_recovery_record_entry",
+                    })
+                    records.append(record)
+                    continue
+
+                recovery = _inspect_recovery_record_at_roots(
+                    vault_root, inbox_root, recovery_root, entry.name
+                )
+                receipt = _inspect_receipt_at_roots(
+                    vault_root, inbox_root, recovery_root, entry.name
+                )
+                record["recovery"] = recovery
+                record["receipt"] = receipt
+                record["valid"] = bool(
+                    recovery.get("success") and receipt.get("success")
+                )
+                classification = recovery.get("classification")
+                record["needs_attention"] = bool(
+                    not record["valid"]
+                    or recovery.get("recovery_required")
+                    or receipt.get("receipt_reconciliation_required")
+                    or classification in (
+                        "applied_unfinalized",
+                        "divergent_unresolved",
+                        "duplicate_unresolved",
+                    )
+                )
+                records.append(record)
     except Exception as exc:
         return _candidate_result(
             success=False,
             error=f"production_recovery_enumeration_failed:{type(exc).__name__}",
         )
-
-    for child in children:
-        if len(records) >= limit:
-            truncated = True
-            break
-        record = {
-            "recovery_id": child.name,
-            "needs_attention": False,
-        }
-        if (
-            not child.is_dir()
-            or _is_reparse_point(child)
-            or not re.fullmatch(r"[0-9a-f]{64}", child.name)
-        ):
-            record.update({
-                "valid": False,
-                "needs_attention": True,
-                "error": "invalid_recovery_record_entry",
-            })
-            records.append(record)
-            continue
-
-        recovery = _inspect_recovery_record_at_roots(
-            vault_root, inbox_root, recovery_root, child.name
-        )
-        receipt = _inspect_receipt_at_roots(
-            vault_root, inbox_root, recovery_root, child.name
-        )
-        record["recovery"] = recovery
-        record["receipt"] = receipt
-        record["valid"] = bool(recovery.get("success") and receipt.get("success"))
-        classification = recovery.get("classification")
-        record["needs_attention"] = bool(
-            not record["valid"]
-            or recovery.get("recovery_required")
-            or receipt.get("receipt_reconciliation_required")
-            or classification in (
-                "applied_unfinalized",
-                "divergent_unresolved",
-                "duplicate_unresolved",
-            )
-        )
-        records.append(record)
 
     return _candidate_result(
         success=True,
