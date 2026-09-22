@@ -1,6 +1,6 @@
 # P5-02D Restart-Safe Approval / Recovery Receipts
 
-Status: **SOURCE-ONLY CANDIDATE / WINDOWS VERIFICATION PENDING / NON-AUTHORIZING**
+Status: **SOURCE-ONLY / WINDOWS-VERIFIED / NON-AUTHORIZING**
 Date: 2026-09-22
 Depends on: P5-02A approval integrity, P5-02B Windows mutation hardening, P5-02C recovery inspection + restore preview
 
@@ -207,15 +207,20 @@ Current expected `test_p5*.py` discovery is **62 tests**:
 - 10 P5-02A;
 - 36 P5-02B/P5-02C/P5-02D.
 
-This 62-test state is not accepted until Windows verification passes.
+Windows operator verification is now **PASS**:
 
-## Next verification
+- full `test_p5*.py`: **62/62 passed** in 0.841s;
+- installed-Hermes dispatcher probe: **2/2 passed** in 0.090s;
+- plugin doctor: **PASS**, manifest `orion-vault-actions 0.1.0`, 4 tools / 2 hooks;
+- no gateway/HUD fixture or persistent probe process was started by these commands.
 
-Run the 62-test Windows suite, then the same one-shot Hermes dispatcher probe and plugin doctor.
+The known Hermes SQLite 3.40.1 WAL-reset warning remained non-fatal and Hermes used `journal_mode=DELETE`. It remains separate runtime hygiene.
 
-No gateway, HUD fixture, plugin installation, or persistent service is required.
+This accepts the restart-safe non-authorizing receipt layer on Windows.
 
-If all three gates pass, the next source task is a **restore-execution design review** that maps the already-verified edit/move primitives onto restore semantics. Do not implement or enable a restore executor until that review explicitly identifies:
+## Next source gate
+
+Perform a **restore-execution design review** that maps the already-verified edit/move primitives onto restore semantics. Do not implement or enable a restore executor until that review explicitly identifies:
 
 - which restore operations are atomic replacements vs exclusive creates;
 - which recovery record is created for the restore itself;
