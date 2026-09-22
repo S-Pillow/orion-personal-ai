@@ -115,6 +115,25 @@ Do not continue to installation if:
 
 Report the H0 output before H1 so exact backup/config commands can be tailored to the observed profile.
 
+## H0 observed baseline — PASS
+
+Operator H0 evidence on 2026-09-22:
+
+- repository working tree: clean;
+- repository HEAD: `cb602e3` (approved P5-02G source);
+- COMPANION profile: `C:\Users\spill\AppData\Local\hermes\profiles\companion`;
+- plugin root exists;
+- plugin root inventory: empty;
+- `orion-vault-actions` destination does not exist;
+- live profile config: `config.yaml`, 3828 bytes, last modified 2026-09-12 20:14:13 local;
+- managed task `Hermes_Gateway_companion`: registered / Ready;
+- no gateway process detected;
+- Hermes plugin CLI exposes install/search/update/remove/list/enable/disable/capabilities/doctor/pack/show.
+
+H0 is accepted. No live profile file was changed and no gateway process was started.
+
+Before H1/H2, perform one additional read-only CLI/config-shape check so installation uses Hermes-native plugin management where supported and the config backup/edit is targeted rather than guessed.
+
 ## Gate H1 — rollback capture
 
 H1 is intentionally deferred until H0 output identifies the live config filename(s) and current plugin inventory.
