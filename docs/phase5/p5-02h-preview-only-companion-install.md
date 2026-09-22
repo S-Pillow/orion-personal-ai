@@ -400,6 +400,27 @@ Repository evidence explains a likely accepted incompatibility:
 
 Therefore do not reset/clean/stash/rollback Hermes merely to satisfy the older v2.7.4 clean-checkout invariant. First classify the current Hermes checkout read-only and verify that any dirtiness is exactly the accepted P4-04A patch state.
 
+## H4 Hermes checkout classification — ACCEPTED P4-04A STATE
+
+Read-only operator classification after `HERMES_CHECKOUT_NOT_CLEAN` showed:
+
+- Hermes HEAD: `5fc308a70719a83cccdbba4c0e39c23f5a8239d5`;
+- tracked changes: only `gateway/platforms/api_server.py`;
+- tracked diff stat: 242 insertions / 1 deletion;
+- untracked files: only:
+  - `gateway/platforms/api_server.py.orion-p4-04a.bak`
+  - `gateway/platforms/api_server.py.orion-p4-04a.json`;
+- patched target SHA-256: `ECFD6DD53610C24A81F078650A0B2B3E129478A50FDB5F353313FFF6E12E3888`;
+- backup SHA-256: `8D87036DD488CB811DBABB7048102D0C28FBF54E0E658C464683000118537EC3`;
+- manifest patch id: `ORION-P4-04A-HERMES-AUDIO-GATEWAY-v1`;
+- manifest accepted Hermes commit: `5fc308a70719a83cccdbba4c0e39c23f5a8239d5`;
+- manifest pre Git blob: `980659c9343d2975040f304e05bf97fa95f6a046`;
+- manifest pre/post SHA-256 values exactly match the accepted P4-04A evidence.
+
+The PowerShell verification wrapper itself did not run because local PowerShell execution policy blocks script execution. This is not a patch-state mismatch. Perform the same read-only verification by invoking the source-controlled Python patcher directly with the accepted Hermes Python.
+
+Disposition: the Hermes checkout dirtiness is fully accounted for by the accepted P4-04A compatibility patch. **Do not clean/reset/stash/rollback this checkout.**
+
 ## Gate H4 — lifecycle/load
 
 Use the accepted installed one-shot Orion operator lifecycle:
