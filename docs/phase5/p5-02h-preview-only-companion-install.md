@@ -1,6 +1,6 @@
 # P5-02H Preview-Only COMPANION Installation
 
-Status: **OWNER AUTHORIZED / BASELINE CAPTURE FIRST / NO MUTATION ENABLEMENT**
+Status: **PASS / PREVIEW-ONLY COMPANION INSTALL ACCEPTED / MUTATION STILL PROHIBITED**
 Date: 2026-09-22
 Authorized source commit: `b8cbb63c3db20c38543220956d3f776bffecf432`
 Source branch: `feature/orion-phase5-p5-02g-production-guardrails`
@@ -627,6 +627,18 @@ Accepted installed state:
 This acceptance does **not** authorize disposable mutation mode, production mutation mode, production recovery-root creation/configuration, or any real vault/inbox edit/move/restore/delete.
 
 The next mutation step is a separate installed-runtime disposable-mutation qualification gate and requires explicit owner authorization.
+
+
+## Lifecycle follow-up — dedicated Ollama shutdown policy
+
+Owner clarified after P5-02H acceptance that Ollama is dedicated to Orion and is not used by other applications. Desired future lifecycle policy:
+
+- Start Orion should ensure/start Ollama and start Hermes/COMPANION.
+- Stop Orion should stop Hermes/COMPANION and then stop the local Ollama runtime, rather than preserving an already-running Ollama solely because the current launcher session did not originally start it.
+- iai remains under the existing vendor-managed idle/HIBERNATION lifecycle.
+- Manual-off login behavior remains unchanged.
+
+This is a separate lifecycle follow-up. It was not implemented as part of P5-02H and does not change the accepted preview-only plugin result.
 
 ## Gate H5 — rollback
 
