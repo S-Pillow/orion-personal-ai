@@ -1,6 +1,6 @@
 name: orion-vault-actions
-version: "0.1.0"
-description: "Orion Phase 5 source-only native vault preview and approval-contract plugin. No protected filesystem mutation."
+version: "0.2.0"
+description: "Orion Phase 5 guarded vault preview and apply plugin. Protected mutation remains disabled unless explicit mutation_enabled mode passes the qualified approval and recovery guardrails."
 provides_hooks:
   - pre_tool_call
   - post_approval_response
