@@ -60,11 +60,9 @@ class PlanBindingTests(unittest.TestCase):
 
         approvals = [plugin.pre_tool_call(plugin.APPLY_TOOL, {"plan_token": item["plan_token"]})
                      for item in (first, second)]
-        for item, approval in zip((first, second), approvals):
-            self.assertEqual(approval["action"], "approve")
-            self.assertIn(item["plan"]["target_canonical_path"], approval["message"])
-            self.assertIn(item["diff"], approval["message"])
-        self.assertNotEqual(approvals[0]["rule_key"], approvals[1]["rule_key"])
+        for approval in approvals:
+            self.assertEqual(approval["action"], "block")
+            self.assertIn("not enabled", approval["message"])
         self.assertEqual(note.read_bytes(), b"old")
         self.assertFalse(json.loads(plugin.apply_plan_placeholder(
             {"plan_token": first["plan_token"]}))["mutation_performed"])
@@ -84,7 +82,9 @@ class PlanBindingTests(unittest.TestCase):
         ctx = Context()
         plugin.register(ctx)
         self.assertEqual(set(ctx.hooks), {"pre_tool_call", "post_approval_response"})
-        self.assertIs(ctx.tools[plugin.APPLY_TOOL], plugin.apply_plan_placeholder)
+        self.assertIs(
+            ctx.tools[plugin.APPLY_TOOL], plugin.apply_plan_production_guarded
+        )
 
     def test_move_approval_shows_canonical_target_and_bound_source_bytes(self):
         draft = self.inbox / "draft.md"
@@ -95,10 +95,9 @@ class PlanBindingTests(unittest.TestCase):
             "source_draft": "draft.md", "target_relative_path": "New/draft.md",
         }))
         directive = plugin.pre_tool_call(plugin.APPLY_TOOL, {"plan_token": preview["plan_token"]})
-        self.assertEqual(directive["action"], "approve")
+        self.assertEqual(directive["action"], "block")
+        self.assertIn("not enabled", directive["message"])
         self.assertEqual(preview["plan"]["target_canonical_path"], str(target.resolve(strict=False)))
-        self.assertIn(preview["plan"]["target_canonical_path"], directive["message"])
-        self.assertIn(preview["diff"], directive["message"])
         self.assertEqual(plugin._PREVIEWS[preview["plan_token"]]["_proposed_bytes"], draft_bytes)
         self.assertEqual(draft.read_bytes(), draft_bytes)
         self.assertFalse(target.exists())
