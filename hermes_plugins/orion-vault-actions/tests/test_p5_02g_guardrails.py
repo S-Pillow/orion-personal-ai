@@ -530,6 +530,101 @@ class ProductionGuardrailTests(unittest.TestCase):
         self.assertTrue(inspected["success"])
         self.assertEqual(inspected["current_classification"], "committed")
         self.assertFalse(inspected["authorization_reusable"])
+        self.assertFalse(
+            {
+                "approval",
+                "approval_message",
+                "approval_key",
+                "api_key",
+                "note_bytes",
+                "recovery_bytes",
+                "callback",
+            }
+            & set(result)
+        )
+
+        def contains_bytes(value):
+            if isinstance(value, (bytes, bytearray, memoryview)):
+                return True
+            if isinstance(value, dict):
+                return any(contains_bytes(item) for item in value.values())
+            if isinstance(value, (list, tuple, set)):
+                return any(contains_bytes(item) for item in value)
+            return False
+
+        self.assertFalse(contains_bytes(result))
+
+    def test_production_edit_requests_exactly_one_human_approval(self):
+        os.environ[plugin.PRODUCTION_MUTATION_MODE_ENV] = (
+            plugin.PRODUCTION_MODE_MUTATION_ENABLED
+        )
+        note = self.vault / "note.md"
+        note.write_bytes(b"before\n")
+        preview = json.loads(plugin.preview_edit({
+            "target_relative_path": "note.md",
+            "new_content": "after\n",
+        }))
+        calls = []
+
+        def gate(_tool_name, description, *, rule_key):
+            calls.append(rule_key)
+            plugin.post_approval_response(
+                pattern_key=f"plugin_rule:{rule_key}",
+                description=description,
+                choice="once",
+                surface="gateway",
+            )
+            return {"approved": True}
+
+        result = self._production_apply(preview["plan_token"], gate=gate)
+
+        self.assertTrue(result["success"])
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(note.read_bytes(), b"after\n")
+
+    def test_truncated_recovery_inventory_blocks_before_approval(self):
+        os.environ[plugin.PRODUCTION_MUTATION_MODE_ENV] = (
+            plugin.PRODUCTION_MODE_MUTATION_ENABLED
+        )
+        note = self.vault / "note.md"
+        note.write_bytes(b"before\n")
+        preview = json.loads(plugin.preview_edit({
+            "target_relative_path": "note.md",
+            "new_content": "after\n",
+        }))
+        called = {"value": False}
+
+        def gate(*_args, **_kwargs):
+            called["value"] = True
+            return {"approved": True}
+
+        truncated = plugin._candidate_result(
+            success=True,
+            mutation_performed=False,
+            mutation_mode=plugin.PRODUCTION_MODE_MUTATION_ENABLED,
+            mutation_allowed=True,
+            record_count=plugin.PRODUCTION_RECOVERY_SCAN_LIMIT,
+            scan_limit=plugin.PRODUCTION_RECOVERY_SCAN_LIMIT,
+            truncated=True,
+            attention_count=0,
+            records=[],
+        )
+        with patch.object(
+            plugin,
+            "_enumerate_production_recovery_records",
+            return_value=truncated,
+        ):
+            result = self._production_apply(
+                preview["plan_token"], gate=gate
+            )
+
+        self.assertFalse(result["success"])
+        self.assertEqual(
+            result["error"], "production_recovery_inventory_truncated"
+        )
+        self.assertFalse(called["value"])
+        self.assertEqual(note.read_bytes(), b"before\n")
+        self.assertEqual(list(self.recovery.iterdir()), [])
 
     def test_production_edit_stale_after_human_once_fails_before_recovery(self):
         os.environ[plugin.PRODUCTION_MUTATION_MODE_ENV] = (
