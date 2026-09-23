@@ -400,7 +400,7 @@ class ProductionGuardrailTests(unittest.TestCase):
         self.assertEqual(blocked["action"], "block")
         self.assertEqual(note.read_bytes(), b"before\n")
 
-    def test_preview_only_pretool_keeps_non_mutating_approval_contract(self):
+    def test_preview_only_pretool_blocks_without_approval_prompt(self):
         os.environ[plugin.PRODUCTION_MUTATION_MODE_ENV] = (
             plugin.PRODUCTION_MODE_PREVIEW_ONLY
         )
@@ -415,11 +415,11 @@ class ProductionGuardrailTests(unittest.TestCase):
             plugin.APPLY_TOOL, {"plan_token": preview["plan_token"]}
         )
 
-        self.assertEqual(directive["action"], "approve")
-        self.assertIn("fail-closed", directive["message"])
+        self.assertEqual(directive["action"], "block")
+        self.assertIn("not enabled", directive["message"])
         self.assertEqual(note.read_bytes(), b"before\n")
 
-    def test_production_candidate_is_unregistered_and_public_apply_refuses(self):
+    def test_private_production_candidate_is_unregistered_and_guarded_wrapper_is_public(self):
         class Context:
             def __init__(self):
                 self.tools = {}
@@ -433,7 +433,9 @@ class ProductionGuardrailTests(unittest.TestCase):
         ctx = Context()
         plugin.register(ctx)
 
-        self.assertIs(ctx.tools[plugin.APPLY_TOOL], plugin.apply_plan_placeholder)
+        self.assertIs(
+            ctx.tools[plugin.APPLY_TOOL], plugin.apply_plan_production_guarded
+        )
         self.assertNotIn(
             plugin._execute_production_plan_candidate, ctx.tools.values()
         )
