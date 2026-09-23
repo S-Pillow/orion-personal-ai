@@ -234,7 +234,9 @@ Write-Host "P5_02O_DISPOSABLE_FLAGS_PERSISTED=false"
 Write-Host "P5_02O_RECOVERY_INVENTORY_COUNT=0"
 Write-Host "P5_02O_HERMES_MANUAL_OFF_PREINSTALL=true"
 
+$InstallMutationStarted = $false
 $Installed = $false
+$GatewayStartIssued = $false
 $Validated = $false
 $Stopped = $false
 $Succeeded = $false
@@ -272,6 +274,7 @@ try {
     }
     Copy-Item -LiteralPath $SourcePlugin -Destination $StageDest -Recurse -Force
 
+    $InstallMutationStarted = $true
     Remove-Item -LiteralPath $PluginDest -Recurse -Force
     Move-Item -LiteralPath $StageDest -Destination $PluginDest
     $Installed = $true
@@ -309,6 +312,7 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw "STOP: Hermes COMPANION gateway start failed."
     }
+    $GatewayStartIssued = $true
     Write-Host "P5_02O_GATEWAY_HEALTH_TIMEOUT_SECONDS=$GatewayHealthTimeoutSeconds"
 
     if (-not (Wait-GatewayState -ExpectedUp $true -TimeoutSeconds $GatewayHealthTimeoutSeconds)) {
@@ -368,13 +372,16 @@ try {
 catch {
     $Failure = $_
     try {
-        Stop-GatewaySafely
+        if ($GatewayStartIssued -or (Test-GatewayHealth)) {
+            & $Hermes -p companion gateway stop
+            $null = Wait-GatewayState -ExpectedUp $false -TimeoutSeconds 30
+        }
     }
     catch {
         Write-Host "P5_02O_ROLLBACK_GATEWAY_STOP=ERROR"
     }
 
-    if ($Installed -and (Test-Path -LiteralPath $BackupPlugin -PathType Container)) {
+    if ($InstallMutationStarted -and (Test-Path -LiteralPath $BackupPlugin -PathType Container)) {
         if (Test-Path -LiteralPath $PluginDest) {
             Remove-Item -LiteralPath $PluginDest -Recurse -Force
         }
@@ -407,7 +414,11 @@ finally {
     if (Test-Path -LiteralPath $SourceWorktree) {
         & git -C $Repo worktree remove --force $SourceWorktree | Out-Null
     }
-    if (-not $Succeeded -and (Test-GatewayHealth)) {
-        try { Stop-GatewaySafely } catch {}
+    if (-not $Succeeded -and ($GatewayStartIssued -or (Test-GatewayHealth))) {
+        try {
+            & $Hermes -p companion gateway stop
+            $null = Wait-GatewayState -ExpectedUp $false -TimeoutSeconds 30
+        }
+        catch {}
     }
 }
