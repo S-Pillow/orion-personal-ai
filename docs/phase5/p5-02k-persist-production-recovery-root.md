@@ -1,6 +1,6 @@
 # P5-02K — Persist Production Recovery Root with Mutation Disabled
 
-Status: **OWNER AUTHORIZED / PERSISTENT COMPANION ENV CHANGE PENDING**
+Status: **COMPLETE / RECOVERY ROOT PERSISTED / MUTATION STILL DISABLED / RUNTIME INGESTION NOT YET QUALIFIED**
 
 Branch:
 
@@ -266,6 +266,69 @@ P5_02K_PLUGIN_UNCHANGED=true
 HERMES_MANUAL_OFF=true
 P5_02K_PERSIST_RECOVERY_ROOT=PASS
 ```
+
+## Observed live result — PASS
+
+The corrected authorized P5-02K persistence gate completed successfully.
+
+Persisted assignment:
+
+```text
+ORION_P5_PRODUCTION_RECOVERY_ROOT=C:\Users\spill\AppData\Local\hermes\profiles\companion\orion\production-recovery
+```
+
+Preserved rollback backup:
+
+```text
+C:\Users\spill\AppData\Local\hermes\profiles\companion\orion\backups\p5-02k-env-20260923-002236
+```
+
+Observed:
+
+- P5-02J native root validation passed before persistence;
+- production mutation mode remained `disabled`;
+- `mutation_allowed=false`;
+- production recovery inventory count remained 0;
+- rollback capture completed before `.env` mutation;
+- exactly one active recovery-root assignment exists;
+- existing `.env` bytes were preserved and the new assignment was appended;
+- persisted recovery-root value exactly matches the P5-02J accepted path;
+- `ORION_P5_MUTATION_MODE` was not persisted;
+- disposable mutation flags were not persisted;
+- P5-02J native root validation passed again after persistence;
+- production recovery inventory remained empty;
+- COMPANION `config.yaml` remained unchanged;
+- installed plugin hash remained unchanged;
+- Hermes remained manual-off;
+- child PowerShell process exited 0;
+- operator worktree was cleaned.
+
+Acceptance markers:
+
+```text
+P5_02K_ROLLBACK_CAPTURED=true
+P5_02K_RECOVERY_ROOT_ASSIGNMENT_COUNT=1
+P5_02K_ENV_APPEND_ONLY=true
+P5_02K_RECOVERY_ROOT_VALUE_MATCH=true
+P5_02K_MUTATION_MODE_PERSISTED=false
+P5_02K_DISPOSABLE_FLAGS_PERSISTED=false
+P5_02K_NATIVE_ROOT_VALIDATION=PASS
+PRODUCTION_MUTATION_MODE=disabled
+PRODUCTION_MUTATION_ALLOWED=false
+P5_02K_RECOVERY_INVENTORY_COUNT=0
+P5_02K_CONFIG_UNCHANGED=true
+P5_02K_PLUGIN_UNCHANGED=true
+HERMES_MANUAL_OFF=true
+P5_02K_PERSIST_RECOVERY_ROOT=PASS
+P5_02K_CHILD_EXIT_CODE=0
+P5_02K_OPERATOR_WORKTREE_CLEANED=true
+```
+
+P5-02K is accepted and complete.
+
+This completion proves persistence only. Hermes has not yet been started after
+the change, so runtime ingestion of the persisted recovery-root setting remains
+unqualified.
 
 ## Next gate after P5-02K
 
