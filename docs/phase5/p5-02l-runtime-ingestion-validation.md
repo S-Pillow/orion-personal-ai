@@ -1,6 +1,6 @@
 # P5-02L — COMPANION Runtime Ingestion Validation
 
-Status: **OWNER AUTHORIZED / FIRST LIVE ATTEMPT SAFE-STOPPED / READ-ONLY DIAGNOSIS PENDING**
+Status: **COMPLETE / RUNTIME INGESTION QUALIFIED / MUTATION STILL DISABLED / HERMES MANUAL-OFF RESTORED**
 
 Branch:
 
@@ -274,6 +274,65 @@ Stop/fail closed if:
 - gateway cannot be returned to manual-off.
 
 No mutation call is permitted as a diagnostic.
+
+## Corrected live result — PASS
+
+The corrected authorized P5-02L start-verify-stop gate completed successfully.
+
+Observed pre-start state:
+
+```text
+P5_02L_PERSISTED_RECOVERY_ROOT_PRECHECK=PASS
+P5_02L_MUTATION_MODE_PERSISTED=false
+P5_02L_DISPOSABLE_FLAGS_PERSISTED=false
+P5_02L_HERMES_SOURCE_PIN_MATCH=true
+P5_02L_P4_04A_PATCH_MATCH=true
+```
+
+The bounded readiness window was 150 seconds. Hermes reached a healthy gateway
+state within that window.
+
+Observed live runtime ingestion:
+
+```text
+P5_02L_GATEWAY_HEALTHY=true
+P5_02L_HERMES_DOTENV_LOADED=true
+P5_02L_EFFECTIVE_RECOVERY_ROOT_MATCH=true
+PRODUCTION_MUTATION_MODE=disabled
+PRODUCTION_MUTATION_ALLOWED=false
+P5_02L_NATIVE_ROOT_VALIDATION=PASS
+P5_02L_RECOVERY_INVENTORY_COUNT=0
+P5_02L_RECOVERY_ATTENTION_COUNT=0
+P5_02L_REGISTERED_APPLY_FAIL_CLOSED=true
+P5_02L_LIVE_ORION_TOOLSET_FOUND=true
+P5_02L_LIVE_ORION_TOOL_COUNT=4
+P5_02L_RUNTIME_INGESTION=PASS
+```
+
+Observed shutdown/post-state:
+
+```text
+P5_02L_GATEWAY_STOPPED=true
+P5_02L_CONFIG_UNCHANGED=true
+P5_02L_ENV_UNCHANGED=true
+P5_02L_PLUGIN_UNCHANGED=true
+P5_02L_RECOVERY_ROOT_STILL_EMPTY=true
+P5_02L_MUTATION_INVOCATION=false
+HERMES_MANUAL_OFF=true
+P5_02L_RUNTIME_INGESTION_LIFECYCLE=PASS
+P5_02L_CHILD_EXIT_CODE=0
+P5_02L_OPERATOR_WORKTREE_CLEANED=true
+```
+
+P5-02L is accepted and complete.
+
+This proves that the persisted P5-02K production recovery-root value is loaded
+by the live COMPANION runtime and accepted by the installed Orion plugin while
+production mutation remains disabled and the public apply surface remains
+fail-closed.
+
+No production mutation call was made and no production recovery transaction was
+created.
 
 ## Next gate
 
