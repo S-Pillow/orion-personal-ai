@@ -1,6 +1,6 @@
 # P5-02L — COMPANION Runtime Ingestion Validation
 
-Status: **OWNER AUTHORIZED / LIVE START-VERIFY-STOP PENDING**
+Status: **OWNER AUTHORIZED / FIRST LIVE ATTEMPT SAFE-STOPPED / READ-ONLY DIAGNOSIS PENDING**
 
 Branch:
 
@@ -137,6 +137,62 @@ P5_02L_MUTATION_INVOCATION=false
 HERMES_MANUAL_OFF=true
 P5_02L_RUNTIME_INGESTION_LIFECYCLE=PASS
 ```
+
+## First live attempt — SAFE STARTUP-READINESS STOP
+
+The first authorized live P5-02L invocation passed all pre-start checks and
+spawned a COMPANION gateway process, but the health endpoint did not become
+reachable within the 30-second gate window.
+
+Observed:
+
+```text
+P5_02L_PERSISTED_RECOVERY_ROOT_PRECHECK=PASS
+P5_02L_MUTATION_MODE_PERSISTED=false
+P5_02L_DISPOSABLE_FLAGS_PERSISTED=false
+P5_02L_HERMES_SOURCE_PIN_MATCH=true
+P5_02L_P4_04A_PATCH_MATCH=true
+Gateway started via direct spawn
+P5_02L_GATEWAY_STOPPED=true
+P5_02L_CHILD_EXIT_CODE=1
+```
+
+The runtime-ingestion verifier was never reached. Therefore this result does
+**not** establish that the persisted recovery-root setting failed ingestion.
+It establishes only that the direct Hermes-only lifecycle used by this gate did
+not reach the accepted HTTP health surface in time.
+
+The `finally` shutdown path ran and Hermes reported the gateway stopped. No
+mutation invocation occurred.
+
+The temporary operator worktree was subsequently removed by the operator even
+though the failure wrapper requested preservation.
+
+Before any retry, classify the existing startup evidence read-only.
+
+Prepared read-only diagnostic:
+
+```text
+42d96757e2bb8be48bafc0a51ee1049f8b5249a8
+scripts/phase5/p5-02l-readonly-failure-diagnostics.py
+```
+
+The diagnostic:
+
+- does not start or stop Hermes;
+- does not mutate COMPANION files;
+- compares the current `.env` hash to the P5-02K accepted post-write hash;
+- confirms recovery-root assignment cardinality/value without printing the
+  full `.env`;
+- confirms forbidden mutation/disposable settings remain absent;
+- confirms the recovery root is still empty;
+- prints config/plugin hashes;
+- emits only recent log lines matching startup/error-related terms;
+- redacts bearer tokens and common key/token/secret/password assignments before
+  printing.
+
+A retry is blocked until the read-only evidence explains or narrows the health
+failure.
 
 ## Stop conditions
 
