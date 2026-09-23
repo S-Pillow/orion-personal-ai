@@ -103,6 +103,18 @@ Required source verification:
   -v
 ```
 
+The pinned-Hermes approval probes remain part of P5-02N because the frozen
+contract explicitly includes session/always, yolo, cached, cron, single-query,
+missing-observer, observer-failure, and dispatcher-failure paths:
+
+```powershell
+& "C:\Users\spill\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe" `
+  "hermes_plugins\orion-vault-actions\tests\probe_hermes_approval.py"
+
+& "C:\Users\spill\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe" `
+  "hermes_plugins\orion-vault-actions\tests\probe_hermes_dispatch.py"
+```
+
 HUD approval-rendering regressions remain part of the P5-02N acceptance set:
 
 ```powershell
@@ -127,6 +139,8 @@ Repository/source inspection confirms:
 - invalid/non-enabled modes block in `pre_tool_call`;
 - the wrapper cannot forward caller-supplied callbacks, roots, probes, bytes, or failure hooks;
 - manifest version is `0.2.0`;
+- direct source coverage now includes exact-one approval counting, truncated recovery-inventory refusal before approval, bounded result-shape checks, and the guarded-wrapper injection boundary;
+- the isolated pinned-Hermes approval probes cover session/always and yolo/cached/cron/single-query bypass cases plus observer/dispatcher failures;
 - installed/runtime state has not been changed by this source work.
 
 The full executable regression set has not yet been claimed as passing in this record. Record exact counts only after it is actually run.
