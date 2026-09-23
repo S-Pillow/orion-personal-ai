@@ -29,6 +29,7 @@ $ExpectedConfigHash = "34D9BD9DDC1BC59783CE2DC80D98FBD66D7AA7CC670DDFB875E0D1C78
 $ExpectedPluginInitHash = "FCFA3DDC4A86B99691FB003CF4421027C5CC3CA22AC99ADBCCEEE8D3B3C7B5DA"
 $ExpectedHermesCommit = "5fc308a70719a83cccdbba4c0e39c23f5a8239d5"
 $ExpectedPatchedApiHash = "ECFD6DD53610C24A81F078650A0B2B3E129478A50FDB5F353313FFF6E12E3888"
+$GatewayHealthTimeoutSeconds = 150
 
 $RecoveryEnvName = "ORION_P5_PRODUCTION_RECOVERY_ROOT"
 $ForbiddenNames = @(
@@ -196,8 +197,10 @@ try {
     }
     $Started = $true
 
-    if (-not (Wait-GatewayState -ExpectedUp $true -TimeoutSeconds 30)) {
-        throw "STOP: Hermes gateway did not become healthy."
+    Write-Host "P5_02L_GATEWAY_HEALTH_TIMEOUT_SECONDS=$GatewayHealthTimeoutSeconds"
+
+    if (-not (Wait-GatewayState -ExpectedUp $true -TimeoutSeconds $GatewayHealthTimeoutSeconds)) {
+        throw "STOP: Hermes gateway did not become healthy within $GatewayHealthTimeoutSeconds seconds."
     }
 
     & $Hermes -p companion gateway status
