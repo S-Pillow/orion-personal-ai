@@ -154,7 +154,9 @@ class DisposableRestoreExecutionTests(unittest.TestCase):
 
         ctx = Context()
         plugin.register(ctx)
-        self.assertIs(ctx.tools[plugin.APPLY_TOOL], plugin.apply_plan_placeholder)
+        self.assertIs(
+            ctx.tools[plugin.APPLY_TOOL], plugin.apply_plan_production_guarded
+        )
         self.assertNotIn(
             plugin._execute_disposable_restore_candidate, ctx.tools.values()
         )
@@ -162,11 +164,11 @@ class DisposableRestoreExecutionTests(unittest.TestCase):
         note, _origin, _origin_result, _origin_evidence, restore = (
             self._edit_restore_preview()
         )
-        result = json.loads(plugin.apply_plan_placeholder({
+        result = json.loads(plugin.apply_plan_production_guarded({
             "plan_token": restore["plan_token"]
         }))
         self.assertFalse(result["success"])
-        self.assertEqual(result["error"], "p5_01_mutation_not_authorized")
+        self.assertEqual(result["error"], "production_mutation_not_enabled")
         self.assertEqual(note.read_bytes(), b"after\n")
 
     def test_restore_edit_requires_fresh_approval_evidence(self):
