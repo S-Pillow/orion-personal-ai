@@ -36,6 +36,7 @@ $BeforeLines = @(
 $BeforeText = $BeforeLines -join [char]10
 $Utf8NoBom = [Text.UTF8Encoding]::new($false)
 $BeforeBytes = $Utf8NoBom.GetBytes($BeforeText)
+$ExpectedBeforeHash = "DDB08A8CA9AB5D06185A692182A742210817CBA1D5523C841D6A371DFDB57B4C"
 
 function Get-Sha256Bytes {
     param([Parameter(Mandatory = $true)][byte[]]$Bytes)
@@ -162,6 +163,9 @@ if (Test-Path -LiteralPath $Target) {
 }
 
 $expectedBeforeHash = Get-Sha256Bytes -Bytes $BeforeBytes
+if ($expectedBeforeHash -ne $ExpectedBeforeHash) {
+    throw "STOP: local canary bytes differ from the frozen before hash."
+}
 $stream = [IO.File]::Open($Target, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
 try {
     $stream.Write($BeforeBytes, 0, $BeforeBytes.Length)
