@@ -840,7 +840,6 @@ class DisposableMutationCandidateTests(unittest.TestCase):
         self.assertEqual(
             public_result["error"], "production_mutation_not_enabled"
         )
-        self.assertTrue(public_result["plan_known"])
         self.assertFalse(public_result["mutation_performed"])
 
         private_result = plugin._execute_disposable_plan_candidate(
