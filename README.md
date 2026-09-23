@@ -159,7 +159,7 @@ P5-02L closure commit:
 
 `243f778a2a09a4a9f2c603c437e8b94149d52e2b`
 
-The next boundary is not routine activation. Registering a production-capable apply handler, installing that wiring, enabling production mutation, and performing the first real vault/inbox action are separate authorization units. P5-02M freezes the repository and registration design without making any live runtime change.
+The next boundary is not routine activation. P5-02M froze the repository and registration design without a live runtime change. P5-02N is the separately authorized source-only wiring unit: it may register the guarded wrapper in repository source and add regressions, but installation, mutation enablement, and the first real vault/inbox action remain separate authorization units.
 
 ## Accepted manual-off lifecycle
 
@@ -260,18 +260,19 @@ Reference/code-donor fork. Reuse only proven patterns that still close a current
 
 ## Resume point
 
-P5-02L is complete and accepted. The immediate work is **P5-02M repository integration and production registration design freeze**.
+P5-02M is prepared as the complete integration/design-freeze review surface in draft PR #27. **P5-02N source wiring is the current authorized work unit** on `feature/orion-phase5-p5-02n-registered-wrapper`.
 
-P5-02M is documentation and source-control work only:
+P5-02N is source-only:
 
-1. reconcile the accepted P5-02A through P5-02L lineage into a reviewable integration branch/PR against `main`;
-2. keep the approved PRD v2.8 and its SHA-256 approval record in the canonical repository;
-3. align repository and plugin status documentation with the installed P5-02L state;
-4. freeze the future registered production apply wrapper, plugin versioning, source pins, rollback order, and acceptance sequence;
-5. make no installed-plugin, COMPANION config, `.env`, Hermes lifecycle, vault, inbox, or recovery-record change.
+1. register the named `apply_plan_production_guarded` wrapper in repository source while keeping `_execute_production_plan_candidate()` private;
+2. keep the public apply schema `plan_token`-only;
+3. block missing/disabled/preview-only/invalid mutation modes before approval or executor delegation;
+4. permit delegation only under explicit `mutation_enabled`, with the private executor retaining the one fresh Hermes human `ALLOW ONCE` gate and existing recovery/staleness controls;
+5. bump the plugin manifest to `0.2.0` and add/refresh the required regressions;
+6. make no installed-plugin, COMPANION config, `.env`, Hermes lifecycle, vault, inbox, or production-recovery change.
 
-After P5-02M, a separately authorized source ticket may implement the registered wrapper. Installation while mutation remains disabled and the first bounded production mutation remain later, separately authorized gates.
+The accepted installed/runtime state remains P5-02L until a separately authorized P5-02O installed-but-disabled qualification replaces it. P5-02N source wiring does not enable production mutation.
 
 The safe project-status shorthand is:
 
-> Phase 3 presentation foundation accepted; Phase 4 voice work partially accepted with final live TTS/barge-in and wake disposition deferred; Phase 5 safety qualification accepted through P5-02L; production recovery-root ingestion is live-qualified; production mutation remains disabled and public apply remains fail-closed.
+> Phase 3 presentation foundation accepted; Phase 4 voice work partially accepted with final live TTS/barge-in and wake disposition deferred; Phase 5 installed/runtime safety qualification accepted through P5-02L; P5-02M freezes the production registration design; P5-02N source wiring is in progress; production mutation remains disabled.
