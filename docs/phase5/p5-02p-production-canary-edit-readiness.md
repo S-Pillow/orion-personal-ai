@@ -335,9 +335,10 @@ to choose a tool.
 That is preferable for the first canary because a model prompt is not a
 sufficient action-boundary control.
 
-Prepared non-production proof artifact:
+Prepared non-production proof artifacts:
 
 ```text
+scripts/phase5/p5-02p-deterministic-dispatch-probe.ps1
 scripts/phase5/p5-02p-deterministic-dispatch-probe.py
 ```
 
@@ -366,6 +367,77 @@ without any model-selected tool invocation.
 
 The Runs API remains the correct product-facing asynchronous approval surface,
 but it is not required for the first deterministic canary gate.
+
+## Prepared tomorrow-night command sequence
+
+These commands are documented for convenience. Their presence in source is not
+authorization to run a production mutation.
+
+### Step 1 — deterministic registered-dispatch approval proof
+
+This is non-production and uses disposable roots. It requires a human Hermes
+prompt; choose **ONCE** only.
+
+```powershell
+& "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" \
+  -NoProfile \
+  -ExecutionPolicy Bypass \
+  -File ".\scripts\phase5\p5-02p-deterministic-dispatch-probe.ps1" \
+  -AuthorizationToken "I_AUTHORIZE_P5_02P_DISPATCH_PROBE"
+```
+
+Do not proceed if the final markers do not include:
+
+```text
+P5_02P_DETERMINISTIC_REGISTERED_DISPATCH=PASS
+P5_02P_FRESH_HUMAN_ONCE_OBSERVED=true
+P5_02P_PRODUCTION_FILESYSTEM_MUTATION=false
+P5_02P_DISPATCH_WRAPPER=PASS
+P5_02P_PRODUCTION_RECOVERY_STILL_EMPTY=true
+HERMES_MANUAL_OFF=true
+```
+
+### Step 2 — canary fixture creation
+
+This step writes one known non-sensitive fixture into the production vault, so
+it requires a separate explicit owner authorization before execution.
+
+```powershell
+& "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" \
+  -NoProfile \
+  -ExecutionPolicy Bypass \
+  -File ".\scripts\phase5\p5-02p-create-canary-fixture.ps1" \
+  -AuthorizationToken "I_AUTHORIZE_P5_02P_CANARY_CREATE"
+```
+
+Expected frozen before hash:
+
+```text
+ddb08a8ca9ab5d06185a692182a742210817cba1d5523c841d6a371dfdb57b4c
+```
+
+### Step 3 — read-only canary readiness
+
+Run only after Step 2 is accepted.
+
+```powershell
+& "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" \
+  -NoProfile \
+  -ExecutionPolicy Bypass \
+  -File ".\scripts\phase5\p5-02p-canary-readiness.ps1" \
+  -AuthorizationToken "I_AUTHORIZE_P5_02P_READINESS"
+```
+
+The readiness output freezes the actual Windows file ID and requires the exact
+before, after, and diff hashes already recorded above.
+
+### Step 4 — stop and review
+
+Do not automatically continue into P5-02Q.
+
+After P5-02P-B passes, record its exact file ID/hash/diff evidence in GitHub,
+review the deterministic dispatch proof, and request a new authorization for
+the exact P5-02Q canary edit.
 
 ## Stop conditions for tomorrow
 
