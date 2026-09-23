@@ -232,10 +232,11 @@ Before mutation enablement:
 - verify no reparse component and fixed local volume assumptions;
 - record the expected approval summary.
 
-Prepared source artifact:
+Prepared source artifacts:
 
 ```text
 scripts/phase5/p5-02p-canary-readiness.ps1
+scripts/phase5/p5-02p-canary-readiness.py
 ```
 
 ### P5-02Q — first Orion production canary edit
@@ -289,33 +290,59 @@ fresh restore preview and require a new human `ALLOW ONCE`.
 - Production move should follow only after edit + restore are accepted.
 - Delete remains unimplemented and separately approval-gated by the PRD.
 
-## Invocation-path finding that remains open
+## Deterministic invocation-path finding
 
-The safest deterministic invocation should use a real Hermes execution context
-so the generic approval observer is genuine.
+Research of the pinned Hermes runtime identified a safer candidate than a
+model-driven Runs API for the first production mutation.
 
-Two candidate paths were reviewed:
+Hermes `model_tools.handle_function_call()` is the ordinary named-tool
+dispatcher used by the agent loop. For a direct named tool call it performs:
 
-1. Hermes Runs API with SSE + `approval.request` +
-   `POST /v1/runs/{run_id}/approval`;
-2. an interactive Hermes process using the installed plugin/registry directly.
+1. argument coercion;
+2. tool-request middleware;
+3. the real `pre_tool_call` lifecycle;
+4. registry dispatch to the registered tool handler;
+5. the handler's own approval behavior;
+6. `post_tool_call` observation/result transforms.
 
-The Runs API has the strongest product-path fidelity and explicit once-only
-approval endpoint, but the current accepted API documentation does not expose a
-per-run allowlist that can constrain the model to only the two Orion tools.
-A model-driven run therefore needs an additional safety argument before it is
-used for the first production mutation.
+This lets an operator harness dispatch exactly
+`orion_vault_apply_plan` with exactly one `plan_token` without asking an LLM
+to choose a tool.
 
-Do not use an LLM prompt as the sole action-boundary control.
+That is preferable for the first canary because a model prompt is not a
+sufficient action-boundary control.
 
-Before P5-02Q execution, resolve this item with a non-production proof:
+Prepared non-production proof artifact:
 
-- either demonstrate a deterministic registered-tool dispatch route that still
-  enters Hermes generic approval;
-- or demonstrate a Runs API harness that cannot execute any unexpected
-  mutating tool during the gate.
+```text
+scripts/phase5/p5-02p-deterministic-dispatch-probe.py
+```
 
-Until that is proven, P5-02Q remains **design-ready but execution-blocked**.
+The proof deliberately:
+
+- discovers the installed plugin through the COMPANION profile;
+- requires the registered handler to be
+  `apply_plan_production_guarded`;
+- creates a preview only under disposable temporary roots;
+- sets `mutation_enabled` only inside the probe process;
+- replaces the private production executor in memory with an approval-only
+  function before dispatch;
+- invokes the exact registered apply tool through
+  `handle_function_call()`;
+- requires a real interactive Hermes human `once` approval;
+- verifies the plugin observer records the fresh CLI `once`;
+- verifies no disposable note bytes change and no recovery content appears;
+- restores the original executor and environment in a `finally` path.
+
+Therefore the real production executor cannot run during this proof.
+
+P5-02Q remains execution-blocked until this non-production dispatch probe
+passes on the accepted Windows/Hermes environment. If it passes, the same
+`handle_function_call()` route can be used by the later production harness
+without any model-selected tool invocation.
+
+The Runs API remains the correct product-facing asynchronous approval surface,
+but it is not required for the first deterministic canary gate.
 
 ## Stop conditions for tomorrow
 
