@@ -101,8 +101,31 @@ state: after
 gate: first-production-edit
 ```
 
-The exact target and exact before/after hashes must be captured and confirmed
-before any mutation-enabled process starts.
+Frozen SHA-256 values:
+
+```text
+before = ddb08a8ca9ab5d06185a692182a742210817cba1d5523c841d6a371dfdb57b4c
+after  = 86e94184ef6ff2a80f5cdfa04749c42328079e029d153d3a23d42eab05059e19
+diff   = 6642d44372449d01e1ec3f5d325bd2b372f52cc58610293bcccf0e4e4ec996e8
+```
+
+Frozen exact unified diff:
+
+```diff
+--- vault/_Orion-P5-Canary.md
++++ vault/_Orion-P5-Canary.md
+@@ -1,3 +1,3 @@
+ # Orion Phase 5 Canary
+-state: before
++state: after
+ gate: first-production-edit
+```
+
+The canary fixture setup and readiness verifier both fail closed if the frozen
+bytes/hashes do not match. The exact Windows file identity is intentionally not
+hard-coded because it exists only after the canary file is created; P5-02P-B
+captures it and P5-02Q must require the same identity immediately before the
+bounded action.
 
 ### 3. Windows file identity remains a required race guard
 
