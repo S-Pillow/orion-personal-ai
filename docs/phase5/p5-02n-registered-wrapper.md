@@ -1,6 +1,6 @@
 # P5-02N Guarded Registered Apply Wrapper
 
-Status: **SOURCE CANDIDATE / RUNTIME UNCHANGED / VERIFICATION IN PROGRESS**
+Status: **ACCEPTED / SOURCE ONLY / RUNTIME UNCHANGED / NO INSTALLATION AUTHORIZED**
 
 Date: 2026-09-23
 
@@ -128,7 +128,25 @@ Python compile checks should cover the plugin and affected Python tests.
 
 The accepted Windows-specific file-identity, ACL, fixed-local-volume, `ReplaceFileW`, held-handle, and delete-pending regressions must pass on the accepted Windows machine. P5-02N does not reopen the accepted production recovery root or lifecycle state merely to recreate old evidence.
 
-## Current verification state
+## Acceptance evidence
+
+Qualified source code head:
+
+```text
+faf8b4787d8e6fb668eb5e9d754104910b4b401a
+```
+
+Windows source qualification on 2026-09-23:
+
+- Phase 5 source suite: **129/129 passed**;
+- pinned-Hermes approval probe: **3/3 passed**;
+- pinned-Hermes dispatcher probe: **2/2 passed**;
+- HUD Python suite: **78/78 passed**;
+- HUD approval-rendering Node suite: **3/3 passed**;
+- Python compile check completed without an error for the plugin and P5-02N registration test;
+- Windows-specific file identity, production stale-state, native recovery probes, guarded approval, recovery-inventory, receipt, replay, and restore regressions in the Phase 5 suite passed.
+
+The first Windows run at source head `8f40ee651cbddae4f0635a67b0815478a32df940` surfaced four schema-v2 receipt/recovery failures. Root cause was an approval-text compatibility mismatch: P5-02N changed the exact production approval suffix to describe the guarded registered path while the durable schema-v2 receipt validator recognized only the legacy P5-02G suffix. The fix preserves exact validation while accepting both the legacy P5-02G wording and the new guarded P5-02N wording so historical receipts remain restart-compatible. A focused compatibility regression also proves altered wording is rejected.
 
 Repository/source inspection confirms:
 
@@ -143,11 +161,13 @@ Repository/source inspection confirms:
 - the isolated pinned-Hermes approval probes cover session/always and yolo/cached/cron/single-query bypass cases plus observer/dispatcher failures;
 - installed/runtime state has not been changed by this source work.
 
-The full executable regression set has not yet been claimed as passing in this record. Record exact counts only after it is actually run.
+The full executable regression set passed on the accepted Windows environment.
 
-## Acceptance boundary
+## Acceptance
 
-P5-02N may be accepted only after the required executable source/HUD regressions and applicable Windows-specific checks pass and the N-only diff is reviewed.
+P5-02N is accepted at the source-only boundary.
+
+Acceptance means the guarded registered wrapper, manifest/version change, approval ownership, disabled-mode blocking, schema-v2 receipt compatibility, and required regressions are qualified in repository source.
 
 P5-02N acceptance does **not** authorize installation.
 
