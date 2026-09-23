@@ -106,6 +106,10 @@ class GuardedRegistrationTests(unittest.TestCase):
         self.assertEqual(parameters["required"], ["plan_token"])
         self.assertIs(parameters["additionalProperties"], False)
 
+        manifest = (PLUGIN_DIR / "plugin.yaml").read_text(encoding="utf-8")
+        self.assertIn('version: "0.2.0"', manifest)
+        self.assertIn("guarded vault preview and apply plugin", manifest)
+
     def test_non_enabled_and_invalid_modes_refuse_before_executor(self):
         note, preview = self._edit_preview()
         token = preview["plan_token"]
