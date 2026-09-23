@@ -1,6 +1,6 @@
 # P5-02J — Production Recovery Root Location and ACL Acceptance
 
-Status: **OWNER AUTHORIZED / LIVE ROOT CREATION + ACL ACCEPTANCE PENDING**
+Status: **COMPLETE / PRODUCTION RECOVERY ROOT + ACL ACCEPTED / MUTATION STILL DISABLED**
 
 Branch:
 
@@ -281,6 +281,65 @@ On failure after P5-02J created the root:
 - preserve the parent and every pre-existing path;
 - do not change COMPANION configuration;
 - do not attempt a mutation as a diagnostic.
+
+## Observed live result — PASS
+
+The authorized P5-02J live gate completed successfully.
+
+Accepted production recovery root:
+
+```text
+C:\Users\spill\AppData\Local\hermes\profiles\companion\orion\production-recovery
+```
+
+Observed:
+
+- Hermes scheduled task remained registered but no gateway process was running;
+- ACL inheritance was protected;
+- ACL contained only the accepted principals;
+- current operator remained owner;
+- production recovery root was created at the exact authorized path;
+- installed plugin native root validation passed;
+- production mutation mode remained `disabled`;
+- `mutation_allowed=false`;
+- recovery inventory count was 0;
+- recovery attention count was 0;
+- inventory was not truncated;
+- registered apply remained fail-closed;
+- no real vault/inbox mutation occurred;
+- COMPANION config remained unchanged;
+- COMPANION `.env` remained unchanged;
+- Hermes remained manual-off;
+- child PowerShell process exited 0;
+- operator worktree was cleaned.
+
+Acceptance markers:
+
+```text
+P5_02J_ACL_INHERITANCE_PROTECTED=true
+P5_02J_ACL_EXPECTED_PRINCIPALS_ONLY=true
+P5_02J_ROOT_CREATED=true
+P5_02J_NATIVE_ROOT_VALIDATION=PASS
+PRODUCTION_MUTATION_MODE=disabled
+PRODUCTION_MUTATION_ALLOWED=false
+P5_02J_RECOVERY_INVENTORY_COUNT=0
+P5_02J_RECOVERY_ATTENTION_COUNT=0
+P5_02J_RECOVERY_INVENTORY_TRUNCATED=false
+P5_02J_REGISTERED_APPLY_FAIL_CLOSED=true
+P5_02J_REAL_VAULT_INBOX_MUTATION=false
+P5_02J_CONFIG_UNCHANGED=true
+P5_02J_ENV_UNCHANGED=true
+HERMES_MANUAL_OFF=true
+P5_02J_PRODUCTION_RECOVERY_ROOT_ACCEPTANCE=PASS
+P5_02J_CHILD_EXIT_CODE=0
+P5_02J_OPERATOR_WORKTREE_CLEANED=true
+```
+
+P5-02J is accepted and complete.
+
+This completion does **not** persist
+`ORION_P5_PRODUCTION_RECOVERY_ROOT` into COMPANION configuration and does not
+authorize or enable production mutation.
 
 ## Next gate after P5-02J
 
