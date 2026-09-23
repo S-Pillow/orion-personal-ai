@@ -4,7 +4,7 @@ This directory contains Orion's native Hermes vault-actions plugin source.
 
 ## Current accepted state
 
-Phase 5 safety qualification is accepted through P5-02L.
+Phase 5 source qualification is accepted through P5-02N. Installed/runtime qualification remains accepted through P5-02L.
 
 The plugin is installed and enabled under the COMPANION profile with access limited to the configured `iai-mcp` server. The live runtime has loaded the expected four-tool `orion_vault` toolset.
 
@@ -35,11 +35,11 @@ P5-02L closure:
 243f778a2a09a4a9f2c603c437e8b94149d52e2b
 ```
 
-## P5-02N source candidate
+## P5-02N accepted source
 
-The repository source on `feature/orion-phase5-p5-02n-registered-wrapper` now implements the P5-02M frozen guarded registration design. This is source-only and has **not** replaced the accepted installed COMPANION plugin described above.
+The repository source on `feature/orion-phase5-p5-02n-registered-wrapper` implements and has qualified the P5-02M frozen guarded registration design. Qualified code head: `faf8b4787d8e6fb668eb5e9d754104910b4b401a`. This is source-only and has **not** replaced the accepted installed COMPANION plugin described above.
 
-Source-candidate behavior:
+Accepted source behavior:
 
 - manifest version is `0.2.0`;
 - registered source handler for `orion_vault_apply_plan` is `apply_plan_production_guarded`;
@@ -50,7 +50,7 @@ Source-candidate behavior:
 - `pre_tool_call` blocks apply in every non-enabled/invalid mode and returns no approval directive for a valid plan only when mutation mode is explicitly enabled;
 - the private executor remains unregistered and continues to own the single fresh Hermes human `ALLOW ONCE` gate and all qualified recovery/staleness safeguards.
 
-No P5-02N source change installs the plugin, changes COMPANION configuration, starts Hermes, persists/enables mutation mode, or touches production vault/inbox/recovery content. Installed-runtime qualification remains a separate P5-02O authorization unit.
+P5-02N passed 129/129 Phase 5 tests, Hermes approval 3/3, Hermes dispatcher 2/2, HUD Python 78/78, HUD approval rendering 3/3, and compile checks on the accepted Windows environment. No P5-02N source change installs the plugin, changes COMPANION configuration, starts Hermes, persists/enables mutation mode, or touches production vault/inbox/recovery content. Installed-runtime qualification remains a separate P5-02O authorization unit.
 
 ## Registered live surface
 
