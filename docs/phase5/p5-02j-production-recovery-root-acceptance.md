@@ -1,0 +1,192 @@
+# P5-02J — Production Recovery Root Location and ACL Acceptance
+
+Status: **SOURCE-ONLY PREPARED / LIVE ROOT CREATION AND ACL CHANGE NOT AUTHORIZED**
+
+Branch:
+
+```text
+feature/orion-phase5-p5-02j-production-recovery-root
+```
+
+Depends on:
+
+- P5-02G production guardrails — source/Windows verified;
+- P5-02H preview-only COMPANION installation — accepted;
+- P5-02I installed-runtime disposable mutation qualification — complete.
+
+## Purpose
+
+P5-02J selects and qualifies the persistent production recovery directory that
+future Orion vault mutations will use for durable recovery manifests, backup
+bytes, and non-authorizing receipts.
+
+This ticket does **not** enable production mutation, register the private
+production executor, persist mutation mode, or mutate the real vault/inbox.
+
+The controlling invariant is:
+
+> Recovery storage must be a fixed-local, disjoint, non-reparse Windows
+> directory whose DACL does not grant write-like rights to broad principals,
+> and the installed plugin must accept it while production mutation remains
+> disabled.
+
+## Proposed production recovery location
+
+The proposed exact root is:
+
+```text
+C:\Users\spill\AppData\Local\hermes\profiles\companion\orion\production-recovery
+```
+
+Operator-form equivalent:
+
+```powershell
+Join-Path $env:LOCALAPPDATA "hermes\profiles\companion\orion\production-recovery"
+```
+
+Rationale:
+
+- it is outside `C:\Personal\Me`;
+- it is outside `C:\Personal\Orion-Inbox`;
+- it is separate from disposable recovery roots;
+- it is tied to the accepted COMPANION profile rather than the plugin
+  installation directory;
+- its parent `...\companion\orion` already hosts the preserved P5 rollback
+  backup area, so P5-02J does not need to create a new parent hierarchy;
+- it can be ACL-protected independently;
+- plugin reinstalls/replacements do not require deleting this directory.
+
+P5-02J does not create this directory until explicit owner authorization.
+
+## Required ACL
+
+The root must have inheritance disabled and must not retain inherited ACEs.
+
+Allowed explicit Full Control principals:
+
+- the current COMPANION operator Windows SID;
+- `SYSTEM` — `S-1-5-18`;
+- `BUILTIN\Administrators` — `S-1-5-32-544`.
+
+The current operator must remain the directory owner.
+
+The following broad principals must not receive allowed write-like rights:
+
+- Everyone — `S-1-1-0`;
+- Authenticated Users — `S-1-5-11`;
+- BUILTIN\Users — `S-1-5-32-545`.
+
+The installed plugin's native validator is the final acceptance check for its
+supported DACL policy. P5-02J additionally requires the operator script to
+observe a protected DACL and no unexpected explicit allow principals.
+
+## Existing production validator
+
+The installed P5-02I plugin already contains read-only production-root
+validation. It requires:
+
+- real vault root exists;
+- real inbox root exists;
+- production recovery root exists;
+- no vault/inbox/recovery path contains a reparse component;
+- all three roots are disjoint after resolution;
+- Windows raw-path overlap is also rejected;
+- recovery root is on a fixed local volume;
+- current process can list the directory and request child-directory creation
+  access;
+- no allowed write-like ACE exists for Everyone, Authenticated Users, or
+  BUILTIN\Users;
+- callback/conditional allow ACEs fail closed.
+
+The validator never repairs ACLs and the plugin never creates the production
+recovery root.
+
+## P5-02J execution boundary
+
+A future explicitly authorized P5-02J operator run may do only the following:
+
+1. require Hermes manual-off;
+2. verify accepted COMPANION config and installed-plugin hashes;
+3. require production mutation-related process/persistent settings to remain
+   absent;
+4. require the proposed recovery root to be absent;
+5. require the existing `...\companion\orion` parent to exist and not be a
+   reparse point;
+6. create exactly the proposed recovery directory;
+7. replace only that new directory's DACL with the accepted protected ACL;
+8. run the installed plugin's native production-root validator with
+   `ORION_P5_PRODUCTION_RECOVERY_ROOT` set **process-only**;
+9. run the bounded production recovery inventory against the empty root;
+10. require mutation mode `disabled` and `mutation_allowed=false`;
+11. verify the persistent COMPANION config and `.env` files are unchanged;
+12. leave Hermes manual-off.
+
+If validation fails, the operator script may remove the newly created directory
+only when it is still empty. It must never remove a non-empty or pre-existing
+directory.
+
+## Explicitly out of scope
+
+P5-02J does not authorize:
+
+- persisting `ORION_P5_PRODUCTION_RECOVERY_ROOT` into COMPANION `.env`;
+- setting `ORION_P5_MUTATION_MODE=mutation_enabled`;
+- setting any production mutation mode persistently;
+- registering `_execute_production_plan_candidate`;
+- changing `orion_vault_apply_plan` away from `apply_plan_placeholder`;
+- starting/restarting Hermes;
+- changing vault/inbox ACLs;
+- moving or editing any real vault/inbox document;
+- creating any production recovery transaction;
+- merge/deploy;
+- Hermes/Ollama/iai upgrade.
+
+## Acceptance markers
+
+A successful authorized operator run must report at least:
+
+```text
+P5_02J_ROOT_CREATED=true
+P5_02J_ACL_INHERITANCE_PROTECTED=true
+P5_02J_ACL_EXPECTED_PRINCIPALS_ONLY=true
+P5_02J_NATIVE_ROOT_VALIDATION=PASS
+PRODUCTION_MUTATION_MODE=disabled
+PRODUCTION_MUTATION_ALLOWED=false
+P5_02J_RECOVERY_INVENTORY_COUNT=0
+P5_02J_RECOVERY_ATTENTION_COUNT=0
+P5_02J_CONFIG_UNCHANGED=true
+P5_02J_ENV_UNCHANGED=true
+HERMES_MANUAL_OFF=true
+P5_02J_PRODUCTION_RECOVERY_ROOT_ACCEPTANCE=PASS
+```
+
+## Stop / rollback conditions
+
+Stop immediately if:
+
+- the candidate root already exists;
+- the parent path is missing or has a reparse component;
+- COMPANION config or installed-plugin hash differs from the accepted baseline;
+- a production mutation environment value is already present;
+- root resolution overlaps vault or inbox;
+- the volume is not fixed-local;
+- broad write ACLs remain;
+- the current identity cannot access the root as required;
+- native validation or inventory fails;
+- recovery inventory is non-empty;
+- Hermes starts unexpectedly.
+
+On failure after P5-02J created the root:
+
+- if and only if the directory remains empty, remove that newly created root;
+- preserve the parent and every pre-existing path;
+- do not change COMPANION configuration;
+- do not attempt a mutation as a diagnostic.
+
+## Next gate after P5-02J
+
+If P5-02J passes, the next gate should separately decide whether to persist
+`ORION_P5_PRODUCTION_RECOVERY_ROOT` into the COMPANION environment while
+keeping production mutation mode disabled.
+
+That persistent configuration change remains separately authorization-gated.
