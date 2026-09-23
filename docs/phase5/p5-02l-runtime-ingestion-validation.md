@@ -80,7 +80,7 @@ No API key or `.env` contents are printed.
 Prepared source pin:
 
 ```text
-5e1db43277b4a408d664fa68fd2ae2b3eccf761a
+bacd831a9d6935bd619c18cf8f17cbe174b2fd53
 scripts/phase5/p5-02l-runtime-ingestion-gate.ps1
 scripts/phase5/p5-02l-runtime-ingestion-verify.py
 ```
@@ -193,6 +193,65 @@ The diagnostic:
 
 A retry is blocked until the read-only evidence explains or narrows the health
 failure.
+
+## Read-only diagnosis — STARTUP LATENCY CLASSIFIED
+
+The read-only diagnostic completed successfully and preserved the accepted
+P5-02K state.
+
+Observed persistent state:
+
+- current COMPANION `.env` SHA-256 exactly matched the accepted P5-02K
+  post-write SHA-256;
+- exactly one production recovery-root assignment existed;
+- the persisted recovery-root value matched the accepted P5-02J path;
+- no forbidden production-mutation/disposable settings were persisted;
+- the production recovery root remained empty;
+- accepted config and installed-plugin hashes remained unchanged.
+
+Observed startup timing:
+
+- detached gateway process start was recorded at approximately 00:39:24 local;
+- control pipe was listening by approximately 00:39:25;
+- Hermes did not log `Starting Hermes Gateway...` until approximately
+  00:40:28;
+- immediately before that transition, MCP startup logged a failed connection to
+  `iai-mcp` with `CancelledError`;
+- the API server began listening on `127.0.0.1:8642` at approximately
+  00:40:28.5.
+
+Therefore the first P5-02L gate's 30-second HTTP-health timeout expired while
+Hermes was still in pre-platform startup. The gateway later reached the API
+listen point after roughly 64 seconds of process lifetime.
+
+Classification:
+
+```text
+P5_02L_FIRST_ATTEMPT=SAFE_FALSE_TIMEOUT
+P5_02L_PERSISTED_STATE_INTACT=true
+P5_02L_RUNTIME_INGESTION_RESULT=NOT_YET_REACHED
+```
+
+The evidence does not implicate Ollama. The API server reached its listen point
+without P5-02L starting Ollama.
+
+Source correction:
+
+```text
+bacd831a9d6935bd619c18cf8f17cbe174b2fd53
+```
+
+The correction changes only the bounded gateway-health readiness window:
+
+- previous: 30 seconds;
+- corrected: 150 seconds.
+
+The wider window remains bounded and is intended to cover the accepted Hermes
+runtime's MCP-delayed startup path. No authorization scope is widened and no
+mutation behavior changes.
+
+The existing P5-02L lifecycle authorization remains applicable to retry this
+same start-verify-stop gate against the corrected source.
 
 ## Stop conditions
 
