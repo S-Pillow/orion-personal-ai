@@ -141,6 +141,34 @@ P5-02J does not authorize:
 - merge/deploy;
 - Hermes/Ollama/iai upgrade.
 
+## Prepared operator artifacts
+
+Source-only preparation is complete at the current branch head.
+
+Prepared files:
+
+```text
+scripts/phase5/p5-02j-production-recovery-root.ps1
+scripts/phase5/p5-02j-verify-production-recovery-root.py
+```
+
+The PowerShell gate requires the literal runtime token:
+
+```text
+I_AUTHORIZE_P5_02J_PRODUCTION_RECOVERY_ROOT
+```
+
+It will not run without that token.
+
+The Python verifier is read-only. It process-scopes the candidate production
+recovery root, keeps mutation mode absent/disabled, calls the installed plugin's
+native root validator and bounded inventory, requires an empty inventory, and
+proves registered apply still fails closed.
+
+The P5-02J branch delta from the accepted P5-02I completion commit is docs and
+operator scripts only. No plugin source, manifest, COMPANION configuration, or
+runtime file is changed by this preparation.
+
 ## Acceptance markers
 
 A successful authorized operator run must report at least:
