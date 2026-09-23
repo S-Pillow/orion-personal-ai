@@ -29,6 +29,9 @@ AFTER_TEXT = (
     "state: after\n"
     "gate: first-production-edit\n"
 )
+EXPECTED_BEFORE_SHA256 = "ddb08a8ca9ab5d06185a692182a742210817cba1d5523c841d6a371dfdb57b4c"
+EXPECTED_AFTER_SHA256 = "86e94184ef6ff2a80f5cdfa04749c42328079e029d153d3a23d42eab05059e19"
+EXPECTED_DIFF_SHA256 = "6642d44372449d01e1ec3f5d325bd2b372f52cc58610293bcccf0e4e4ec996e8"
 
 
 def sha256(data: bytes) -> str:
@@ -138,6 +141,8 @@ def main() -> int:
             "canary bytes differ from the frozen P5-02P before fixture"
         )
     before_sha = sha256(before_actual)
+    if before_sha != EXPECTED_BEFORE_SHA256:
+        raise RuntimeError("canary before hash differs from frozen contract")
 
     file_identity = plugin._windows_path_file_identity(target)
 
@@ -166,7 +171,9 @@ def main() -> int:
         raise RuntimeError("preview before hash mismatch")
 
     expected_after_sha = sha256(AFTER_TEXT.encode("utf-8"))
-    if plan.get("proposed_sha256") != expected_after_sha:
+    if expected_after_sha != EXPECTED_AFTER_SHA256:
+        raise RuntimeError("local proposed bytes differ from frozen after hash")
+    if plan.get("proposed_sha256") != EXPECTED_AFTER_SHA256:
         raise RuntimeError("preview after hash mismatch")
     if plan.get("target_file_id") != file_identity:
         raise RuntimeError("preview Windows file identity mismatch")
@@ -175,7 +182,9 @@ def main() -> int:
     if not isinstance(diff_text, str) or not diff_text:
         raise RuntimeError("preview exact diff missing")
     diff_sha = sha256(diff_text.encode("utf-8"))
-    if plan.get("diff_sha256") != diff_sha:
+    if diff_sha != EXPECTED_DIFF_SHA256:
+        raise RuntimeError("preview diff differs from frozen exact diff")
+    if plan.get("diff_sha256") != EXPECTED_DIFF_SHA256:
         raise RuntimeError("preview diff hash mismatch")
 
     if target.read_bytes() != before_actual:
@@ -192,8 +201,8 @@ def main() -> int:
     print(f"P5_02P_CANARY_CANONICAL_PATH={canonical_target}")
     print(f"P5_02P_CANARY_FILE_ID={file_identity}")
     print(f"P5_02P_CANARY_BEFORE_SHA256={before_sha}")
-    print(f"P5_02P_CANARY_AFTER_SHA256={expected_after_sha}")
-    print(f"P5_02P_CANARY_DIFF_SHA256={diff_sha}")
+    print(f"P5_02P_CANARY_AFTER_SHA256={EXPECTED_AFTER_SHA256}")
+    print(f"P5_02P_CANARY_DIFF_SHA256={EXPECTED_DIFF_SHA256}")
     print("P5_02P_PREVIEW_MUTATION=false")
     print("P5_02P_CANARY_UNCHANGED=true")
     print("P5_02P_EXACT_DIFF_BEGIN")
