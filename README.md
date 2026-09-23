@@ -130,7 +130,7 @@ Tracking:
 - draft PR #16 — Phase 4 P4-04 push-to-talk voice foundation
 - issue #19 — P4-04B resume native TTS/live voice acceptance after Edge connectivity stabilizes
 
-### Phase 5 - source safety chain accepted through P5-02N; installed runtime accepted through P5-02L
+### Phase 5 - source qualification accepted through P5-02N; installed/runtime qualification accepted through P5-02O
 
 Phase 5 has advanced through source qualification, preview-only COMPANION installation, installed-runtime disposable mutation qualification, production recovery-root acceptance, recovery-root persistence, and live runtime-ingestion verification.
 
@@ -144,24 +144,28 @@ Accepted checkpoints:
 - P5-02K: accepted recovery-root path persisted append-only in COMPANION `.env`, with rollback captured and no mutation-mode setting persisted;
 - P5-02L: live COMPANION runtime ingested the persisted recovery root, exposed the expected four-tool `orion_vault` toolset, retained `mutation_allowed=false`, and returned to manual-off;
 - P5-02M: repository integration and guarded production-registration design freeze accepted with no runtime change;
-- P5-02N: guarded registered apply wrapper accepted in source at qualified code head `faf8b4787d8e6fb668eb5e9d754104910b4b401a`, with 129/129 Phase 5 tests, Hermes approval 3/3, Hermes dispatcher 2/2, HUD Python 78/78, HUD rendering 3/3, and compile checks passing on Windows. Installed COMPANION remains unchanged at P5-02L.
+- P5-02N: guarded registered apply wrapper accepted in source at qualified code head `faf8b4787d8e6fb668eb5e9d754104910b4b401a`, with 129/129 Phase 5 tests, Hermes approval 3/3, Hermes dispatcher 2/2, HUD Python 78/78, HUD rendering 3/3, and compile checks passing on Windows;
+- P5-02O: exact P5-02N-qualified plugin `0.2.0` installed into COMPANION with rollback captured, live guarded-wrapper registration verified, production mutation still disabled, recovery inventory still empty, config/`.env` unchanged, and Hermes restored to manual-off.
 
 Current installed/runtime boundary:
 
-- installed plugin source is the P5-02I-qualified source at `ce676a263f3dd2c18a7d7700b17a6023c6845904`;
-- installed `__init__.py` SHA-256 is `FCFA3DDC4A86B99691FB003CF4421027C5CC3CA22AC99ADBCCEEE8D3B3C7B5DA`;
+- installed plugin source exactly matches P5-02N-qualified code head `faf8b4787d8e6fb668eb5e9d754104910b4b401a`;
+- installed plugin manifest version is `0.2.0`;
 - `ORION_P5_PRODUCTION_RECOVERY_ROOT` is persisted and runtime-qualified;
 - `ORION_P5_MUTATION_MODE` is not persisted and resolves to `disabled`;
-- registered `orion_vault_apply_plan` still points to `apply_plan_placeholder` and returns `p5_01_mutation_not_authorized`;
-- `_execute_production_plan_candidate()` exists only as a private, unregistered candidate;
-- production recovery inventory was empty at P5-02L closure;
+- registered `orion_vault_apply_plan` points to `apply_plan_production_guarded`;
+- disabled public apply refuses with `production_mutation_not_enabled` before human approval or private-executor delegation;
+- `_execute_production_plan_candidate()` remains private and unregistered;
+- production recovery inventory remains empty;
+- COMPANION `config.yaml` and `.env` remained unchanged through P5-02O;
+- Hermes is restored to manual-off;
 - no production vault/inbox mutation has been authorized or performed.
 
-P5-02L closure commit:
+P5-02O rollback capture:
 
-`243f778a2a09a4a9f2c603c437e8b94149d52e2b`
+`C:\Users\spill\AppData\Local\hermes\profiles\companion\orion\backups\p5-02o-installed-disabled-20260923-040536`
 
-The next boundary is P5-02O installed-but-disabled qualification. P5-02N source wiring is accepted, but the installed COMPANION plugin remains at P5-02L. Installation, mutation enablement, and the first real vault/inbox action remain separate authorization units.
+The next boundary is a separately authorized bounded production mutation gate naming the exact action and target. Mutation enablement and the first real vault/inbox action remain separate authorization units.
 
 ## Accepted manual-off lifecycle
 
@@ -262,10 +266,10 @@ Reference/code-donor fork. Reuse only proven patterns that still close a current
 
 ## Resume point
 
-P5-02M remains the integration/design-freeze review surface in PR #27. **P5-02N source wiring is accepted** on `feature/orion-phase5-p5-02n-registered-wrapper` with qualified code head `faf8b4787d8e6fb668eb5e9d754104910b4b401a`.
+P5-02M remains the integration/design-freeze review surface in PR #27. P5-02N source wiring is accepted at qualified code head `faf8b4787d8e6fb668eb5e9d754104910b4b401a`, and P5-02O installed-but-disabled qualification is accepted on `feature/orion-phase5-p5-02o-installed-disabled-qualification`.
 
-The accepted installed/runtime state remains P5-02L. P5-02O installed-but-disabled qualification is the next separate authorization unit and has not started.
+The installed COMPANION runtime now carries the P5-02N-qualified `0.2.0` guarded wrapper while production mutation remains disabled and Hermes remains manual-off.
 
 The safe project-status shorthand is:
 
-> Phase 3 presentation foundation accepted; Phase 4 voice work partially accepted with final live TTS/barge-in and wake disposition deferred; Phase 5 source qualification accepted through P5-02N while installed/runtime qualification remains P5-02L; production mutation remains disabled.
+> Phase 3 presentation foundation accepted; Phase 4 voice work partially accepted with final live TTS/barge-in and wake disposition deferred; Phase 5 source qualification accepted through P5-02N and installed/runtime qualification accepted through P5-02O; production mutation remains disabled.
