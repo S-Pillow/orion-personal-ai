@@ -517,7 +517,11 @@ class ProductionGuardrailTests(unittest.TestCase):
         self.assertEqual(receipt["schema_version"], 2)
         self.assertEqual(receipt["state"], "committed")
         self.assertIn(
-            "private production mutation candidate",
+            "guarded registered production apply path",
+            receipt["approval"]["approval_message"],
+        )
+        self.assertIn(
+            "private production executor is not registered directly",
             receipt["approval"]["approval_message"],
         )
         inspected = plugin._inspect_receipt_at_roots(
