@@ -203,6 +203,43 @@ The P5-02J branch delta from the accepted P5-02I completion commit is docs and
 operator scripts only. No plugin source, manifest, COMPANION configuration, or
 runtime file is changed by this preparation.
 
+## First live invocation — SAFE PRE-EXECUTION STOP
+
+The first authorized operator invocation did not enter the P5-02J gate script.
+
+Windows PowerShell blocked direct invocation of the pinned `.ps1` because
+script execution is disabled by the host execution policy:
+
+```text
+PSSecurityException
+running scripts is disabled on this system
+FullyQualifiedErrorId : UnauthorizedAccess
+```
+
+Because the script was rejected before execution:
+
+- the proposed production recovery root was not created by P5-02J;
+- no ACL was changed;
+- no production environment setting was persisted;
+- no plugin/native validator ran;
+- no vault/inbox content was touched.
+
+The temporary source worktree was subsequently removed.
+
+Operator-control correction:
+
+- do **not** change LocalMachine/User execution policy;
+- rematerialize the exact authorized source pin
+  `c39d07dfce69ed9797318eec0d48edc05d26acf6`;
+- invoke that exact script in a child Windows PowerShell process with
+  `-ExecutionPolicy Bypass -File`;
+- this bypass is process-scoped only and does not persist an execution-policy
+  change;
+- use the child process exit code directly rather than relying on
+  `$LASTEXITCODE` after an in-process PowerShell script-policy exception.
+
+P5-02J remains authorized and pending. No acceptance marker has been earned yet.
+
 ## Acceptance markers
 
 A successful authorized operator run must report at least:
