@@ -270,6 +270,8 @@ P5-02M remains the integration/design-freeze review surface in PR #27. P5-02N so
 
 The installed COMPANION runtime now carries the P5-02N-qualified `0.2.0` guarded wrapper while production mutation remains disabled and Hermes remains manual-off.
 
+P5-02P is source-only readiness work for the first bounded production canary edit. It records the research-backed edit-first strategy, a separately authorized canary-fixture setup, a read-only readiness verifier, and a deterministic non-production Hermes dispatch/approval probe. No canary has been created, no production mutation has been authorized, and P5-02Q remains blocked until the dispatch probe passes and the owner separately authorizes the exact canary action/target.
+
 The safe project-status shorthand is:
 
-> Phase 3 presentation foundation accepted; Phase 4 voice work partially accepted with final live TTS/barge-in and wake disposition deferred; Phase 5 source qualification accepted through P5-02N and installed/runtime qualification accepted through P5-02O; production mutation remains disabled.
+> Phase 3 presentation foundation accepted; Phase 4 voice work partially accepted with final live TTS/barge-in and wake disposition deferred; Phase 5 source qualification accepted through P5-02N and installed/runtime qualification accepted through P5-02O; P5-02P production-canary readiness is prepared source-only; production mutation remains disabled.
