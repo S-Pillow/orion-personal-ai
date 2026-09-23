@@ -308,11 +308,11 @@ try {
 
     Write-Host ""
     Write-Host "=== P5-02O START COMPANION ==="
+    $GatewayStartIssued = $true
     & $Hermes -p companion gateway start
     if ($LASTEXITCODE -ne 0) {
         throw "STOP: Hermes COMPANION gateway start failed."
     }
-    $GatewayStartIssued = $true
     Write-Host "P5_02O_GATEWAY_HEALTH_TIMEOUT_SECONDS=$GatewayHealthTimeoutSeconds"
 
     if (-not (Wait-GatewayState -ExpectedUp $true -TimeoutSeconds $GatewayHealthTimeoutSeconds)) {
