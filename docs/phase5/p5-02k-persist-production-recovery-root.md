@@ -141,6 +141,31 @@ P5-02K does not authorize:
 - merge/deploy;
 - Hermes/Ollama/iai upgrade.
 
+## Prepared operator artifact
+
+Prepared source pin:
+
+```text
+179840b4ba67ba3dbba6728a542a52378d824fa8
+scripts/phase5/p5-02k-persist-production-recovery-root.ps1
+```
+
+The branch delta from completed P5-02J is limited to this runbook and the
+operator script. No plugin source, manifest, live COMPANION configuration, or
+runtime file has been changed by source-only preparation.
+
+The operator script requires the literal authorization token:
+
+```text
+I_AUTHORIZE_P5_02K_PERSIST_RECOVERY_ROOT
+```
+
+and fails closed without it.
+
+The script never prints `.env` contents. It preserves existing bytes and
+appends only the accepted recovery-root assignment, with exact rollback bytes
+captured first.
+
 ## Acceptance markers
 
 A successful authorized run must report:
