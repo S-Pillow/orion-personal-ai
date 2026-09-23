@@ -35,6 +35,23 @@ P5-02L closure:
 243f778a2a09a4a9f2c603c437e8b94149d52e2b
 ```
 
+## P5-02N source candidate
+
+The repository source on `feature/orion-phase5-p5-02n-registered-wrapper` now implements the P5-02M frozen guarded registration design. This is source-only and has **not** replaced the accepted installed COMPANION plugin described above.
+
+Source-candidate behavior:
+
+- manifest version is `0.2.0`;
+- registered source handler for `orion_vault_apply_plan` is `apply_plan_production_guarded`;
+- the public apply schema exposes only `plan_token` and rejects additional properties;
+- missing/blank, `disabled`, and `preview_only` modes refuse as `production_mutation_not_enabled` before any approval request or production-executor call;
+- unknown modes refuse as `invalid_production_mutation_mode`;
+- only explicit `mutation_enabled` may delegate to the private `_execute_production_plan_candidate()`;
+- `pre_tool_call` blocks apply in every non-enabled/invalid mode and returns no approval directive for a valid plan only when mutation mode is explicitly enabled;
+- the private executor remains unregistered and continues to own the single fresh Hermes human `ALLOW ONCE` gate and all qualified recovery/staleness safeguards.
+
+No P5-02N source change installs the plugin, changes COMPANION configuration, starts Hermes, persists/enables mutation mode, or touches production vault/inbox/recovery content. Installed-runtime qualification remains a separate P5-02O authorization unit.
+
 ## Registered live surface
 
 - `orion_vault_preview_edit`: read-only edit preview;
@@ -158,10 +175,10 @@ From the repository root:
   -v
 ```
 
-Windows-only file identity, ACL, local-volume, and handle semantics must pass on the accepted Windows machine before a later source-wiring candidate can be accepted.
+Windows-only file identity, ACL, local-volume, and handle semantics remain required P5-02N acceptance regressions on the accepted Windows machine; the source branch does not substitute Linux/source checks for that evidence.
 
 ## Safety boundary
 
 Do not treat this README, a source test, a plugin registration, an approval card, a persisted receipt, or a visual authority label as mutation authorization.
 
-Production mutation requires a separately authorized runtime gate. Until then, public apply remains fail-closed and Hermes remains manual-off by default.
+Production mutation requires a separately authorized runtime gate. The P5-02N source wrapper remains fail-closed unless explicit `mutation_enabled` is present; the installed P5-02L runtime still uses the older placeholder and Hermes remains manual-off by default.
