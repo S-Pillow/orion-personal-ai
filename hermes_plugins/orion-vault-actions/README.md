@@ -1,131 +1,124 @@
 # Orion Vault Actions Hermes Plugin
 
-This directory contains the source-controlled native Hermes plugin planned for Orion Phase 5.
+This directory contains Orion's native Hermes vault-actions plugin source.
 
-## Current status
+## Current accepted state
 
-P5-01 through P5-02E source/disposable safety work is accepted through the current Windows baseline. The plugin is still **not installed or enabled** in the live COMPANION profile, and no protected real-vault mutation is registered.
+Phase 5 safety qualification is accepted through P5-02L.
 
-Current accepted evidence:
+The plugin is installed and enabled under the COMPANION profile with access limited to the configured `iai-mcp` server. The live runtime has loaded the expected four-tool `orion_vault` toolset.
 
-- `test_p5*.py`: **86/86 passed** on Windows;
-- installed-Hermes dispatcher probe: **2/2 passed**;
-- plugin doctor: **PASS**, 4 tools / 2 hooks;
-- exact HUD approval presentation and real Hermes fresh-once no-write approval path accepted;
-- Windows move identity/held-handle hardening accepted;
-- recovery reconciliation, restore preview/revalidation, restart-safe non-authorizing receipts, and private disposable restore transactions accepted.
+Production mutation remains disabled:
 
-The current registered implementation exposes:
+- `ORION_P5_PRODUCTION_RECOVERY_ROOT` is persisted and runtime-qualified;
+- `ORION_P5_MUTATION_MODE` is not persisted and resolves to `disabled`;
+- registered `orion_vault_apply_plan` still points to `apply_plan_placeholder`;
+- the placeholder always returns `p5_01_mutation_not_authorized`;
+- `_execute_production_plan_candidate()` remains private and unregistered;
+- no real vault/inbox mutation has been authorized or performed.
 
-- `orion_vault_preview_edit` — read-only edit preview;
-- `orion_vault_preview_move_draft` — read-only inbox-to-vault move preview;
-- `orion_vault_recommend_destination` — read-only iai-backed destination recommendation;
-- `orion_vault_apply_plan` — fail-closed placeholder.
-
-The apply handler still always returns `p5_01_mutation_not_authorized`. Private disposable edit/move/restore executors exist only for source qualification and are not registered.
-
-Production activation readiness is reviewed in `docs/phase5/p5-02f-production-activation-readiness-review.md`. Preview-only installation may be considered only under a separate explicit owner authorization. Live mutation remains NO-GO until the P5-02F blockers are closed.
-
-### P5-02G production guardrails candidate
-
-Branch `feature/orion-phase5-p5-02g-production-guardrails` now contains a source-only production-shaped guardrail candidate. It adds explicit disabled/preview-only/mutation-enabled mode parsing, an explicit production recovery-root seam, Windows fixed-volume/access/DACL validation, bounded restart recovery enumeration, normal-edit Windows file-ID parity, schema-v2 production recovery/receipts, and a private unregistered production apply candidate with one handler-owned fresh ALLOW ONCE and post-approval stale revalidation.
-
-The registered apply handler is unchanged and still refuses mutation. P5-02G is now **Windows-verified**: 116/116 `test_p5*.py` tests passed, the installed-Hermes dispatcher probe passed 2/2, and plugin doctor passed with 4 tools / 2 hooks. See `docs/phase5/p5-02g-production-mutation-guardrails.md`.
-
-## P5-02A source candidate
-
-The source candidate on the P5-02A review branch is still non-mutating. Each preview now uses a fresh random nonce, so an identical second preview receives a distinct plan token and Hermes rule key. The bounded in-memory cache binds the exact proposed bytes and unified diff to the plan's hashes without adding replacement content to the public plan or apply-tool arguments. The approval hook includes the canonical target and exact diff and blocks missing, inconsistent, or oversized approval content. Internal hook errors return a block directive. The apply handler still always refuses mutation.
-
-This does not prove live approval safety. The pinned Hermes runtime can bypass approval under certain explicit modes and can omit a policy hook directive on callback/dispatch exceptions. See `docs/phase5/p5-02a-approval-integrity.md` before considering any mutating handler or live activation.
-
-P5-02A Windows source verification passed: 20/20 tests on disposable roots (0.166 s), and COMPANION Hermes `plugins doctor <source-dir> --ci` passed with 4 tools and 1 hook. This does not validate a live approval decision or authorize mutation.
-
-The separate Windows Hermes approval-signal probe passed 3/3 in 0.025 s. It confirmed that a fresh `once` response differs from bypass, cached, and automatic approval paths under mocked prompt/observer delivery. Full plugin dispatch and actual approval-screen rendering remain unverified; the apply handler still refuses mutation.
-
-A later source-only candidate adds the `post_approval_response` observer and an internal no-write approval probe helper. The registered apply tool is still the refusing placeholder. Local and owner-run Windows disposable-root tests pass 23/23. The isolated Windows dispatcher probe passes 2/2. At `ea4e138`, owner-run Windows Hermes doctor passed with **4 tools / 2 hooks and no warnings**, resolving the manifest declaration warning. See the P5-02A document for the exact boundary.
-
-The HUD approval display candidate now shows both the command and full description, removing a 1,000-character truncation. Local renderer tests pass 3/3 and the HUD Python suite passes 74/74. The isolated Windows fixture completed simulated DENY and ALLOW ONCE with `mutation_performed=false`, and the corrected fixture shut down cleanly with Ctrl+C. Terminal evidence closes decision routing/shutdown; exact human visual inspection still must be recorded explicitly before claiming that the operator saw every required diff marker.
-
-The source branch now also contains a **P5-02B disposable mutation candidate**. It is private/unregistered; `orion_vault_apply_plan` still points to `apply_plan_placeholder`. The candidate requires explicit temporary vault/inbox/recovery roots plus `ORION_P5_ALLOW_DISPOSABLE_MUTATION=1`, rejects the live default roots, requires recovery storage disjoint from vault/inbox, writes durable recovery bytes, uses native `ReplaceFileW` on Windows for edit replacement, and uses exclusive target creation + verification for draft moves. Failure-injection tests cover stale edit, post-replace interruption, target race, source drift after target creation, duplicate/recovery state, replay, and root guards. The combined `test_p5*.py` discovery is expected to contain **37 tests** after the approval-concurrency work and the disposable mutation/recovery/root-overlap hardening through `08785c6`. A fresh Windows run is pending and no PASS is claimed yet. See `docs/phase5/p5-02b-disposable-mutation-candidate.md` for the exact source-only gate.
-
-## Intended runtime location
-
-The accepted COMPANION Hermes home is:
+Accepted installed source:
 
 ```text
-%LOCALAPPDATA%\hermes\profiles\companion
+ce676a263f3dd2c18a7d7700b17a6023c6845904
 ```
 
-If a later owner-approved P5-02 ticket authorizes installation, the intended plugin destination is:
+Accepted installed `__init__.py` SHA-256:
 
 ```text
-%LOCALAPPDATA%\hermes\profiles\companion\plugins\orion-vault-actions
+FCFA3DDC4A86B99691FB003CF4421027C5CC3CA22AC99ADBCCEEE8D3B3C7B5DA
 ```
 
-Do not copy or enable this plugin there as part of P5-01.
+P5-02L closure:
 
-## Configuration seam
+```text
+243f778a2a09a4a9f2c603c437e8b94149d52e2b
+```
 
-The source defaults to the currently accepted Orion roots:
+## Registered live surface
+
+- `orion_vault_preview_edit`: read-only edit preview;
+- `orion_vault_preview_move_draft`: read-only inbox-to-vault move preview;
+- `orion_vault_recommend_destination`: read-only iai-backed destination recommendation;
+- `orion_vault_apply_plan`: fail-closed placeholder;
+- `pre_tool_call`: plan validation and current no-write approval contract;
+- `post_approval_response`: fresh human-once observer used by qualified private candidates.
+
+Hermes doctor accepted the manifest with four tools and two hooks.
+
+## Qualified private source behavior
+
+The source contains private, unregistered candidates for:
+
+- disposable edit and move execution;
+- disposable historical edit and move-source restore;
+- production-shaped edit, move, and restore execution;
+- Windows file-ID and held-handle protection;
+- schema-v2 production recovery records and non-authorizing receipts;
+- bounded startup recovery inventory;
+- fresh handler-owned Hermes `ALLOW ONCE` approval;
+- post-approval stale-state refusal;
+- replay refusal and restart-safe recovery classification.
+
+These candidates being source-qualified does not register them and does not grant live mutation authority.
+
+## Accepted P5-02I installed-runtime evidence
+
+The installed plugin was qualified against explicit disposable roots only:
+
+- DENY produced no mutation;
+- fresh human `ALLOW ONCE` permitted one exact disposable edit or move;
+- stale state, mismatched evidence, target races, and replay were refused;
+- receipts survived in-memory reset but remained non-authorizing;
+- historical restore required a new plan, approval, and recovery transaction;
+- pre-mutation and post-mutation failures classified as `prepared_no_effect` and `applied_unfinalized`;
+- public apply remained fail-closed throughout;
+- real vault and inbox were not touched.
+
+See `docs/phase5/p5-02i-installed-disposable-mutation-qualification.md`.
+
+## Production recovery state
+
+The accepted recovery root is:
+
+```text
+C:\Users\spill\AppData\Local\hermes\profiles\companion\orion\production-recovery
+```
+
+P5-02J accepted its location and ACL. P5-02K persisted the exact path in COMPANION `.env` without persisting mutation mode. P5-02L proved the live runtime ingests it while mutation remains disabled. The recovery inventory was empty at closure.
+
+## Configuration contract
+
+Accepted data roots:
 
 ```text
 ORION_VAULT_ROOT=C:\Personal\Me
 ORION_INBOX_ROOT=C:\Personal\Orion-Inbox
+ORION_P5_PRODUCTION_RECOVERY_ROOT=C:\Users\spill\AppData\Local\hermes\profiles\companion\orion\production-recovery
 ```
 
-Tests override these values with disposable temporary directories.
+Production mutation mode:
 
-## Approval seam
-
-A valid preview is cached in process memory for a bounded interval and identified by an immutable SHA-256 plan token.
-
-A later call to `orion_vault_apply_plan` is intercepted by the plugin's `pre_tool_call` hook:
-
-- missing/unknown/expired token -> `action=block`;
-- valid token -> `action=approve`;
-- `rule_key` is scoped to the exact plan token.
-
-Hermes, not Orion, owns the human approval decision. The current apply handler still refuses mutation even after approval because P5-01 is source-contract work only.
-
-## Source verification
-
-From the Orion repository root, run:
-
-```powershell
-& "C:\Users\spill\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe" `
-  "D:\Orion\orion-personal-ai\hermes_plugins\orion-vault-actions\tests\test_p5_01.py"
+```text
+ORION_P5_MUTATION_MODE=disabled | preview_only | mutation_enabled
 ```
 
-The suite uses temporary directories only. It must not touch the live vault or inbox.
+Missing or blank mode resolves to `disabled`. Unknown values fail closed. `mutation_enabled` makes mutation only eligible; all root, recovery, plan, approval, stale-state, receipt, and postcondition guards still apply.
 
-Current Windows verification evidence (2026-09-21):
+The browser/HUD has no path that can widen this mode.
 
-- `test_p5_01.py`: 13/13 passed in 0.133 s;
-- Hermes `plugins doctor <source-dir> --ci`: PASS;
-- runtime discovery, manifest parsing, import, and registration passed;
-- doctor observed 4 tools and 1 hook with no warnings;
-- COMPANION user-plugin baseline was `[]`, so no pre-existing user plugin was displaced;
-- destination recommendation coverage passed for native iai ordering, ambiguous lossy `doc:` tag omission, and fail-closed iai errors.
+## iai destination recommendation
 
-The 13/13 Windows result above applies to commit `835509f`. Review feedback on the ready PR led to source-only fixes for NTFS alternate data stream and invalid Windows component paths, leading-space path identity, and unambiguous diffs for files without final newlines. On Windows at `574c2a3`, Hermes doctor passed with 4 tools / 1 hook; the suite passed 15/16 with one failure caused by a CRLF-sensitive test fixture. The corrected fixture now uses explicit CRLF bytes without a final terminator and the updated suite passes 16/16 in a disposable non-Windows checkout. The corrected suite passed 16/16 on Windows in 0.139 s at `25cb56b`; Hermes doctor passed on the unchanged plugin code at `574c2a3`. Owner/operator review confirmed source-only P5-01 acceptance on 2026-09-21.
+Destination recommendation remains advisory and read-only:
 
-## iai destination-recommendation seam
+- use native `iai-mcp.memory_recall` ordering;
+- use `memory_temporal_recall` only to recover document tags;
+- map a document tag only when it resolves to exactly one current contained Markdown file;
+- omit missing or ambiguous mappings;
+- add no Orion semantic reranking or second memory store;
+- perform no vault/inbox mutation.
 
-The COMPANION profile already has `iai-mcp` enabled. Phase 5 destination recommendation should therefore call the existing native iai recall/search authority rather than recreate the historical Docker recommender or add an Orion-side semantic ranker.
-
-The implemented P5-01 recommendation behavior is read-only against the Orion inbox/vault:
-
-- call `iai-mcp.memory_recall` for native semantic ordering;
-- call `iai-mcp.memory_temporal_recall` only for the recalled records' document tags;
-- compute iai-compatible `doc:` tags for current contained Markdown files in the vault;
-- accept a source only when one document tag maps to exactly one current file;
-- preserve native recall order and deduplicate only by destination directory;
-- omit ambiguous/missing mappings rather than guessing;
-- never mutate the draft or vault.
-
-The source deliberately does not open the iai store directly.
-
-A future live install must explicitly grant this plugin access only to the configured iai server:
+COMPANION configuration grants only:
 
 ```yaml
 plugins:
@@ -134,20 +127,41 @@ plugins:
       mcp_allowlist: ["iai-mcp"]
 ```
 
-P5-01 does **not** apply that live configuration.
+## P5-02M registration design freeze
 
-## Future P5-02 installation gate
+P5-02M does not change plugin code or the installed runtime. It freezes the required shape of a later registered production apply wrapper:
 
-A later installation ticket must, at minimum:
+1. The manifest and schema continue exposing only `plan_token` for apply.
+2. The registered handler accepts ordinary Hermes handler arguments only. Test callbacks, root probes, approval functions, and failure hooks are never tool arguments.
+3. Missing, invalid, disabled, or preview-only production mode refuses without calling a production executor.
+4. Unknown, expired, malformed, or consumed plans fail before human approval.
+5. In `mutation_enabled` mode, `pre_tool_call` validates the plan but does not own approval.
+6. The final handler requests exactly one fresh Hermes generic approval and accepts only a matching human `choice=once` observer event plus `approved=true`.
+7. Session, always, yolo, cached, cron, single-query, missing, late, denied, timed-out, or mismatched approval cannot authorize mutation.
+8. The handler revalidates plan state and recovery inventory after approval and immediately before the protected filesystem primitive.
+9. Durable recovery and receipt preparation precedes the protected side effect.
+10. The handler returns the production candidate result as bounded JSON without leaking secrets or recovery bytes.
+11. The plugin version and description must change when the registered behavior changes.
+12. Source wiring, live installation while disabled, mutation enablement, and the first real mutation are separate authorization units.
 
-1. verify the source commit and changed-path set;
-2. confirm the COMPANION user-plugin baseline immediately before install;
-3. install only from the approved repository commit into the exact COMPANION plugin directory;
-4. validate Hermes plugin discovery before enablement;
-5. enable the plugin only after source/tests pass;
-6. restart Hermes only through the accepted Orion lifecycle path;
-7. prove preview-only behavior before authorizing any mutation implementation;
-8. record rollback instructions and evidence.
+See `docs/phase5/p5-02m-repository-integration-and-registration-design-freeze.md`.
 
-Rollback for an installed version must disable the plugin first, return Hermes to the prior accepted configuration, and remove only the explicitly installed Orion plugin artifact under a separately authorized mutation step.
+## Verification
 
+From the repository root:
+
+```powershell
+& "C:\Users\spill\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe" `
+  -m unittest discover `
+  -s "hermes_plugins\orion-vault-actions\tests" `
+  -p "test_p5*.py" `
+  -v
+```
+
+Windows-only file identity, ACL, local-volume, and handle semantics must pass on the accepted Windows machine before a later source-wiring candidate can be accepted.
+
+## Safety boundary
+
+Do not treat this README, a source test, a plugin registration, an approval card, a persisted receipt, or a visual authority label as mutation authorization.
+
+Production mutation requires a separately authorized runtime gate. Until then, public apply remains fail-closed and Hermes remains manual-off by default.

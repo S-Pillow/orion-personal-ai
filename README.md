@@ -6,6 +6,11 @@ Orion is a privacy-first, local-first personal AI companion for **native Windows
 
 The controlling product requirements document is **ORION — Master PRD v2.8**, approved 2026-09-10.
 
+Canonical artifact and approval record:
+
+- `docs/prd/orion-master-prd-v2.8-ai-optimized-approved.docx`
+- `docs/prd/orion-master-prd-v2.8-approval-record-2026-09-10.md`
+
 PRD v2.8 supersedes v2.7. It preserves the accepted native-Windows/manual-off foundation while defining Hermes as the runtime and preferred native voice/wake authority, iai as the persistent-memory authority, and Orion as the living visual control-and-presentation layer.
 
 The accepted **manual-off** lifecycle model remains unchanged:
@@ -125,70 +130,36 @@ Tracking:
 - draft PR #16 — Phase 4 P4-04 push-to-talk voice foundation
 - issue #19 — P4-04B resume native TTS/live voice acceptance after Edge connectivity stabilizes
 
-### Phase 5 — P5-01 native vault contract accepted (source only)
+### Phase 5 - vault safety chain accepted through P5-02L
 
-Phase 5 work has started without installing or enabling a new live plugin and without performing any protected vault mutation.
+Phase 5 has advanced through source qualification, preview-only COMPANION installation, installed-runtime disposable mutation qualification, production recovery-root acceptance, recovery-root persistence, and live runtime-ingestion verification.
 
-P5-01 source-only work is recorded in issue #20 and PR #21. Owner/operator acceptance was confirmed on 2026-09-21 after Windows verification and review-thread closure.
+Accepted checkpoints:
 
-P5-01 currently establishes:
+- P5-01: native plugin contract, canonical containment, side-effect-free edit/move previews, iai-backed destination recommendation, and a fail-closed public apply placeholder;
+- P5-02A through P5-02G: exact approval payloads, fresh handler-side `ALLOW ONCE` evidence, disposable edit/move/restore execution, restart-safe non-authorizing receipts, recovery classification, Windows file-identity hardening, and source-qualified production guardrails;
+- P5-02H: exact plugin installed and enabled in COMPANION with `mcp_allowlist: ["iai-mcp"]`, while public apply remained fail-closed;
+- P5-02I: installed plugin qualified against disposable roots for edit, move, stale-state refusal, replay refusal, restart classification, historical restore, and controlled failure classification;
+- P5-02J: production recovery root created and ACL-qualified with production mutation still disabled;
+- P5-02K: accepted recovery-root path persisted append-only in COMPANION `.env`, with rollback captured and no mutation-mode setting persisted;
+- P5-02L: live COMPANION runtime ingested the persisted recovery root, exposed the expected four-tool `orion_vault` toolset, retained `mutation_allowed=false`, and returned to manual-off.
 
-- a native Hermes plugin shape under `hermes_plugins/orion-vault-actions/`;
-- read-only edit and inbox-to-vault move previews;
-- canonical Windows path containment after normalization / real-path resolution;
-- rejection of traversal, absolute-path escape, symlink/junction/reparse escape, non-Markdown targets, and invalid state;
-- immutable SHA-256 preview-plan tokens;
-- plan-scoped Hermes `pre_tool_call` approval interception;
-- a fail-closed apply placeholder that performs no protected mutation even after approval;
-- explicit separation between preview and any future mutation implementation;
-- source-only install/rollback boundaries for a later owner-approved P5-02.
+Current installed/runtime boundary:
 
-Local Windows verification on 2026-09-21 passed:
+- installed plugin source is the P5-02I-qualified source at `ce676a263f3dd2c18a7d7700b17a6023c6845904`;
+- installed `__init__.py` SHA-256 is `FCFA3DDC4A86B99691FB003CF4421027C5CC3CA22AC99ADBCCEEE8D3B3C7B5DA`;
+- `ORION_P5_PRODUCTION_RECOVERY_ROOT` is persisted and runtime-qualified;
+- `ORION_P5_MUTATION_MODE` is not persisted and resolves to `disabled`;
+- registered `orion_vault_apply_plan` still points to `apply_plan_placeholder` and returns `p5_01_mutation_not_authorized`;
+- `_execute_production_plan_candidate()` exists only as a private, unregistered candidate;
+- production recovery inventory was empty at P5-02L closure;
+- no production vault/inbox mutation has been authorized or performed.
 
-- P5-01 fixture suite: **13/13 tests passed in 0.133 s**;
-- Hermes `plugins doctor ... --ci`: runtime discovery, manifest parsing, import, and registration passed with **4 tools / 1 hook and no warnings**;
-- COMPANION user-plugin baseline: `[]` before any Orion plugin install;
-- COMPANION MCP inventory shows `iai-mcp` **enabled**;
-- a fourth source-only tool, `orion_vault_recommend_destination`, now uses native iai `memory_recall` ordering and `memory_temporal_recall` document tags to derive advisory destination candidates;
-- because iai's `doc:` tag is intentionally lossy, Orion accepts a candidate only when that tag maps to exactly one current contained Markdown file; missing or ambiguous mappings are omitted rather than guessed;
-- no direct iai store access or second semantic ranker is introduced.
+P5-02L closure commit:
 
-The 13/13 Windows test and earlier Hermes-doctor results above apply to commit `835509f`. Review feedback after PR #21 became ready identified three preview issues: NTFS alternate data stream paths, significant leading whitespace in filenames, and diffs for text without a final newline. Source fixes and three new regression tests are on the PR branch. On Windows at `574c2a3`, Hermes doctor passed with 4 tools / 1 hook; 15/16 tests passed, with one failure caused by the new test fixture leaving a trailing CR from Windows CRLF. The fixture now uses explicit cross-platform CRLF bytes without a terminal newline, and 16/16 tests pass in a disposable non-Windows checkout. The corrected suite passed 16/16 on Windows in 0.139 s at `25cb56b`. Hermes doctor had already passed on the unchanged plugin source at `574c2a3`. P5-01 is accepted at the source-only boundary. P5-02 remains a separate authorization gate.
+`243f778a2a09a4a9f2c603c437e8b94149d52e2b`
 
-Important boundary: P5-01 is still **source-only**. No live COMPANION plugin install/enable, Hermes restart for this plugin, vault write, inbox write, move, edit, restore, or delete has been authorized or performed.
-
-Current Phase 5 contract:
-
-`docs/phase5/p5-01-native-vault-contract.md`
-
-### P5-02 approval/mutation safety — source baseline accepted; production activation not yet ready
-
-[Issue #22](https://github.com/S-Pillow/orion-personal-ai/issues/22) and [draft PR #23](https://github.com/S-Pillow/orion-personal-ai/pull/23) now contain the broader P5-02 source/disposable qualification work.
-
-Accepted Windows evidence through P5-02E:
-
-- full `test_p5*.py`: **86/86 passed**;
-- installed-Hermes dispatcher probe: **2/2 passed**;
-- plugin doctor: **PASS**, 4 tools / 2 hooks;
-- exact HUD approval-card visual gate accepted;
-- real Hermes fresh human DENY / ALLOW ONCE no-write gate accepted;
-- Windows move-path file-ID / held-handle hardening accepted;
-- recovery reconciliation and historical restore preview/stale revalidation accepted;
-- restart-safe non-authorizing approval/recovery receipts accepted;
-- private disposable edit/move/restore transaction behavior, crash classification, and replay refusal accepted.
-
-The registered `orion_vault_apply_plan` handler still refuses all protected mutation. The private disposable executors are not registered, and no live COMPANION plugin install/enable, service restart for this plugin, production recovery-root creation, vault write, inbox write, move, edit, restore, or delete has been authorized or performed.
-
-Production activation readiness is documented in:
-
-`docs/phase5/p5-02f-production-activation-readiness-review.md`
-
-Current readiness decision:
-
-- preview-only COMPANION install may enter a **separate explicit authorization gate**;
-- live edit/move/restore activation is **NO-GO** until production recovery-root/ACL validation, mutation-mode/startup gating, dedicated handler-side approval ownership, normal-edit Windows file-ID parity, bounded restart recovery enumeration, production schema/rollback freeze, and installed-runtime disposable qualification are completed.
-
-Do not interpret source/disposable acceptance as live mutation authorization.
+The next boundary is not routine activation. Registering a production-capable apply handler, installing that wiring, enabling production mutation, and performing the first real vault/inbox action are separate authorization units. P5-02M freezes the repository and registration design without making any live runtime change.
 
 ## Accepted manual-off lifecycle
 
@@ -289,18 +260,18 @@ Reference/code-donor fork. Reuse only proven patterns that still close a current
 
 ## Resume point
 
-Continue **Phase 5 / P5-02A source-only work** on draft PR #23, starting with the isolated HUD approval-display check above. Keep final Phase 4 live voice acceptance on issue #19. Live plugin installation and real mutation still require separate authorization.
+P5-02L is complete and accepted. The immediate work is **P5-02M repository integration and production registration design freeze**.
 
-Immediate sequence:
+P5-02M is documentation and source-control work only:
 
-1. keep PR #16 unmerged until stable-connectivity voice acceptance is completed;
-2. treat P5-01 as accepted source-only: Windows source tests passed 16/16 at `25cb56b`, Hermes doctor passed on the unchanged plugin code at `574c2a3`, and owner/operator review is complete;
-3. keep destination recommendation advisory and preserve native iai recall ordering rather than introducing a second semantic ranker;
-4. preserve the P5-01 source-only boundary — no plugin install/enablement or protected vault mutation is authorized by this acceptance;
-5. require a separately approved P5-02 before live plugin installation or any real move/edit/delete/restore behavior;
-6. preserve Hermes as the generic approval authority, iai as memory authority, Obsidian as the durable human-authored vault, and Orion as presentation/control.
+1. reconcile the accepted P5-02A through P5-02L lineage into a reviewable integration branch/PR against `main`;
+2. keep the approved PRD v2.8 and its SHA-256 approval record in the canonical repository;
+3. align repository and plugin status documentation with the installed P5-02L state;
+4. freeze the future registered production apply wrapper, plugin versioning, source pins, rollback order, and acceptance sequence;
+5. make no installed-plugin, COMPANION config, `.env`, Hermes lifecycle, vault, inbox, or recovery-record change.
+
+After P5-02M, a separately authorized source ticket may implement the registered wrapper. Installation while mutation remains disabled and the first bounded production mutation remain later, separately authorized gates.
 
 The safe project-status shorthand is:
 
-> Phase 3 presentation slices P3-01 through P3-05A merged/accepted; Phase 4 voice work partially accepted with final live TTS/barge-in acceptance deferred; Phase 5 P5-01 source-only vault contract accepted; P5-02A source-only approval qualification in progress on draft PR #23; live P5-02 work requires separate authorization.
-
+> Phase 3 presentation foundation accepted; Phase 4 voice work partially accepted with final live TTS/barge-in and wake disposition deferred; Phase 5 safety qualification accepted through P5-02L; production recovery-root ingestion is live-qualified; production mutation remains disabled and public apply remains fail-closed.
