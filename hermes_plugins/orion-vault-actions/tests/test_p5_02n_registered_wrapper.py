@@ -219,6 +219,45 @@ class GuardedRegistrationTests(unittest.TestCase):
         self.assertNotIn("approval_request", result)
         self.assertNotIn("proposed_bytes", result)
 
+    def test_schema2_receipt_matcher_accepts_legacy_and_guarded_wording(self):
+        note, preview = self._edit_preview()
+        token = preview["plan_token"]
+        os.environ[plugin.PRODUCTION_MUTATION_MODE_ENV] = (
+            plugin.PRODUCTION_MODE_MUTATION_ENABLED
+        )
+        plan = plugin._PREVIEWS[token]
+        guarded_message = plugin._approval_summary(plan)
+
+        legacy_suffix = (
+            "This one-time approval may be used only by the private production "
+            "mutation candidate for this exact plan. Registered/live apply "
+            "remains fail-closed."
+        )
+        guarded_suffix = (
+            "This one-time approval may be used only by the guarded registered "
+            "production apply path for this exact plan. The private production "
+            "executor is not registered directly."
+        )
+        self.assertTrue(guarded_message.endswith(guarded_suffix))
+        legacy_message = guarded_message[: -len(guarded_suffix)] + legacy_suffix
+
+        self.assertTrue(
+            plugin._receipt_approval_message_matches_plan(
+                plan, guarded_message, schema_version=2
+            )
+        )
+        self.assertTrue(
+            plugin._receipt_approval_message_matches_plan(
+                plan, legacy_message, schema_version=2
+            )
+        )
+        self.assertFalse(
+            plugin._receipt_approval_message_matches_plan(
+                plan, guarded_message + "tampered", schema_version=2
+            )
+        )
+        self.assertEqual(note.read_bytes(), b"before\n")
+
     def test_missing_plan_token_cannot_inject_callbacks(self):
         os.environ[plugin.PRODUCTION_MUTATION_MODE_ENV] = (
             plugin.PRODUCTION_MODE_MUTATION_ENABLED
