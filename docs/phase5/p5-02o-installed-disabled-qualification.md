@@ -1,6 +1,6 @@
 # P5-02O — Installed-but-Disabled Qualification
 
-Status: **AUTHORIZED / PREPARED / NOT YET EXECUTED**
+Status: **PASS / INSTALLED-BUT-DISABLED QUALIFICATION ACCEPTED / MUTATION STILL DISABLED / HERMES MANUAL-OFF RESTORED**
 
 Date: 2026-09-23
 
@@ -245,13 +245,93 @@ Fail closed and do not continue if:
 - any recovery record appears;
 - Hermes cannot return to manual-off.
 
-## Acceptance boundary
+## Observed live result — PASS
 
-P5-02O acceptance installs and runtime-qualifies the P5-02N guarded wrapper
-while mutation remains disabled.
+The authorized P5-02O installed-but-disabled gate completed successfully on
+2026-09-23.
 
-It does **not** authorize a production edit, move, restore, delete, or any
-future `mutation_enabled` state.
+Rollback was captured before plugin replacement at:
+
+```text
+C:\Users\spill\AppData\Local\hermes\profiles\companion\orion\backups\p5-02o-installed-disabled-20260923-040536
+```
+
+Exact installed source pin:
+
+```text
+faf8b4787d8e6fb668eb5e9d754104910b4b401a
+```
+
+Observed pre-install and installation evidence:
+
+```text
+P5_02O_ROLLBACK_CAPTURED=true
+P5_02O_MUTATION_MODE_PERSISTED=false
+P5_02O_DISPOSABLE_FLAGS_PERSISTED=false
+P5_02O_RECOVERY_INVENTORY_COUNT=0
+P5_02O_HERMES_MANUAL_OFF_PREINSTALL=true
+P5_02O_SOURCE_DOCTOR=PASS
+P5_02O_INSTALLED_DOCTOR=PASS
+P5_02O_INSTALLED_SOURCE_MATCH=true
+P5_02O_INSTALLED_PLUGIN_VERSION=0.2.0
+```
+
+Both source and installed-location Hermes Plugin Doctor reported **4 tools /
+2 hooks**.
+
+Observed live runtime evidence:
+
+```text
+P5_02O_GATEWAY_HEALTHY=true
+P5_02O_HERMES_DOTENV_LOADED=true
+P5_02O_EFFECTIVE_RECOVERY_ROOT_MATCH=true
+PRODUCTION_MUTATION_MODE=disabled
+PRODUCTION_MUTATION_ALLOWED=false
+P5_02O_NATIVE_ROOT_VALIDATION=PASS
+P5_02O_RECOVERY_INVENTORY_COUNT=0
+P5_02O_RECOVERY_ATTENTION_COUNT=0
+P5_02O_REGISTERED_APPLY_HANDLER=apply_plan_production_guarded
+P5_02O_PRIVATE_EXECUTOR_REGISTERED=false
+P5_02O_APPLY_SCHEMA_PLAN_TOKEN_ONLY=true
+P5_02O_DISABLED_PRETOOL_BLOCK=true
+P5_02O_DISABLED_APPLY_REFUSED=true
+P5_02O_DISABLED_APPROVAL_ATTEMPT_CREATED=false
+P5_02O_DISABLED_EXECUTOR_CALLED=false
+P5_02O_LIVE_ORION_TOOLSET_FOUND=true
+P5_02O_LIVE_ORION_TOOL_COUNT=4
+P5_02O_RUNTIME_VERIFY=PASS
+```
+
+The disabled apply verification used disposable temporary note roots only. It
+proved that a valid preview token still blocks before approval/executor
+delegation when production mutation is disabled.
+
+Observed shutdown/post-state:
+
+```text
+P5_02O_GATEWAY_STOPPED=true
+P5_02O_CONFIG_UNCHANGED=true
+P5_02O_ENV_UNCHANGED=true
+P5_02O_RECOVERY_ROOT_STILL_EMPTY=true
+P5_02O_MUTATION_INVOCATION=false
+HERMES_MANUAL_OFF=true
+P5_02O_INSTALLED_DISABLED_QUALIFICATION=PASS
+```
+
+No production recovery transaction was created. No real vault/inbox edit,
+move, restore, or delete was invoked. COMPANION configuration and persisted
+environment bytes remained unchanged.
+
+## Acceptance
+
+P5-02O is accepted.
+
+The installed COMPANION plugin is now the exact P5-02N-qualified `0.2.0`
+source and the live registered apply handler is
+`apply_plan_production_guarded`, but production mutation remains disabled.
+
+P5-02O acceptance does **not** authorize a production edit, move, restore,
+delete, or any future `mutation_enabled` state.
 
 Any bounded production mutation gate requires a new owner authorization naming
 the exact action and target, with its own rollback/recovery plan.
