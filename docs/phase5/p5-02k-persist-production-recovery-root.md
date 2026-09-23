@@ -1,6 +1,6 @@
 # P5-02K — Persist Production Recovery Root with Mutation Disabled
 
-Status: **SOURCE-ONLY PREPARED / PERSISTENT COMPANION ENV CHANGE NOT AUTHORIZED**
+Status: **OWNER AUTHORIZED / PERSISTENT COMPANION ENV CHANGE PENDING**
 
 Branch:
 
@@ -39,6 +39,44 @@ ORION_P5_RECOVERY_ROOT
 
 With `ORION_P5_MUTATION_MODE` absent, the installed plugin continues to resolve
 production mutation mode as `disabled`.
+
+## Owner authorization
+
+Owner explicitly authorized:
+
+```text
+Persist ORION_P5_PRODUCTION_RECOVERY_ROOT=
+C:\Users\spill\AppData\Local\hermes\profiles\companion\orion\production-recovery
+in the COMPANION .env while keeping production mutation mode disabled.
+```
+
+Authorized live actions are limited to the P5-02K execution boundary in this
+runbook.
+
+The authorization permits:
+
+- byte-for-byte rollback capture of the COMPANION `.env`;
+- append-only persistence of exactly the accepted production recovery-root
+  assignment;
+- post-write verification and rollback on failure.
+
+The authorization does **not** permit:
+
+- persisting or enabling `ORION_P5_MUTATION_MODE`;
+- starting/restarting Hermes;
+- registering the private production executor;
+- changing vault/inbox ACLs;
+- mutating real vault/inbox content;
+- merge/deploy.
+
+Operator source pin:
+
+```text
+179840b4ba67ba3dbba6728a542a52378d824fa8
+scripts/phase5/p5-02k-persist-production-recovery-root.ps1
+```
+
+The live run must execute that exact source pin or an identical script hash.
 
 ## Persistent target
 
