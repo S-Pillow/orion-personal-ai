@@ -70,7 +70,11 @@ function Get-EnvText {
         throw "STOP: COMPANION .env encoding is not safe for append-only UTF-8 update."
     }
 
-    return $Utf8Strict.GetString($bytes)
+    $text = $Utf8Strict.GetString($bytes)
+    if ($text.Length -gt 0 -and $text[0] -eq [char]0xFEFF) {
+        $text = $text.Substring(1)
+    }
+    return $text
 }
 
 function Get-ActiveEnvValues {
