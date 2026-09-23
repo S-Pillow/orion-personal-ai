@@ -1,6 +1,6 @@
 # P5-02J — Production Recovery Root Location and ACL Acceptance
 
-Status: **SOURCE-ONLY PREPARED / LIVE ROOT CREATION AND ACL CHANGE NOT AUTHORIZED**
+Status: **OWNER AUTHORIZED / LIVE ROOT CREATION + ACL ACCEPTANCE PENDING**
 
 Branch:
 
@@ -100,6 +100,40 @@ validation. It requires:
 
 The validator never repairs ACLs and the plugin never creates the production
 recovery root.
+
+## Owner authorization
+
+Owner explicitly authorized:
+
+```text
+P5-02J production recovery-root creation and ACL acceptance at
+C:\Users\spill\AppData\Local\hermes\profiles\companion\orion\production-recovery
+```
+
+Authorized live actions are limited to the P5-02J execution boundary in this
+runbook. In particular, the authorization permits creation of exactly that
+directory and replacement of only that new directory's ACL with the accepted
+protected ACL.
+
+The authorization does **not** extend to:
+
+- persisting `ORION_P5_PRODUCTION_RECOVERY_ROOT`;
+- setting `ORION_P5_MUTATION_MODE=mutation_enabled`;
+- registering the private production executor;
+- starting/restarting Hermes;
+- changing vault/inbox ACLs;
+- mutating real vault/inbox content;
+- merge/deploy.
+
+Operator script source pin:
+
+```text
+c39d07dfce69ed9797318eec0d48edc05d26acf6
+scripts/phase5/p5-02j-production-recovery-root.ps1
+scripts/phase5/p5-02j-verify-production-recovery-root.py
+```
+
+The live run must execute that exact source pin or an identical script hash.
 
 ## P5-02J execution boundary
 
