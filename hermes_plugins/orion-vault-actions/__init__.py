@@ -2874,24 +2874,38 @@ def _receipt_approval_message_matches_plan(
         return False
 
     if schema_version == 2:
-        suffix = (
-            "\nThis one-time approval may be used only by the private production "
-            "mutation candidate for this exact plan. Registered/live apply "
-            "remains fail-closed."
+        suffixes = (
+            (
+                "\nThis one-time approval may be used only by the guarded registered "
+                "production apply path for this exact plan. The private production "
+                "executor is not registered directly."
+            ),
+            (
+                "\nThis one-time approval may be used only by the private production "
+                "mutation candidate for this exact plan. Registered/live apply "
+                "remains fail-closed."
+            ),
         )
     elif suffix_kind == "restore":
-        suffix = (
-            "\nThis one-time approval may be used only by the private disposable "
-            "restore candidate for this exact plan. Registered/live apply remains "
-            "fail-closed."
+        suffixes = (
+            (
+                "\nThis one-time approval may be used only by the private disposable "
+                "restore candidate for this exact plan. Registered/live apply remains "
+                "fail-closed."
+            ),
         )
     else:
-        suffix = "\nCurrent apply handler remains fail-closed and will not mutate."
+        suffixes = (
+            "\nCurrent apply handler remains fail-closed and will not mutate.",
+        )
 
-    if not message.startswith(prefix) or not message.endswith(suffix):
+    if not message.startswith(prefix):
         return False
-    diff = message[len(prefix):len(message) - len(suffix)]
-    return _sha_text(diff) == plan.get("diff_sha256")
+    for suffix in suffixes:
+        if message.endswith(suffix):
+            diff = message[len(prefix):len(message) - len(suffix)]
+            return _sha_text(diff) == plan.get("diff_sha256")
+    return False
 
 
 def _inspect_receipt_at_roots(
