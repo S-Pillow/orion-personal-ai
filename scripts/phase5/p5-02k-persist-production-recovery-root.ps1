@@ -161,12 +161,12 @@ else {
 
 $EnvBeforeText = Get-EnvText -Path $EnvFile
 
-if ((Get-ActiveEnvValues -Text $EnvBeforeText -Name $RecoveryEnvName).Count -ne 0) {
+if (@(Get-ActiveEnvValues -Text $EnvBeforeText -Name $RecoveryEnvName).Count -ne 0) {
     throw "STOP: persistent production recovery-root setting already exists."
 }
 
 foreach ($name in $ForbiddenPersistent) {
-    if ((Get-ActiveEnvValues -Text $EnvBeforeText -Name $name).Count -ne 0) {
+    if (@(Get-ActiveEnvValues -Text $EnvBeforeText -Name $name).Count -ne 0) {
         throw "STOP: forbidden persistent mutation/disposable setting exists: $name"
     }
 }
@@ -301,7 +301,7 @@ try {
     }
 
     foreach ($name in $ForbiddenPersistent) {
-        if ((Get-ActiveEnvValues -Text $EnvAfterText -Name $name).Count -ne 0) {
+        if (@(Get-ActiveEnvValues -Text $EnvAfterText -Name $name).Count -ne 0) {
             throw "STOP: forbidden mutation/disposable setting appeared: $name"
         }
     }
