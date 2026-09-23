@@ -72,7 +72,7 @@ The authorization does **not** permit:
 Operator source pin:
 
 ```text
-179840b4ba67ba3dbba6728a542a52378d824fa8
+4032d5e872bd371ebc5c6050f17bd63a5616a4f0
 scripts/phase5/p5-02k-persist-production-recovery-root.ps1
 ```
 
@@ -203,6 +203,48 @@ and fails closed without it.
 The script never prints `.env` contents. It preserves existing bytes and
 appends only the accepted recovery-root assignment, with exact rollback bytes
 captured first.
+
+## First live invocation — SAFE PRE-MUTATION STOP
+
+The first authorized P5-02K invocation stopped during dotenv preflight before
+rollback capture or environment mutation.
+
+Observed error:
+
+```text
+PropertyNotFoundStrict
+The property 'Count' cannot be found on this object.
+```
+
+Root cause:
+
+- `Get-ActiveEnvValues` emits no pipeline object when there are zero matches;
+- under `Set-StrictMode -Version Latest`, directly evaluating
+  `(Get-ActiveEnvValues ...).Count` on that zero-result value fails because
+  the expression is `$null`.
+
+Evidence that no persistent mutation occurred:
+
+- no `P5_02K_ROLLBACK_CAPTURED=true` marker was reached;
+- the script failed before the gateway/native-validation stage and before the
+  backup/append block;
+- therefore the COMPANION `.env` append path was never entered.
+
+The temporary operator worktree was subsequently removed.
+
+Source correction:
+
+```text
+4032d5e872bd371ebc5c6050f17bd63a5616a4f0
+```
+
+The correction wraps all zero-or-more dotenv helper calls with `@(...)` before
+reading `.Count`. The commit changes only three count expressions; it does not
+change the authorized assignment, rollback strategy, mutation-mode boundary, or
+runtime behavior.
+
+P5-02K remains authorized and pending. The corrected source pin supersedes the
+earlier operator pin for the retry.
 
 ## Acceptance markers
 
