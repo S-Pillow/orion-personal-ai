@@ -128,6 +128,10 @@ if ((Get-FileHash -Algorithm SHA256 -LiteralPath $EditCanary).Hash -ne $Expected
     throw "STOP: edit canary differs from accepted P5-02R restored state."
 }
 
+$ConfigBefore = (Get-FileHash -Algorithm SHA256 -LiteralPath $Config).Hash
+$EnvBefore = (Get-FileHash -Algorithm SHA256 -LiteralPath $EnvFile).Hash
+$PluginManifestBefore = (Get-FileHash -Algorithm SHA256 -LiteralPath $PluginManifest).Hash
+
 $ForbiddenNames = @(
     "ORION_P5_MUTATION_MODE",
     "ORION_P5_ALLOW_DISPOSABLE_MUTATION",
@@ -200,6 +204,28 @@ if (Test-Path -LiteralPath $Target) {
     throw "STOP: vault target appeared during fixture creation; preserve state for inspection."
 }
 
+$RecoveryEntriesAfter = @(Get-ChildItem -LiteralPath $RecoveryRoot -Force)
+$RecoveryIdsAfter = @($RecoveryEntriesAfter | Select-Object -ExpandProperty Name) | Sort-Object
+if (
+    $RecoveryEntriesAfter.Count -ne 2 -or
+    @($RecoveryEntriesAfter | Where-Object { -not $_.PSIsContainer }).Count -ne 0 -or
+    ($RecoveryIdsAfter -join "|") -ne (($ExpectedRecoveryIds | Sort-Object) -join "|")
+) {
+    throw "STOP: production recovery root changed during fixture creation."
+}
+if ((Get-FileHash -Algorithm SHA256 -LiteralPath $Config).Hash -ne $ConfigBefore) {
+    throw "STOP: COMPANION config changed during fixture creation."
+}
+if ((Get-FileHash -Algorithm SHA256 -LiteralPath $EnvFile).Hash -ne $EnvBefore) {
+    throw "STOP: COMPANION .env changed during fixture creation."
+}
+if ((Get-FileHash -Algorithm SHA256 -LiteralPath $PluginManifest).Hash -ne $PluginManifestBefore) {
+    throw "STOP: installed plugin manifest changed during fixture creation."
+}
+if (Test-GatewayHealth) {
+    throw "STOP: Hermes gateway started during fixture creation."
+}
+
 Write-Host "P5_02S_MOVE_FIXTURE_CREATE=PASS"
 Write-Host "P5_02S_SOURCE_CANONICAL_PATH=$Source"
 Write-Host "P5_02S_TARGET_CANONICAL_PATH=$Target"
@@ -208,6 +234,9 @@ Write-Host "P5_02S_TARGET_STATE=absent"
 Write-Host "P5_02S_FIXTURE_UTF8_NO_BOM=true"
 Write-Host "P5_02S_FIXTURE_NEWLINES=LF"
 Write-Host "P5_02S_PRODUCTION_RECOVERY_COUNT=2"
+Write-Host "P5_02S_CONFIG_UNCHANGED=true"
+Write-Host "P5_02S_ENV_UNCHANGED=true"
+Write-Host "P5_02S_INSTALLED_PLUGIN_MANIFEST_UNCHANGED=true"
 Write-Host "PRODUCTION_MUTATION_MODE=disabled"
 Write-Host "HERMES_MANUAL_OFF=true"
 Write-Host "P5_02S_MOVE_NOT_EXECUTED=true"
