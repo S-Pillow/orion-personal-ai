@@ -130,7 +130,7 @@ Tracking:
 - draft PR #16 — Phase 4 P4-04 push-to-talk voice foundation
 - issue #19 — P4-04B resume native TTS/live voice acceptance after Edge connectivity stabilizes
 
-### Phase 5 - source qualification accepted through P5-02N; installed/runtime qualification accepted through P5-02O
+### Phase 5 - source/runtime qualification accepted through first production mutation P5-02Q
 
 Phase 5 has advanced through source qualification, preview-only COMPANION installation, installed-runtime disposable mutation qualification, production recovery-root acceptance, recovery-root persistence, and live runtime-ingestion verification.
 
@@ -145,7 +145,9 @@ Accepted checkpoints:
 - P5-02L: live COMPANION runtime ingested the persisted recovery root, exposed the expected four-tool `orion_vault` toolset, retained `mutation_allowed=false`, and returned to manual-off;
 - P5-02M: repository integration and guarded production-registration design freeze accepted with no runtime change;
 - P5-02N: guarded registered apply wrapper accepted in source at qualified code head `faf8b4787d8e6fb668eb5e9d754104910b4b401a`, with 129/129 Phase 5 tests, Hermes approval 3/3, Hermes dispatcher 2/2, HUD Python 78/78, HUD rendering 3/3, and compile checks passing on Windows;
-- P5-02O: exact P5-02N-qualified plugin `0.2.0` installed into COMPANION with rollback captured, live guarded-wrapper registration verified, production mutation still disabled, recovery inventory still empty, config/`.env` unchanged, and Hermes restored to manual-off.
+- P5-02O: exact P5-02N-qualified plugin `0.2.0` installed into COMPANION with rollback captured, live guarded-wrapper registration verified, production mutation still disabled, recovery inventory still empty, config/`.env` unchanged, and Hermes restored to manual-off;
+- P5-02P: deterministic registered-dispatch approval proof passed, controlled canary fixture created, and read-only readiness froze the exact target, pre-edit Windows file identity, before/after hashes, and exact diff while mutation remained disabled;
+- P5-02Q: first real Orion production mutation accepted — exactly one guarded `edit_note` on the controlled canary, fresh human `once` approval, committed schema-v2 recovery/receipt, zero recovery attention state, mutation mode returned to disabled, and Hermes remained manual-off.
 
 Current installed/runtime boundary:
 
@@ -156,16 +158,19 @@ Current installed/runtime boundary:
 - registered `orion_vault_apply_plan` points to `apply_plan_production_guarded`;
 - disabled public apply refuses with `production_mutation_not_enabled` before human approval or private-executor delegation;
 - `_execute_production_plan_candidate()` remains private and unregistered;
-- production recovery inventory remains empty;
-- COMPANION `config.yaml` and `.env` remained unchanged through P5-02O;
+- production recovery inventory now contains exactly one valid committed P5-02Q record with zero attention state;
+- controlled canary `C:\Personal\Me\_Orion-P5-Canary.md` is in the accepted `state: after` form with SHA-256 `86e94184ef6ff2a80f5cdfa04749c42328079e029d153d3a23d42eab05059e19`;
+- current canary Windows file identity is `5e1aeb8a1aeb5d91:19c10700000020000000000000000000`;
+- P5-02Q recovery ID is `33d3dc72984b872778680106dabfc2260eab9a91be130b9e9d6dd1351483de3f`;
+- COMPANION `config.yaml` and `.env` remain unchanged;
 - Hermes is restored to manual-off;
-- no production vault/inbox mutation has been authorized or performed.
+- `ORION_P5_MUTATION_MODE` remains unpersisted and resolves to disabled outside the bounded child process.
 
 P5-02O rollback capture:
 
 `C:\Users\spill\AppData\Local\hermes\profiles\companion\orion\backups\p5-02o-installed-disabled-20260923-040536`
 
-The next boundary is a separately authorized bounded production mutation gate naming the exact action and target. Mutation enablement and the first real vault/inbox action remain separate authorization units.
+The next boundary is a separately authorized restore qualification using the committed P5-02Q recovery record. Restore is a distinct production mutation and has not been authorized.
 
 ## Accepted manual-off lifecycle
 
@@ -270,10 +275,12 @@ P5-02M remains the integration/design-freeze review surface in PR #27. P5-02N so
 
 The installed COMPANION runtime now carries the P5-02N-qualified `0.2.0` guarded wrapper while production mutation remains disabled and Hermes remains manual-off.
 
-P5-02P production-canary readiness is accepted. The deterministic registered-dispatch proof passed with a real fresh human `once` approval and no production executor call; the controlled canary `C:\Personal\Me\_Orion-P5-Canary.md` was created under separate authorization; and read-only readiness froze Windows file identity `5e1aeb8a1aeb5d91:cba20a00000012000000000000000000`, before SHA-256 `ddb08a8ca9ab5d06185a692182a742210817cba1d5523c841d6a371dfdb57b4c`, after SHA-256 `86e94184ef6ff2a80f5cdfa04749c42328079e029d153d3a23d42eab05059e19`, and exact diff SHA-256 `6642d44372449d01e1ec3f5d325bd2b372f52cc58610293bcccf0e4e4ec996e8`. Production mutation remains disabled, recovery inventory remains empty, and Hermes remains manual-off.
+P5-02P production-canary readiness is accepted. The deterministic registered-dispatch proof passed with a real fresh human `once` approval and no production executor call; the controlled canary `C:\Personal\Me\_Orion-P5-Canary.md` was created under separate authorization; and read-only readiness froze pre-edit Windows file identity `5e1aeb8a1aeb5d91:cba20a00000012000000000000000000`, before SHA-256 `ddb08a8ca9ab5d06185a692182a742210817cba1d5523c841d6a371dfdb57b4c`, after SHA-256 `86e94184ef6ff2a80f5cdfa04749c42328079e029d153d3a23d42eab05059e19`, and exact diff SHA-256 `6642d44372449d01e1ec3f5d325bd2b372f52cc58610293bcccf0e4e4ec996e8`.
 
-P5-02Q is the next separate authorization boundary: one bounded `edit_note` operation against exactly that frozen canary contract.
+P5-02Q is accepted as the first real Orion production mutation. Exactly one `edit_note` changed the controlled canary to the frozen after-hash through the registered guarded wrapper and a fresh human `once` approval. Recovery ID `33d3dc72984b872778680106dabfc2260eab9a91be130b9e9d6dd1351483de3f` is valid/committed with zero attention state. Mutation mode is again disabled and Hermes is manual-off.
+
+The next boundary is a separately authorized restore qualification against that committed recovery record.
 
 The safe project-status shorthand is:
 
-> Phase 3 presentation foundation accepted; Phase 4 voice work partially accepted with final live TTS/barge-in and wake disposition deferred; Phase 5 source qualification accepted through P5-02N, installed/runtime qualification accepted through P5-02O, and first-production-canary readiness accepted through P5-02P; production mutation remains disabled.
+> Phase 3 presentation foundation accepted; Phase 4 voice work partially accepted with final live TTS/barge-in and wake disposition deferred; Phase 5 source/runtime safety is accepted through P5-02Q, including the first bounded production canary edit; mutation mode is disabled outside that completed action and Hermes remains manual-off.
