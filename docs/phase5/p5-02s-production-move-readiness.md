@@ -1,6 +1,6 @@
 # P5-02S — Production Move Readiness
 
-Status: **SOURCE-ONLY PREPARED / NO MOVE FIXTURE CREATED / NO PRODUCTION MOVE AUTHORIZED**
+Status: **P5-02S-A PASS / CONTROLLED MOVE FIXTURE CREATED / NO PRODUCTION MOVE AUTHORIZED**
 
 Date: 2026-09-24
 
@@ -187,6 +187,41 @@ Literal operator token:
 ```text
 I_AUTHORIZE_P5_02S_MOVE_FIXTURE_CREATE
 ```
+
+## Observed P5-02S-A controlled move fixture creation — PASS
+
+The separately authorized controlled inbox fixture creation completed
+successfully on the accepted Windows environment.
+
+Observed result:
+
+```text
+P5_02S_MOVE_FIXTURE_CREATE=PASS
+P5_02S_SOURCE_CANONICAL_PATH=C:\Personal\Orion-Inbox\_Orion-P5-Move-Canary.md
+P5_02S_TARGET_CANONICAL_PATH=C:\Personal\Me\_Orion-P5-Move-Canary.md
+P5_02S_SOURCE_SHA256=132FF51D62FD7FD8827D7222E233617E92C55DC21D40FF68164F2238BA0FD132
+P5_02S_TARGET_STATE=absent
+P5_02S_FIXTURE_UTF8_NO_BOM=true
+P5_02S_FIXTURE_NEWLINES=LF
+P5_02S_PRODUCTION_RECOVERY_COUNT=2
+P5_02S_CONFIG_UNCHANGED=true
+P5_02S_ENV_UNCHANGED=true
+P5_02S_INSTALLED_PLUGIN_MANIFEST_UNCHANGED=true
+PRODUCTION_MUTATION_MODE=disabled
+HERMES_MANUAL_OFF=true
+P5_02S_MOVE_NOT_EXECUTED=true
+```
+
+The fixture exactly matches the frozen source-hash contract.
+
+This was a direct operator-created controlled inbox fixture, not an Orion
+`move_draft` mutation. No Orion apply tool was invoked, mutation mode remained
+disabled, the vault target remained absent, the accepted P5-02Q/P5-02R recovery
+inventory remained at two records, and Hermes remained manual-off.
+
+The controlled source fixture must now be treated as a Phase 5 test asset. Do
+not edit, rename, move, or delete it outside the later explicitly authorized
+readiness/move/restore gates.
 
 ## P5-02S-B — read-only move readiness
 
