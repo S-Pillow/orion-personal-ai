@@ -1,6 +1,6 @@
 # P5-02Q — First Production Canary Edit
 
-Status: **AUTHORIZED / PREPARED / NOT YET EXECUTED**
+Status: **PASS / FIRST PRODUCTION CANARY EDIT ACCEPTED / MUTATION MODE DISABLED / HERMES MANUAL-OFF**
 
 Date: 2026-09-24
 
@@ -199,6 +199,90 @@ At the approval prompt, stop/deny unless the displayed target and diff are
 exactly the frozen contract above.
 
 Only **ONCE** is acceptable.
+
+## Observed live result — PASS
+
+The authorized P5-02Q production canary edit completed successfully on
+2026-09-24.
+
+Observed apply result:
+
+```text
+P5_02Q_PRODUCTION_CANARY_EDIT=PASS
+P5_02Q_APPLY_SUCCESS=true
+P5_02Q_MUTATION_PERFORMED=true
+P5_02Q_RECOVERY_REQUIRED=false
+P5_02Q_RECOVERY_ID=33d3dc72984b872778680106dabfc2260eab9a91be130b9e9d6dd1351483de3f
+P5_02Q_RECOVERY_RECORD_VALID=true
+P5_02Q_RECOVERY_MANIFEST_STATE=committed
+P5_02Q_RECOVERY_CLASSIFICATION=committed
+P5_02Q_RECEIPT_STATE=committed
+P5_02Q_RECEIPT_FINALIZED=true
+P5_02Q_RECEIPT_RECONCILIATION_REQUIRED=false
+P5_02Q_APPROVAL_SURFACE=cli
+P5_02Q_APPROVAL_CHOICE=once
+P5_02Q_AUTHORIZATION_REUSABLE=false
+P5_02Q_PRODUCTION_RECOVERY_COUNT_AFTER=1
+P5_02Q_PRODUCTION_RECOVERY_ATTENTION_AFTER=0
+```
+
+Committed recovery directory:
+
+```text
+C:\Users\spill\AppData\Local\hermes\profiles\companion\orion\production-recovery\33d3dc72984b872778680106dabfc2260eab9a91be130b9e9d6dd1351483de3f
+```
+
+Post-mutation canary evidence:
+
+```text
+P5_02Q_CANARY_POST_FILE_ID=5e1aeb8a1aeb5d91:19c10700000020000000000000000000
+P5_02Q_CANARY_POST_SHA256=86e94184ef6ff2a80f5cdfa04749c42328079e029d153d3a23d42eab05059e19
+```
+
+The post-edit Windows file identity differs from the frozen pre-edit identity.
+That is not treated as a failure: the pre-edit identity was the race guard for
+the original target immediately before the protected replacement. Acceptance
+after replacement is based on the exact frozen after-bytes/hash plus the valid
+committed recovery and receipt state.
+
+Observed parent/post-state checks:
+
+```text
+P5_02Q_PARENT_CHILD_EXIT=0
+P5_02Q_PARENT_CANARY_SHA256=86E94184EF6FF2A80F5CDFA04749C42328079E029D153D3A23D42EAB05059E19
+P5_02Q_PARENT_RECOVERY_COUNT=1
+P5_02Q_PARENT_AUTOMATIC_RESTORE=false
+P5_02Q_CONFIG_UNCHANGED=true
+P5_02Q_ENV_UNCHANGED=true
+P5_02Q_INSTALLED_PLUGIN_UNCHANGED=true
+P5_02Q_PARENT_MUTATION_MODE_ABSENT=true
+HERMES_MANUAL_OFF=true
+P5_02Q_PARENT_AFTER_HASH_MATCH=true
+P5_02Q_PARENT_RECOVERY_COUNT_MATCH=true
+P5_02Q_GATE_RESULT=PASS
+```
+
+No automatic restore was attempted. The committed recovery record is retained
+as production evidence and as the input to a later separately authorized
+restore qualification.
+
+## Acceptance
+
+P5-02Q is accepted.
+
+Accepted production state:
+
+- canary is in the frozen `state: after` form;
+- canary SHA-256 is
+  `86e94184ef6ff2a80f5cdfa04749c42328079e029d153d3a23d42eab05059e19`;
+- current canary Windows file identity is
+  `5e1aeb8a1aeb5d91:19c10700000020000000000000000000`;
+- exactly one committed production recovery record exists;
+- that record has zero attention/reconciliation requirement;
+- mutation mode is absent/disabled after the bounded action;
+- COMPANION config and `.env` are unchanged;
+- installed plugin bytes are unchanged;
+- Hermes remains manual-off.
 
 ## Acceptance boundary
 
