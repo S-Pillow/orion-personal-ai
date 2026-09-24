@@ -1,6 +1,6 @@
 # P5-02P — First Production Canary Edit Readiness
 
-Status: **SOURCE-ONLY READINESS / NO PRODUCTION MUTATION AUTHORIZED**
+Status: **PASS / READINESS COMPLETE / NO PRODUCTION MUTATION AUTHORIZED**
 
 Date: 2026-09-23
 
@@ -452,6 +452,72 @@ production recovery remained empty, and Hermes remained manual-off.
 
 The canary must now be treated as a controlled Phase 5 test asset. Do not edit,
 move, rename, or delete it outside the later explicitly authorized Orion gates.
+
+## Observed P5-02P-B read-only readiness — PASS
+
+The separately authorized read-only production-canary readiness gate completed
+successfully on the accepted Windows environment.
+
+Observed installed/runtime checks:
+
+```text
+P5_02P_INSTALLED_SOURCE_MATCH=true
+P5_02P_INSTALLED_PLUGIN_DOCTOR=PASS
+P5_02P_HERMES_MANUAL_OFF=true
+P5_02P_READINESS=PASS
+P5_02P_MUTATION_MODE=disabled
+P5_02P_MUTATION_ALLOWED=false
+P5_02P_RECOVERY_INVENTORY_COUNT=0
+P5_02P_RECOVERY_ATTENTION_COUNT=0
+```
+
+Frozen canary identity and content contract:
+
+```text
+P5_02P_CANARY_RELATIVE_PATH=_Orion-P5-Canary.md
+P5_02P_CANARY_CANONICAL_PATH=C:\Personal\Me\_Orion-P5-Canary.md
+P5_02P_CANARY_FILE_ID=5e1aeb8a1aeb5d91:cba20a00000012000000000000000000
+P5_02P_CANARY_BEFORE_SHA256=ddb08a8ca9ab5d06185a692182a742210817cba1d5523c841d6a371dfdb57b4c
+P5_02P_CANARY_AFTER_SHA256=86e94184ef6ff2a80f5cdfa04749c42328079e029d153d3a23d42eab05059e19
+P5_02P_CANARY_DIFF_SHA256=6642d44372449d01e1ec3f5d325bd2b372f52cc58610293bcccf0e4e4ec996e8
+```
+
+Exact unified diff:
+
+```diff
+--- vault/_Orion-P5-Canary.md
++++ vault/_Orion-P5-Canary.md
+@@ -1,3 +1,3 @@
+ # Orion Phase 5 Canary
+-state: before
++state: after
+ gate: first-production-edit
+```
+
+Observed side-effect-free/post-state checks:
+
+```text
+P5_02P_PREVIEW_MUTATION=false
+P5_02P_CANARY_UNCHANGED=true
+P5_02P_READINESS_WRAPPER=PASS
+P5_02P_MUTATION_INVOCATION=false
+HERMES_MANUAL_OFF=true
+```
+
+P5-02P readiness is therefore complete:
+
+- deterministic exact-tool Hermes dispatch with real human `once` approval is proven;
+- the controlled canary fixture exists and matches the frozen before bytes;
+- installed source still matches the P5-02N-qualified source;
+- the exact Windows file identity is frozen;
+- exact before/after/diff hashes are frozen;
+- production mutation remains disabled;
+- production recovery remains empty;
+- Hermes remains manual-off.
+
+P5-02Q is the next boundary and requires a separate owner authorization naming
+the exact `edit_note` action and this exact canary target/identity/hash/diff
+contract.
 
 ## Prepared tomorrow-night command sequence
 
