@@ -424,6 +424,35 @@ Hermes upgrade is authorized by this gate. Track the warning separately before
 any future Hermes upgrade/maintenance ticket; do not mix that work into the
 first production canary gate.
 
+## Observed P5-02P-A canary fixture creation — PASS
+
+The separately authorized production canary fixture creation completed
+successfully on the accepted Windows environment.
+
+Observed result:
+
+```text
+P5_02P_CANARY_CREATE=PASS
+P5_02P_CANARY_RELATIVE_PATH=_Orion-P5-Canary.md
+P5_02P_CANARY_CANONICAL_PATH=C:\Personal\Me\_Orion-P5-Canary.md
+P5_02P_CANARY_BEFORE_SHA256=DDB08A8CA9AB5D06185A692182A742210817CBA1D5523C841D6A371DFDB57B4C
+P5_02P_CANARY_UTF8_NO_BOM=true
+P5_02P_CANARY_NEWLINES=LF
+PRODUCTION_MUTATION_MODE=disabled
+P5_02P_RECOVERY_INVENTORY_COUNT=0
+HERMES_MANUAL_OFF=true
+P5_02P_CANARY_RETAIN_FOR_FUTURE_GATES=true
+```
+
+The created fixture exactly matches the frozen before-hash contract.
+
+This was an operator-created test fixture, not an Orion mutation acceptance.
+No Orion apply tool was invoked, production mutation mode was not enabled,
+production recovery remained empty, and Hermes remained manual-off.
+
+The canary must now be treated as a controlled Phase 5 test asset. Do not edit,
+move, rename, or delete it outside the later explicitly authorized Orion gates.
+
 ## Prepared tomorrow-night command sequence
 
 These commands are documented for convenience. Their presence in source is not
