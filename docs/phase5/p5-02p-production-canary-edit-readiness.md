@@ -368,6 +368,62 @@ without any model-selected tool invocation.
 The Runs API remains the correct product-facing asynchronous approval surface,
 but it is not required for the first deterministic canary gate.
 
+## Observed deterministic dispatch proof — PASS
+
+The non-production deterministic registered-dispatch proof passed on the accepted
+Windows/Hermes environment on 2026-09-23.
+
+Observed preconditions:
+
+```text
+P5_02P_DISPATCH_PRECHECK=PASS
+P5_02P_INSTALLED_SOURCE_MATCH=true
+P5_02P_PRODUCTION_RECOVERY_EMPTY=true
+P5_02P_HERMES_MANUAL_OFF=true
+```
+
+Hermes presented exactly one interactive plugin approval for the disposable
+preview and the owner selected `once`.
+
+Observed proof result:
+
+```text
+P5_02P_DETERMINISTIC_REGISTERED_DISPATCH=PASS
+P5_02P_REGISTERED_HANDLER=apply_plan_production_guarded
+P5_02P_PRE_TOOL_CALL_PATH_EXERCISED=true
+P5_02P_PRIVATE_PRODUCTION_EXECUTOR_CALLED=false
+P5_02P_APPROVAL_ONLY_PROBE_DELEGATIONS=1
+P5_02P_FRESH_HUMAN_ONCE_OBSERVED=true
+P5_02P_APPROVAL_SURFACE=cli
+P5_02P_AUTHORIZATION_REUSABLE=false
+P5_02P_PRODUCTION_FILESYSTEM_MUTATION=false
+P5_02P_DISPOSABLE_NOTE_UNCHANGED=true
+P5_02P_DISPOSABLE_RECOVERY_EMPTY=true
+P5_02P_DISPATCH_WRAPPER=PASS
+P5_02P_PRODUCTION_RECOVERY_STILL_EMPTY=true
+P5_02P_CONFIG_UNCHANGED=true
+P5_02P_PRODUCTION_MUTATION=false
+HERMES_MANUAL_OFF=true
+```
+
+This closes the previously open invocation-path question for the first bounded
+production canary: `model_tools.handle_function_call()` can deterministically
+dispatch the exact registered Orion apply tool while preserving the genuine
+Hermes generic approval observer, without using an LLM to select the tool.
+
+The real private production executor was not called during this proof.
+
+### Runtime warning observed
+
+The probe process emitted Hermes' existing warning that its linked SQLite
+3.40.1 is affected by the WAL-reset corruption issue and therefore Hermes is
+falling back to `journal_mode=DELETE` for the affected state database.
+
+This did not fail or alter the P5-02P proof and no state-database repair or
+Hermes upgrade is authorized by this gate. Track the warning separately before
+any future Hermes upgrade/maintenance ticket; do not mix that work into the
+first production canary gate.
+
 ## Prepared tomorrow-night command sequence
 
 These commands are documented for convenience. Their presence in source is not
