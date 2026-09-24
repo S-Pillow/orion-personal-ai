@@ -1,6 +1,6 @@
 # P5-02S — Production Move Readiness
 
-Status: **P5-02S-A PASS / CONTROLLED MOVE FIXTURE CREATED / NO PRODUCTION MOVE AUTHORIZED**
+Status: **PASS / MOVE READINESS COMPLETE / NO PRODUCTION MOVE AUTHORIZED**
 
 Date: 2026-09-24
 
@@ -262,6 +262,87 @@ Literal operator token:
 ```text
 I_AUTHORIZE_P5_02S_MOVE_READINESS
 ```
+
+## Observed P5-02S-B read-only move readiness — PASS
+
+The separately authorized read-only production move readiness gate completed
+successfully on the accepted Windows environment.
+
+Observed installed/runtime checks:
+
+```text
+P5_02S_READINESS_PRECHECK=PASS
+P5_02S_INSTALLED_SOURCE_MATCH=true
+P5_02S_INSTALLED_PLUGIN_DOCTOR=PASS
+P5_02S_VERIFIER_COMPILE=PASS
+P5_02S_HERMES_MANUAL_OFF=true
+P5_02S_MOVE_READINESS=PASS
+P5_02S_MUTATION_MODE=disabled
+P5_02S_MUTATION_ALLOWED=false
+P5_02S_RECOVERY_INVENTORY_COUNT=2
+P5_02S_RECOVERY_ATTENTION_COUNT=0
+```
+
+Frozen source/target identity and move-preview contract:
+
+```text
+P5_02S_SOURCE_RELATIVE_PATH=_Orion-P5-Move-Canary.md
+P5_02S_SOURCE_CANONICAL_PATH=C:\Personal\Orion-Inbox\_Orion-P5-Move-Canary.md
+P5_02S_SOURCE_FILE_ID=5e1aeb8a1aeb5d91:eec0070000001f000000000000000000
+P5_02S_SOURCE_SHA256=132ff51d62fd7fd8827d7222e233617e92c55dc21d40ff68164f2238ba0fd132
+P5_02S_TARGET_RELATIVE_PATH=_Orion-P5-Move-Canary.md
+P5_02S_TARGET_CANONICAL_PATH=C:\Personal\Me\_Orion-P5-Move-Canary.md
+P5_02S_TARGET_STATE=absent
+P5_02S_MOVE_DIFF_SHA256=61e4f48a0964aec273217a87dc3d7ac706f2a6525886420ee5e6d80fcb26a587
+```
+
+Exact registered move preview:
+
+```diff
+--- /dev/null
++++ vault/_Orion-P5-Move-Canary.md
+@@ -0,0 +1,9 @@
++---
++orion_draft: true
++status: draft
++date: 2026-09-24
++origin: p5-02s-controlled-fixture
++---
++# Orion Phase 5 Move Canary
++state: inbox
++gate: first-production-move
+```
+
+Observed side-effect-free/post-state checks:
+
+```text
+P5_02S_PREVIEW_MUTATION=false
+P5_02S_SOURCE_UNCHANGED=true
+P5_02S_TARGET_STILL_ABSENT=true
+P5_02S_READINESS_WRAPPER=PASS
+P5_02S_MUTATION_INVOCATION=false
+P5_02S_CONFIG_UNCHANGED=true
+P5_02S_ENV_UNCHANGED=true
+P5_02S_INSTALLED_PLUGIN_UNCHANGED=true
+HERMES_MANUAL_OFF=true
+```
+
+The Hermes process also emitted the already-known linked SQLite 3.40.1
+WAL-reset warning and used `journal_mode=DELETE`. That runtime-maintenance
+warning did not affect this read-only gate and remains outside P5-02S scope.
+
+P5-02S readiness is therefore complete:
+
+- controlled move fixture exists and matches the frozen bytes/hash;
+- actual Windows source file identity is frozen;
+- registered move preview exactly matches the frozen source/target/diff contract;
+- target remains absent;
+- production recovery remains at the accepted two-record/zero-attention baseline;
+- mutation mode remains disabled;
+- no apply/mutation invocation occurred;
+- Hermes remains manual-off.
+
+P5-02T remains a separate production-mutation authorization boundary.
 
 ## Planned later gates — not authorized
 
