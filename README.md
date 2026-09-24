@@ -283,7 +283,9 @@ P5-02Q is accepted as the first real Orion production mutation. Exactly one `edi
 
 P5-02R is accepted as the first production restore qualification. The exact P5-02Q canary edit was restored to the original before-hash through the registered guarded wrapper and a fresh human `once`. New restore recovery ID `1b1e26014063b3156adb2152c703371bf5c78234af9dfe9ab51e045e652d7b27` is valid/committed; the origin P5-02Q record reads `committed_then_changed`; recovery count is 2 with zero attention. Mutation mode is disabled and Hermes is manual-off.
 
-Any further production mutation or recovery cleanup requires a new explicit authorization.
+P5-02S production-move readiness is prepared source-only on `feature/orion-phase5-p5-02s-production-move-readiness`. It freezes a dedicated controlled inbox draft/absent-vault-target contract plus exact source/diff hashes and provides separate fixture-creation and read-only readiness gates. No P5-02S script has been run, no move fixture has been created, and no production move is authorized.
+
+Any fixture creation, production move, move-source restore, delete, or recovery cleanup requires a new explicit authorization.
 
 The safe project-status shorthand is:
 
