@@ -130,7 +130,7 @@ Tracking:
 - draft PR #16 — Phase 4 P4-04 push-to-talk voice foundation
 - issue #19 — P4-04B resume native TTS/live voice acceptance after Edge connectivity stabilizes
 
-### Phase 5 - source/runtime qualification accepted through P5-02X protected target delete
+### Phase 5 - canary closure accepted through P5-02Y audited recovery cleanup
 
 Phase 5 has advanced through source qualification, preview-only COMPANION installation, installed-runtime disposable mutation qualification, production recovery-root acceptance, recovery-root persistence, and live runtime-ingestion verification.
 
@@ -153,7 +153,8 @@ Accepted checkpoints:
 - P5-02U: move-source restore accepted — the committed P5-02T move recovery recreated the inbox source through the guarded registered apply path with a fresh human `once`; source and vault target are both present at SHA-256 `132ff51d62fd7fd8827d7222e233617e92c55dc21d40ff68164f2238ba0fd132`, origin move now reads `committed_then_changed`, new restore recovery `5c9b264a465f468c2f172f880fc89878e63368480c3eecfd0fb37212b159e175` is valid/committed, total recovery count is 4 with zero attention, mutation mode is disabled, and Hermes remains manual-off;
 - P5-02V: protected-delete source candidate `0.3.0` accepted after compile, full Phase 5 tests, source plugin doctor, and unchanged P5-02U production-state verification;
 - P5-02W: exact P5-02V-qualified `0.3.0` plugin installed and runtime-qualified with rollback captured, protected-delete preview live in a five-tool `orion_vault` toolset, guarded apply/private-executor invariants intact, mutation disabled, recovery still 4/0, protected files/config unchanged, and Hermes restored to manual-off;
-- P5-02X: protected retained-target deletion accepted — the exact vault target was deleted through registered `preview_delete` + guarded apply with fresh human `once`; restored inbox source remained unchanged, target became absent, delete recovery `e48123ceecc2be50afb2902511f64397f5dcfa35338ab9fd785cbf7278658b36` is committed, recovery is 5/0, mutation returned to disabled, and Hermes remained manual-off.
+- P5-02X: protected retained-target deletion accepted — the exact vault target was deleted through registered `preview_delete` + guarded apply with fresh human `once`; restored inbox source remained unchanged, target became absent, delete recovery `e48123ceecc2be50afb2902511f64397f5dcfa35338ab9fd785cbf7278658b36` was committed, recovery became 5/0, mutation returned to disabled, and Hermes remained manual-off;
+- P5-02Y: exact audited Phase 5 recovery cleanup accepted — all five approved canary recovery directories were removed individually under the owner-approved exact-count/exact-ID retention policy, each removal was durably journaled, the external audit was committed at SHA-256 `9aff3bff771ee8745642510c5f4561de3f8395c490e0d24fc22563cc85650537`, production recovery is now 0/0 with the root retained empty, source remains valid, target remains absent, mutation remains disabled, and Hermes remains manual-off.
 
 Current installed/runtime boundary:
 
@@ -165,14 +166,15 @@ Current installed/runtime boundary:
 - registered `orion_vault_apply_plan` points to `apply_plan_production_guarded`;
 - disabled public apply refuses with `production_mutation_not_enabled` before human approval or private-executor delegation;
 - `_execute_production_plan_candidate()` remains private and unregistered;
-- production recovery inventory now contains exactly five valid records with zero attention state;
+- production recovery inventory is now empty: 0 records / 0 attention, after accepted P5-02Y audited pruning of the five completed Phase 5 canary records;
 - controlled canary `C:\Personal\Me\_Orion-P5-Canary.md` is restored to the original `state: before` form with SHA-256 `ddb08a8ca9ab5d06185a692182a742210817cba1d5523c841d6a371dfdb57b4c`;
 - current canary Windows file identity is `5e1aeb8a1aeb5d91:428a0300000031000000000000000000`;
 - origin P5-02Q recovery ID `33d3dc72984b872778680106dabfc2260eab9a91be130b9e9d6dd1351483de3f` remains valid and reads `committed_then_changed`;
 - P5-02R restore recovery ID `1b1e26014063b3156adb2152c703371bf5c78234af9dfe9ab51e045e652d7b27` is valid and `committed`;
 - P5-02T move recovery ID `8f79ba8396c2c5877bc9c28c8a5cdbfa55dda850c70ce18c324524d8a5e461a6` is valid and now reads `committed_then_changed`;
 - P5-02U move-source-restore recovery ID `5c9b264a465f468c2f172f880fc89878e63368480c3eecfd0fb37212b159e175` is valid and `committed`;
-- P5-02X delete recovery ID `e48123ceecc2be50afb2902511f64397f5dcfa35338ab9fd785cbf7278658b36` is valid and `committed`;
+- P5-02X delete recovery ID `e48123ceecc2be50afb2902511f64397f5dcfa35338ab9fd785cbf7278658b36` was valid and `committed` before P5-02Y pruning;
+- P5-02Y durable cleanup audit is retained at `C:\Users\spill\AppData\Local\hermes\profiles\companion\orion\recovery-audit\p5-02y-phase5-canary-recovery-cleanup-20260925-041448.json` with SHA-256 `9aff3bff771ee8745642510c5f4561de3f8395c490e0d24fc22563cc85650537`;
 - controlled move source `C:\Personal\Orion-Inbox\_Orion-P5-Move-Canary.md` remains present with SHA-256 `132ff51d62fd7fd8827d7222e233617e92c55dc21d40ff68164f2238ba0fd132` and Windows file identity `5e1aeb8a1aeb5d91:67660100000036010000000000000000`;
 - controlled move target `C:\Personal\Me\_Orion-P5-Move-Canary.md` is absent after the accepted protected delete;
 - COMPANION `config.yaml` and `.env` remain unchanged;
@@ -183,7 +185,7 @@ P5-02O rollback capture:
 
 `C:\Users\spill\AppData\Local\hermes\profiles\companion\orion\backups\p5-02o-installed-disabled-20260923-040536`
 
-The P5-02Q edit, P5-02R restore, P5-02T first production move, P5-02U move-source restore, P5-02V protected-delete source qualification, P5-02W installed-disabled qualification, and P5-02X protected target deletion are accepted. P5-02Y exact audited recovery cleanup is the remaining authorized closure gate.
+The P5-02Q edit, P5-02R restore, P5-02T first production move, P5-02U move-source restore, P5-02V protected-delete source qualification, P5-02W installed-disabled qualification, P5-02X protected target deletion, and P5-02Y exact audited recovery cleanup are accepted. The controlled Phase 5 canary transaction/recovery chain is closed; no further Phase 5 mutation is authorized by that closure.
 
 ## Accepted manual-off lifecycle
 
