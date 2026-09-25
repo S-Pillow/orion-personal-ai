@@ -1,6 +1,6 @@
 # P5-02Y — Exact Audited Phase 5 Recovery Cleanup
 
-Status: **AUTHORIZED / GATE PREPARED / EXECUTION PENDING**
+Status: **PASS / AUDITED RECOVERY CLEANUP ACCEPTED / PHASE 5 CANARY CLOSURE COMPLETE**
 
 Authorization date: 2026-09-25
 
@@ -194,8 +194,76 @@ chain is closed and its runtime recovery artifacts are pruned under the explicit
 owner-approved policy, while its durable audit and repository acceptance
 records remain.
 
+## Accepted Windows execution result
+
+Observed operator result:
+
+```text
+P5_02Y_PRECHECK=PASS
+P5_02Y_INSTALLED_SOURCE_MATCH=true
+P5_02Y_INSTALLED_PLUGIN_VERSION=0.3.0
+P5_02Y_INSTALLED_PLUGIN_DOCTOR=PASS
+P5_02Y_AUDIT_HELPER_COMPILE=PASS
+P5_02Y_POLICY_KIND=exact_count_exact_id
+P5_02Y_APPROVED_RECOVERY_COUNT=5
+P5_02Y_TARGET_STATE_BEFORE=absent
+P5_02Y_SOURCE_SHA256=132FF51D62FD7FD8827D7222E233617E92C55DC21D40FF68164F2238BA0FD132
+P5_02Y_HERMES_MANUAL_OFF=true
+P5_02Y_AUDIT_PREPARE=PASS
+P5_02Y_RECOVERY_ATTENTION_COUNT=0
+P5_02Y_UNRESOLVED_RECORDS=0
+P5_02Y_REFERENCE_SOURCE_VALID=true
+P5_02Y_REFERENCE_TARGET_ABSENT=true
+P5_02Y_AUDIT_FINALIZE=PASS
+P5_02Y_AUDIT_STATUS=committed
+P5_02Y_PRODUCTION_RECOVERY_COUNT_AFTER=0
+P5_02Y_PRODUCTION_RECOVERY_ATTENTION_AFTER=0
+P5_02Y_REFERENCE_SOURCE_VALID_AFTER=true
+P5_02Y_REFERENCE_TARGET_ABSENT_AFTER=true
+P5_02Y_RECOVERY_CLEANUP=PASS
+P5_02Y_REMOVED_RECOVERY_COUNT=5
+P5_02Y_PRODUCTION_RECOVERY_ROOT_EMPTY=true
+P5_02Y_SOURCE_UNCHANGED=true
+P5_02Y_TARGET_REMAINS_ABSENT=true
+P5_02Y_EDIT_CANARY_UNCHANGED=true
+P5_02Y_CONFIG_UNCHANGED=true
+P5_02Y_ENV_UNCHANGED=true
+P5_02Y_INSTALLED_PLUGIN_UNCHANGED=true
+P5_02Y_MUTATION_MODE_PERSISTED=false
+P5_02Y_AUTOMATIC_RECOVERY_RESTORE=false
+HERMES_MANUAL_OFF=true
+P5_02Y_GATE_RESULT=PASS
+```
+
+Committed audit:
+
+```text
+C:\Users\spill\AppData\Local\hermes\profiles\companion\orion\recovery-audit\p5-02y-phase5-canary-recovery-cleanup-20260925-041448.json
+```
+
+Final audit SHA-256:
+
+```text
+9aff3bff771ee8745642510c5f4561de3f8395c490e0d24fc22563cc85650537
+```
+
+All five approved recovery IDs were removed individually and each removal was
+durably journaled before the next deletion. The final audit was committed only
+after the production recovery root was empty and native inventory reported
+0 records / 0 attention.
+
+P5-02Y is accepted.
+
 ## Current stop point
 
-P5-02Y is authorized and the audited cleanup gate is prepared.
+The controlled Phase 5 canary transaction/recovery chain is closed.
 
-No recovery record has been removed by repository preparation.
+Production recovery root exists and is empty. Its five prior canary recovery
+records were pruned under the owner-approved exact-count/exact-ID policy, while
+the durable external audit above remains as evidence of what was removed.
+
+The restored inbox source remains present and valid, the protected vault target
+remains absent, the edit canary is unchanged, installed plugin/config/.env are
+unchanged, mutation mode remains absent/disabled, and Hermes remains manual-off.
+
+No further Phase 5 mutation is authorized by this closure result.
