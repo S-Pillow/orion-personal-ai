@@ -4,7 +4,7 @@ This directory contains Orion's native Hermes vault-actions plugin source.
 
 ## Current accepted state
 
-Phase 5 source/runtime qualification is accepted through P5-02W, including the guarded wrapper, bounded production edit/restore/move/move-source-restore sequence, protected-delete source qualification, and installed-disabled protected-delete qualification.
+Phase 5 source/runtime qualification is accepted through P5-02X, including the guarded wrapper, bounded production edit/restore/move/move-source-restore sequence, protected-delete source/runtime qualification, and the first protected production delete.
 
 The plugin is installed and enabled under the COMPANION profile with access limited to the configured `iai-mcp` server. The live runtime has loaded the expected five-tool `orion_vault` toolset, including read-only `orion_vault_preview_delete`.
 
@@ -16,15 +16,16 @@ Production mutation remains disabled:
 - disabled `pre_tool_call` blocks without creating an approval rule;
 - disabled public apply returns `production_mutation_not_enabled` without entering the private production executor;
 - `_execute_production_plan_candidate()` remains private and unregistered;
-- production recovery inventory contains exactly four valid records with zero attention state;
+- production recovery inventory contains exactly five valid records with zero attention state;
 - one real production `edit_note`, its separately authorized `restore_edit`, one bounded production `move_draft`, and one bounded `restore_move_source` have been accepted through the guarded registered apply path;
 - the canary is restored to the frozen before-state with SHA-256 `ddb08a8ca9ab5d06185a692182a742210817cba1d5523c841d6a371dfdb57b4c`;
 - origin edit recovery `33d3dc72984b872778680106dabfc2260eab9a91be130b9e9d6dd1351483de3f` remains valid as `committed_then_changed`;
 - restore recovery `1b1e26014063b3156adb2152c703371bf5c78234af9dfe9ab51e045e652d7b27` is valid and `committed`;
 - move recovery `8f79ba8396c2c5877bc9c28c8a5cdbfa55dda850c70ce18c324524d8a5e461a6` is valid and now reads `committed_then_changed`;
 - move-source-restore recovery `5c9b264a465f468c2f172f880fc89878e63368480c3eecfd0fb37212b159e175` is valid and `committed`;
-- controlled move source and vault target are both present at SHA-256 `132ff51d62fd7fd8827d7222e233617e92c55dc21d40ff68164f2238ba0fd132`;
-- mutation mode returned to disabled after the bounded restore.
+- protected-delete recovery `e48123ceecc2be50afb2902511f64397f5dcfa35338ab9fd785cbf7278658b36` is valid and `committed`;
+- controlled move source remains present at SHA-256 `132ff51d62fd7fd8827d7222e233617e92c55dc21d40ff68164f2238ba0fd132` while the controlled vault target is absent;
+- mutation mode returned to disabled after the bounded delete.
 
 Accepted installed source:
 
@@ -248,3 +249,16 @@ restored move source, retained vault target, edit canary, COMPANION config, and
 P5-02X is the next authorized closure gate for the exact retained-target delete.
 Recovery cleanup remains P5-02Y after the final post-delete recovery set is
 known.
+
+
+## P5-02X protected target delete accepted
+
+P5-02X used the registered read-only delete preview and guarded apply path to
+delete exactly `C:\Personal\Me\_Orion-P5-Move-Canary.md` after fresh human
+`once` approval. The restored inbox source remained unchanged at the frozen
+SHA-256 and Windows file identity. Delete recovery
+`e48123ceecc2be50afb2902511f64397f5dcfa35338ab9fd785cbf7278658b36`
+is committed; production recovery is 5 valid records / 0 attention; mutation
+mode is disabled; Hermes is manual-off.
+
+P5-02Y exact audited recovery cleanup is the remaining authorized closure gate.
