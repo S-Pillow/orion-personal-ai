@@ -6,21 +6,21 @@ Authorization date: 2026-09-25
 
 Branch:
 
-\`\`\`text
+```text
 feature/orion-phase5-p5-02t-first-production-move
-\`\`\`
+```
 
 Repository baseline:
 
-\`\`\`text
+```text
 main after P5-02S + PRD v2.9 merge: fc89e4efbe6869a26c41505acb553585c6fbb90e
-\`\`\`
+```
 
 Installed Orion plugin source remains pinned to the P5-02N-qualified code:
 
-\`\`\`text
+```text
 faf8b4787d8e6fb668eb5e9d754104910b4b401a
-\`\`\`
+```
 
 ## Owner authorization
 
@@ -28,19 +28,19 @@ Steven explicitly authorized P5-02T on 2026-09-25.
 
 That authorization is limited to exactly one production action:
 
-\`\`\`text
+```text
 action: move_draft
 source: C:\Personal\Orion-Inbox\_Orion-P5-Move-Canary.md
 target: C:\Personal\Me\_Orion-P5-Move-Canary.md
-\`\`\`
+```
 
 No other source, target, action, recovery mutation, cleanup, deletion, or follow-up restore is authorized by P5-02T.
 
 The operator script requires the literal scope token:
 
-\`\`\`text
+```text
 I_AUTHORIZE_P5_02T_EXACT_PRODUCTION_MOVE
-\`\`\`
+```
 
 That token authorizes only the bounded script scope. The actual production mutation still requires the separate live Hermes human **ONCE** decision after the exact move preview is shown.
 
@@ -65,49 +65,49 @@ Accepted P5-02S state immediately before P5-02T:
 
 Source relative path:
 
-\`\`\`text
+```text
 _Orion-P5-Move-Canary.md
-\`\`\`
+```
 
 Source canonical path:
 
-\`\`\`text
+```text
 C:\Personal\Orion-Inbox\_Orion-P5-Move-Canary.md
-\`\`\`
+```
 
 Target relative path:
 
-\`\`\`text
+```text
 _Orion-P5-Move-Canary.md
-\`\`\`
+```
 
 Target canonical path:
 
-\`\`\`text
+```text
 C:\Personal\Me\_Orion-P5-Move-Canary.md
-\`\`\`
+```
 
 Frozen source SHA-256:
 
-\`\`\`text
+```text
 132ff51d62fd7fd8827d7222e233617e92c55dc21d40ff68164f2238ba0fd132
-\`\`\`
+```
 
 Frozen source Windows file identity:
 
-\`\`\`text
+```text
 5e1aeb8a1aeb5d91:eec0070000001f000000000000000000
-\`\`\`
+```
 
 Frozen exact diff SHA-256:
 
-\`\`\`text
+```text
 61e4f48a0964aec273217a87dc3d7ac706f2a6525886420ee5e6d80fcb26a587
-\`\`\`
+```
 
 Exact source bytes, UTF-8 without BOM and LF newlines:
 
-\`\`\`text
+```text
 ---
 orion_draft: true
 status: draft
@@ -117,13 +117,13 @@ origin: p5-02s-controlled-fixture
 # Orion Phase 5 Move Canary
 state: inbox
 gate: first-production-move
-\`\`\`
+```
 
 with one trailing LF.
 
 Exact move preview:
 
-\`\`\`diff
+```diff
 --- /dev/null
 +++ vault/_Orion-P5-Move-Canary.md
 @@ -0,0 +1,9 @@
@@ -136,7 +136,7 @@ Exact move preview:
 +# Orion Phase 5 Move Canary
 +state: inbox
 +gate: first-production-move
-\`\`\`
+```
 
 The target must remain absent until the qualified move executor creates it.
 
@@ -144,15 +144,15 @@ The target must remain absent until the qualified move executor creates it.
 
 P5-02T requires exactly these two existing recovery IDs before execution:
 
-\`\`\`text
+```text
 33d3dc72984b872778680106dabfc2260eab9a91be130b9e9d6dd1351483de3f
 1b1e26014063b3156adb2152c703371bf5c78234af9dfe9ab51e045e652d7b27
-\`\`\`
+```
 
 Expected read-time state:
 
-- P5-02Q edit record: valid, no attention, manifest committed, classification \`committed_then_changed\`;
-- P5-02R restore record: valid, no attention, manifest committed, classification \`committed\`;
+- P5-02Q edit record: valid, no attention, manifest committed, classification `committed_then_changed`;
+- P5-02R restore record: valid, no attention, manifest committed, classification `committed`;
 - total recovery count = 2;
 - attention count = 0.
 
@@ -160,10 +160,10 @@ Any different recovery inventory blocks P5-02T before the move approval.
 
 ## Gate artifacts
 
-\`\`\`text
+```text
 scripts/phase5/p5-02t-first-production-move.ps1
 scripts/phase5/p5-02t-first-production-move.py
-\`\`\`
+```
 
 The PowerShell wrapper:
 
@@ -181,7 +181,7 @@ The PowerShell wrapper:
 
 The Python runner independently:
 
-- binds both registered Orion move-preview/apply handlers to the exact verified installed \`plugin_dir\__init__.py\`;
+- binds both registered Orion move-preview/apply handlers to the exact verified installed `plugin_dir\__init__.py`;
 - requires the private production executor to remain unregistered;
 - validates the exact vault/inbox/recovery roots;
 - requires production mutation disabled before preview;
@@ -191,9 +191,9 @@ The Python runner independently:
 - dispatches the registered move preview while mutation remains disabled;
 - independently verifies every frozen plan field and the exact diff hash;
 - rechecks source bytes/file ID and absent target after preview;
-- enables \`ORION_P5_MUTATION_MODE=mutation_enabled\` only inside the child process immediately around one registered apply dispatch;
+- enables `ORION_P5_MUTATION_MODE=mutation_enabled` only inside the child process immediately around one registered apply dispatch;
 - requires a fresh Hermes human **ONCE** approval;
-- removes mutation mode in a \`finally\` path;
+- removes mutation mode in a `finally` path;
 - verifies source absent, target exact, and a new committed move recovery/receipt record;
 - preserves state and recovery evidence on any failure.
 
@@ -214,33 +214,33 @@ A successful P5-02T run must leave:
 - inbox source absent;
 - vault target present at the exact canonical target path;
 - vault target SHA-256 exactly
-  \`132ff51d62fd7fd8827d7222e233617e92c55dc21d40ff68164f2238ba0fd132\`;
+  `132ff51d62fd7fd8827d7222e233617e92c55dc21d40ff68164f2238ba0fd132`;
 - a new recovery ID equal to the immutable P5-02T move plan token;
-- new recovery action = \`move_draft\`;
-- new recovery manifest state = \`committed\`;
-- new recovery classification = \`committed\`;
-- new recovery backup file = \`source.bin\`;
+- new recovery action = `move_draft`;
+- new recovery manifest state = `committed`;
+- new recovery classification = `committed`;
+- new recovery backup file = `source.bin`;
 - new recovery backup SHA-256 = frozen source SHA-256;
 - new receipt committed/finalized with no reconciliation requirement;
-- approval surface = \`cli\`;
-- approval choice = \`once\`;
+- approval surface = `cli`;
+- approval choice = `once`;
 - authorization reusable = false;
 - production recovery inventory = exactly 3 valid records;
 - recovery attention count = 0;
 - previous P5-02Q/P5-02R records still valid with their accepted classifications;
 - mutation mode absent/disabled after the bounded child process;
-- COMPANION config and \`.env\` unchanged;
+- COMPANION config and `.env` unchanged;
 - installed Orion plugin unchanged;
 - unrelated edit canary unchanged;
 - Hermes manual-off.
 
 Expected new recovery-directory entries:
 
-\`\`\`text
+```text
 manifest.json
 receipt.json
 source.bin
-\`\`\`
+```
 
 ## Failure policy
 
@@ -263,7 +263,7 @@ If a failure occurs after target creation or source removal, preserve both files
 
 P5-02T authorization does **not** authorize P5-02U.
 
-A later P5-02U move-source restore, if separately authorized, may recreate the removed inbox source from the committed P5-02T \`source.bin\` recovery evidence.
+A later P5-02U move-source restore, if separately authorized, may recreate the removed inbox source from the committed P5-02T `source.bin` recovery evidence.
 
 That restore must not silently delete the vault target. Target deletion is a separate action class and remains separately approval-gated.
 
