@@ -4,7 +4,7 @@ This directory contains Orion's native Hermes vault-actions plugin source.
 
 ## Current accepted state
 
-Phase 5 source/runtime qualification is accepted through P5-02X, including the guarded wrapper, bounded production edit/restore/move/move-source-restore sequence, protected-delete source/runtime qualification, and the first protected production delete.
+Phase 5 source/runtime qualification and controlled canary closure are accepted through P5-02Y, including the guarded wrapper, bounded production edit/restore/move/move-source-restore sequence, protected-delete source/runtime qualification, the first protected production delete, and audited recovery cleanup.
 
 The plugin is installed and enabled under the COMPANION profile with access limited to the configured `iai-mcp` server. The live runtime has loaded the expected five-tool `orion_vault` toolset, including read-only `orion_vault_preview_delete`.
 
@@ -16,7 +16,7 @@ Production mutation remains disabled:
 - disabled `pre_tool_call` blocks without creating an approval rule;
 - disabled public apply returns `production_mutation_not_enabled` without entering the private production executor;
 - `_execute_production_plan_candidate()` remains private and unregistered;
-- production recovery inventory contains exactly five valid records with zero attention state;
+- production recovery inventory is empty: 0 records / 0 attention, after accepted P5-02Y audited pruning of the five completed canary records;
 - one real production `edit_note`, its separately authorized `restore_edit`, one bounded production `move_draft`, and one bounded `restore_move_source` have been accepted through the guarded registered apply path;
 - the canary is restored to the frozen before-state with SHA-256 `ddb08a8ca9ab5d06185a692182a742210817cba1d5523c841d6a371dfdb57b4c`;
 - origin edit recovery `33d3dc72984b872778680106dabfc2260eab9a91be130b9e9d6dd1351483de3f` remains valid as `committed_then_changed`;
@@ -262,3 +262,31 @@ is committed; production recovery is 5 valid records / 0 attention; mutation
 mode is disabled; Hermes is manual-off.
 
 P5-02Y exact audited recovery cleanup is the remaining authorized closure gate.
+
+
+## P5-02Y audited recovery cleanup accepted
+
+P5-02Y removed exactly the five approved completed Phase 5 canary recovery
+directories under the owner-approved `exact_count_exact_id` retention policy.
+Each removal was durably journaled before the next deletion, and the external
+audit was committed only after native production recovery inventory reached
+0 records / 0 attention.
+
+Committed audit:
+
+```text
+C:\Users\spill\AppData\Local\hermes\profiles\companion\orion\recovery-audit\p5-02y-phase5-canary-recovery-cleanup-20260925-041448.json
+```
+
+Final audit SHA-256:
+
+```text
+9aff3bff771ee8745642510c5f4561de3f8395c490e0d24fc22563cc85650537
+```
+
+The restored inbox source remains valid, the protected vault target remains
+absent, the edit canary and installed plugin/config/.env are unchanged,
+mutation mode remains absent/disabled, and Hermes is manual-off.
+
+The controlled Phase 5 canary transaction/recovery chain is closed. This
+closure does not grant authority for unrelated future mutations.
