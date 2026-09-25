@@ -4,14 +4,14 @@ Orion is a privacy-first, local-first personal AI companion for **native Windows
 
 ## Controlling baseline
 
-The controlling product requirements document is **ORION — Master PRD v2.8**, approved 2026-09-10.
+The controlling product requirements document is **ORION — Master PRD v2.9**, approved 2026-09-24.
 
 Canonical artifact and approval record:
 
-- `docs/prd/orion-master-prd-v2.8-ai-optimized-approved.docx`
-- `docs/prd/orion-master-prd-v2.8-approval-record-2026-09-10.md`
+- `docs/prd/orion-master-prd-v2.9-ai-optimized-approved.docx`
+- `docs/prd/orion-master-prd-v2.9-approval-record-2026-09-24.md`
 
-PRD v2.8 supersedes v2.7. It preserves the accepted native-Windows/manual-off foundation while defining Hermes as the runtime and preferred native voice/wake authority, iai as the persistent-memory authority, and Orion as the living visual control-and-presentation layer.
+PRD v2.9 supersedes v2.8. It preserves the accepted native-Windows/manual-off authority model while adding explicit contracts for truthful runtime-to-HUD projection, reconnect durability, richer Phase 5 action/evidence presentation, bounded voice-recorder hardening, durable reminder recovery semantics, and deferred Persistent Goal Mode boundaries.
 
 The accepted **manual-off** lifecycle model remains unchanged:
 
@@ -130,7 +130,7 @@ Tracking:
 - draft PR #16 — Phase 4 P4-04 push-to-talk voice foundation
 - issue #19 — P4-04B resume native TTS/live voice acceptance after Edge connectivity stabilizes
 
-### Phase 5 - source/runtime qualification accepted through production restore P5-02R
+### Phase 5 - source/runtime qualification accepted through P5-02S move readiness
 
 Phase 5 has advanced through source qualification, preview-only COMPANION installation, installed-runtime disposable mutation qualification, production recovery-root acceptance, recovery-root persistence, and live runtime-ingestion verification.
 
@@ -222,7 +222,7 @@ Accepted pins remain:
 - iai `3.0.8`
 - installed Ollama observed during Phase 2A: `0.32.15`
 
-Any newer Hermes, iai, Ollama, model, or presentation dependency is a **candidate** until separately qualified under PRD v2.8. Do not replace an accepted dependency merely because a newer release exists.
+Any newer Hermes, iai, Ollama, model, or presentation dependency is a **candidate** until separately qualified under PRD v2.9. Do not replace an accepted dependency merely because a newer release exists.
 
 Dependency-watch record:
 
@@ -238,6 +238,8 @@ Dependency-watch record:
 - Browser assets never receive the Hermes API key.
 - HUD/adapter listeners remain loopback-only during MVP.
 - Authority/provenance/voice indicators describe observed state; they do not grant permission.
+- Browser presentation state is not durable authority. Consequential reconnect state must come from supported persisted Hermes/plugin evidence, and unknown state must remain explicit when it cannot be reconstructed.
+- Presentation projection must be allowlisted and may normalize observed facts, but it must not become a second event, approval, persistence, or runtime authority.
 - Narrow dependency patches are allowed only when necessary, evidence-backed, source-controlled, reversible, and consistent with the Intent Preservation Check.
 
 Core Intent Preservation Gate:
@@ -289,4 +291,4 @@ Any fixture creation, production move, move-source restore, delete, or recovery 
 
 The safe project-status shorthand is:
 
-> Phase 3 presentation foundation accepted; Phase 4 voice work partially accepted with final live TTS/barge-in and wake disposition deferred; Phase 5 source/runtime safety is accepted through P5-02R, including the first bounded production edit and first production restore qualification; mutation mode is disabled and Hermes remains manual-off.
+> Phase 3 presentation foundation accepted; Phase 4 voice work partially accepted with final live TTS/barge-in and wake disposition deferred; Phase 5 source/runtime safety is accepted through P5-02S move readiness, including the first bounded production edit, first production restore qualification, and read-only first-move readiness; mutation mode is disabled, P5-02T remains separately authorization-gated, and Hermes remains manual-off.
