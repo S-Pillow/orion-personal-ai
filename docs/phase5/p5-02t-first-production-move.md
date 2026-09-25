@@ -1,6 +1,6 @@
 # P5-02T — First Production Move
 
-Status: **AUTHORIZED / GATE PREPARED / EXECUTION PENDING**
+Status: **PASS / FIRST PRODUCTION MOVE ACCEPTED / MUTATION MODE DISABLED / HERMES MANUAL-OFF**
 
 Authorization date: 2026-09-25
 
@@ -267,10 +267,93 @@ A later P5-02U move-source restore, if separately authorized, may recreate the r
 
 That restore must not silently delete the vault target. Target deletion is a separate action class and remains separately approval-gated.
 
+## Observed live result — PASS
+
+The authorized P5-02T production move completed successfully on the accepted
+Windows COMPANION environment.
+
+Observed result:
+
+```text
+P5_02T_PRODUCTION_MOVE=PASS
+P5_02T_APPLY_SUCCESS=true
+P5_02T_MUTATION_PERFORMED=true
+P5_02T_RECOVERY_REQUIRED=false
+P5_02T_RECOVERY_ID=8f79ba8396c2c5877bc9c28c8a5cdbfa55dda850c70ce18c324524d8a5e461a6
+P5_02T_MOVE_RECOVERY_RECORD_VALID=true
+P5_02T_MOVE_RECOVERY_MANIFEST_STATE=committed
+P5_02T_MOVE_RECOVERY_CLASSIFICATION=committed
+P5_02T_RECEIPT_STATE=committed
+P5_02T_RECEIPT_FINALIZED=true
+P5_02T_RECEIPT_RECONCILIATION_REQUIRED=false
+P5_02T_APPROVAL_SURFACE=cli
+P5_02T_APPROVAL_CHOICE=once
+P5_02T_AUTHORIZATION_REUSABLE=false
+P5_02T_SOURCE_STATE_AFTER=absent
+P5_02T_TARGET_STATE_AFTER=present
+P5_02T_TARGET_SHA256=132ff51d62fd7fd8827d7222e233617e92c55dc21d40ff68164f2238ba0fd132
+P5_02T_PRODUCTION_RECOVERY_COUNT_AFTER=3
+P5_02T_PRODUCTION_RECOVERY_ATTENTION_AFTER=0
+P5_02T_MUTATION_MODE_AFTER=disabled
+P5_02T_AUTOMATIC_RESTORE=false
+P5_02T_AUTOMATIC_TARGET_DELETE=false
+P5_02T_RECOVERY_EVIDENCE_PRESERVED=true
+HERMES_MANUAL_OFF=true
+```
+
+Parent/post-state checks also passed:
+
+```text
+P5_02T_PARENT_CHILD_EXIT=0
+P5_02T_PARENT_SOURCE_STATE=absent
+P5_02T_PARENT_TARGET_SHA256=132FF51D62FD7FD8827D7222E233617E92C55DC21D40FF68164F2238BA0FD132
+P5_02T_PARENT_RECOVERY_COUNT=3
+P5_02T_CONFIG_UNCHANGED=true
+P5_02T_ENV_UNCHANGED=true
+P5_02T_INSTALLED_PLUGIN_UNCHANGED=true
+P5_02T_EDIT_CANARY_UNCHANGED=true
+P5_02T_PARENT_MUTATION_MODE_ABSENT=true
+HERMES_MANUAL_OFF=true
+P5_02T_PARENT_SOURCE_ABSENT=true
+P5_02T_PARENT_TARGET_HASH_MATCH=true
+P5_02T_PARENT_RECOVERY_COUNT_MATCH=true
+P5_02T_GATE_RESULT=PASS
+```
+
+Accepted new move recovery ID:
+
+```text
+8f79ba8396c2c5877bc9c28c8a5cdbfa55dda850c70ce18c324524d8a5e461a6
+```
+
+Accepted production post-state:
+
+- controlled inbox source is absent;
+- vault target is present at
+  `C:\Personal\Me\_Orion-P5-Move-Canary.md`;
+- target SHA-256 is the frozen source hash
+  `132ff51d62fd7fd8827d7222e233617e92c55dc21d40ff68164f2238ba0fd132`;
+- new P5-02T recovery record is valid and committed;
+- production recovery inventory is exactly 3 records with zero attention;
+- receipt is committed/finalized with no reconciliation requirement;
+- approval surface was `cli` and approval choice was `once`;
+- authorization is not reusable;
+- mutation mode is absent/disabled after the bounded action;
+- COMPANION config and `.env` are unchanged;
+- installed Orion plugin is unchanged;
+- unrelated edit canary is unchanged;
+- Hermes remains manual-off;
+- no automatic restore, target deletion, or recovery cleanup occurred.
+
 ## Current stop point
 
-P5-02T is authorized and the guarded gate is prepared on this branch.
+P5-02T is complete and accepted.
 
-The production move has **not** yet been executed by this repository preparation.
+The first bounded production `move_draft` is now accepted through the guarded
+registered apply path and fresh human `once` approval. The controlled inbox
+source is absent, the vault target is present at the frozen hash, and production
+recovery contains 3 valid records with zero attention.
 
-Do not update this document to PASS and do not update repository current-state claims until the Windows gate has actually run and its complete acceptance evidence has been reviewed.
+P5-02U move-source restore remains a separate authorization boundary and is not
+authorized by P5-02T acceptance. Target deletion and recovery-record cleanup also
+remain separately gated.
