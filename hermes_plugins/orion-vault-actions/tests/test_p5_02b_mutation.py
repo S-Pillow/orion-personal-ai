@@ -265,7 +265,12 @@ class DisposableMutationCandidateTests(unittest.TestCase):
 
         ctx = Context()
         plugin.register(ctx)
-        self.assertIs(ctx.tools[plugin.APPLY_TOOL], plugin.apply_plan_placeholder)
+        self.assertIs(
+            ctx.tools[plugin.APPLY_TOOL], plugin.apply_plan_production_guarded
+        )
+        self.assertNotIn(
+            plugin._execute_production_plan_candidate, ctx.tools.values()
+        )
 
         note, preview = self._edit_preview()
         with patch.dict(os.environ, {plugin.DISPOSABLE_MUTATION_FLAG: "0"}):
@@ -828,14 +833,13 @@ class DisposableMutationCandidateTests(unittest.TestCase):
         )
         self.assertTrue(restore["success"])
 
-        public_result = json.loads(plugin.apply_plan_placeholder({
+        public_result = json.loads(plugin.apply_plan_production_guarded({
             "plan_token": restore["plan_token"],
         }))
         self.assertFalse(public_result["success"])
         self.assertEqual(
-            public_result["error"], "p5_01_mutation_not_authorized"
+            public_result["error"], "production_mutation_not_enabled"
         )
-        self.assertTrue(public_result["plan_known"])
         self.assertFalse(public_result["mutation_performed"])
 
         private_result = plugin._execute_disposable_plan_candidate(

@@ -140,12 +140,9 @@ class P501VaultContractTests(unittest.TestCase):
             plugin.APPLY_TOOL,
             {"plan_token": result["plan_token"]},
         )
-        self.assertEqual(directive["action"], "approve")
-        self.assertEqual(
-            directive["rule_key"],
-            f"orion_vault_plan:{result['plan_token']}",
-        )
-        self.assertIn(str(note.resolve()), directive["message"])
+        self.assertEqual(directive["action"], "block")
+        self.assertIn("not enabled", directive["message"])
+        self.assertIn(str(note.resolve()), result["plan"]["target_canonical_path"])
 
     def test_move_preview_is_side_effect_free(self):
         draft = self.inbox / "draft.md"

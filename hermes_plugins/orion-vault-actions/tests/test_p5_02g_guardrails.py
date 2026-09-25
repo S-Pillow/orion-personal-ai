@@ -400,7 +400,7 @@ class ProductionGuardrailTests(unittest.TestCase):
         self.assertEqual(blocked["action"], "block")
         self.assertEqual(note.read_bytes(), b"before\n")
 
-    def test_preview_only_pretool_keeps_non_mutating_approval_contract(self):
+    def test_preview_only_pretool_blocks_without_approval_prompt(self):
         os.environ[plugin.PRODUCTION_MUTATION_MODE_ENV] = (
             plugin.PRODUCTION_MODE_PREVIEW_ONLY
         )
@@ -415,11 +415,11 @@ class ProductionGuardrailTests(unittest.TestCase):
             plugin.APPLY_TOOL, {"plan_token": preview["plan_token"]}
         )
 
-        self.assertEqual(directive["action"], "approve")
-        self.assertIn("fail-closed", directive["message"])
+        self.assertEqual(directive["action"], "block")
+        self.assertIn("not enabled", directive["message"])
         self.assertEqual(note.read_bytes(), b"before\n")
 
-    def test_production_candidate_is_unregistered_and_public_apply_refuses(self):
+    def test_private_production_candidate_is_unregistered_and_guarded_wrapper_is_public(self):
         class Context:
             def __init__(self):
                 self.tools = {}
@@ -433,7 +433,9 @@ class ProductionGuardrailTests(unittest.TestCase):
         ctx = Context()
         plugin.register(ctx)
 
-        self.assertIs(ctx.tools[plugin.APPLY_TOOL], plugin.apply_plan_placeholder)
+        self.assertIs(
+            ctx.tools[plugin.APPLY_TOOL], plugin.apply_plan_production_guarded
+        )
         self.assertNotIn(
             plugin._execute_production_plan_candidate, ctx.tools.values()
         )
@@ -515,7 +517,11 @@ class ProductionGuardrailTests(unittest.TestCase):
         self.assertEqual(receipt["schema_version"], 2)
         self.assertEqual(receipt["state"], "committed")
         self.assertIn(
-            "private production mutation candidate",
+            "guarded registered production apply path",
+            receipt["approval"]["approval_message"],
+        )
+        self.assertIn(
+            "private production executor is not registered directly",
             receipt["approval"]["approval_message"],
         )
         inspected = plugin._inspect_receipt_at_roots(
@@ -524,6 +530,101 @@ class ProductionGuardrailTests(unittest.TestCase):
         self.assertTrue(inspected["success"])
         self.assertEqual(inspected["current_classification"], "committed")
         self.assertFalse(inspected["authorization_reusable"])
+        self.assertFalse(
+            {
+                "approval",
+                "approval_message",
+                "approval_key",
+                "api_key",
+                "note_bytes",
+                "recovery_bytes",
+                "callback",
+            }
+            & set(result)
+        )
+
+        def contains_bytes(value):
+            if isinstance(value, (bytes, bytearray, memoryview)):
+                return True
+            if isinstance(value, dict):
+                return any(contains_bytes(item) for item in value.values())
+            if isinstance(value, (list, tuple, set)):
+                return any(contains_bytes(item) for item in value)
+            return False
+
+        self.assertFalse(contains_bytes(result))
+
+    def test_production_edit_requests_exactly_one_human_approval(self):
+        os.environ[plugin.PRODUCTION_MUTATION_MODE_ENV] = (
+            plugin.PRODUCTION_MODE_MUTATION_ENABLED
+        )
+        note = self.vault / "note.md"
+        note.write_bytes(b"before\n")
+        preview = json.loads(plugin.preview_edit({
+            "target_relative_path": "note.md",
+            "new_content": "after\n",
+        }))
+        calls = []
+
+        def gate(_tool_name, description, *, rule_key):
+            calls.append(rule_key)
+            plugin.post_approval_response(
+                pattern_key=f"plugin_rule:{rule_key}",
+                description=description,
+                choice="once",
+                surface="gateway",
+            )
+            return {"approved": True}
+
+        result = self._production_apply(preview["plan_token"], gate=gate)
+
+        self.assertTrue(result["success"])
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(note.read_bytes(), b"after\n")
+
+    def test_truncated_recovery_inventory_blocks_before_approval(self):
+        os.environ[plugin.PRODUCTION_MUTATION_MODE_ENV] = (
+            plugin.PRODUCTION_MODE_MUTATION_ENABLED
+        )
+        note = self.vault / "note.md"
+        note.write_bytes(b"before\n")
+        preview = json.loads(plugin.preview_edit({
+            "target_relative_path": "note.md",
+            "new_content": "after\n",
+        }))
+        called = {"value": False}
+
+        def gate(*_args, **_kwargs):
+            called["value"] = True
+            return {"approved": True}
+
+        truncated = plugin._candidate_result(
+            success=True,
+            mutation_performed=False,
+            mutation_mode=plugin.PRODUCTION_MODE_MUTATION_ENABLED,
+            mutation_allowed=True,
+            record_count=plugin.PRODUCTION_RECOVERY_SCAN_LIMIT,
+            scan_limit=plugin.PRODUCTION_RECOVERY_SCAN_LIMIT,
+            truncated=True,
+            attention_count=0,
+            records=[],
+        )
+        with patch.object(
+            plugin,
+            "_enumerate_production_recovery_records",
+            return_value=truncated,
+        ):
+            result = self._production_apply(
+                preview["plan_token"], gate=gate
+            )
+
+        self.assertFalse(result["success"])
+        self.assertEqual(
+            result["error"], "production_recovery_inventory_truncated"
+        )
+        self.assertFalse(called["value"])
+        self.assertEqual(note.read_bytes(), b"before\n")
+        self.assertEqual(list(self.recovery.iterdir()), [])
 
     def test_production_edit_stale_after_human_once_fails_before_recovery(self):
         os.environ[plugin.PRODUCTION_MUTATION_MODE_ENV] = (

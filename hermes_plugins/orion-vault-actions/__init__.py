@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Dict
 
-PLUGIN_VERSION = "p5-01-0.1"
+PLUGIN_VERSION = "p5-02n-0.2.0"
 MAX_TEXT_CHARS = 100_000
 PREVIEW_TTL_SECONDS = 600.0
 PREVIEW_CACHE_LIMIT = 32
@@ -657,6 +657,39 @@ def apply_plan_placeholder(params: Dict[str, Any], **_: Any) -> str:
     )
 
 
+def apply_plan_production_guarded(params: Dict[str, Any], **_: Any) -> str:
+    """Registered P5-02N apply wrapper with a fail-closed mode boundary.
+
+    The public tool accepts only a plan token. It never accepts caller-owned
+    approval callbacks, filesystem probes, recovery roots, proposed bytes, or
+    failure hooks. Only explicit mutation_enabled mode can reach the private
+    production executor, which remains the sole owner of the fresh Hermes
+    human ALLOW ONCE request.
+    """
+    production_mode = _production_mutation_mode()
+    if not production_mode.get("valid"):
+        return _json(
+            _candidate_result(
+                success=False,
+                error="invalid_production_mutation_mode",
+                mutation_performed=False,
+            )
+        )
+    if production_mode.get("mode") != PRODUCTION_MODE_MUTATION_ENABLED:
+        return _json(
+            _candidate_result(
+                success=False,
+                error="production_mutation_not_enabled",
+                mutation_performed=False,
+                mutation_mode=production_mode.get("mode"),
+            )
+        )
+
+    public_params = params if isinstance(params, dict) else {}
+    token = str(public_params.get("plan_token") or "").strip()
+    return _json(_execute_production_plan_candidate(token))
+
+
 def _approval_execution_suffix(action: str) -> str:
     mode = _production_mutation_mode()
     if (
@@ -664,9 +697,9 @@ def _approval_execution_suffix(action: str) -> str:
         and mode.get("mode") == PRODUCTION_MODE_MUTATION_ENABLED
     ):
         return (
-            "This one-time approval may be used only by the private production "
-            "mutation candidate for this exact plan. Registered/live apply "
-            "remains fail-closed."
+            "This one-time approval may be used only by the guarded registered "
+            "production apply path for this exact plan. The private production "
+            "executor is not registered directly."
         )
     if action in ("restore_edit", "restore_move_source"):
         return (
@@ -775,20 +808,22 @@ def pre_tool_call(tool_name: str = "", args: Dict[str, Any] | None = None, **_: 
         }
 
     production_mode = _production_mutation_mode()
-    if (
-        production_mode.get("valid")
-        and production_mode.get("mode") == PRODUCTION_MODE_MUTATION_ENABLED
-    ):
-        # In production mutation mode the final handler owns the one human
-        # generic approval. The pre-tool hook remains only a fail-closed
-        # plan validator so one action does not generate two approval prompts.
-        return None
+    if not production_mode.get("valid"):
+        return {
+            "action": "block",
+            "message": "P5-02N blocked: production mutation mode is invalid.",
+        }
+    if production_mode.get("mode") != PRODUCTION_MODE_MUTATION_ENABLED:
+        return {
+            "action": "block",
+            "message": "P5-02N blocked: production mutation is not enabled.",
+        }
 
-    return {
-        "action": "approve",
-        "message": message,
-        "rule_key": f"orion_vault_plan:{token}",
-    }
+    # In explicit production mutation mode the registered handler owns the one
+    # human generic approval through the private production executor. The
+    # pre-tool hook validates the plan only, so one action cannot create two
+    # approval prompts.
+    return None
 
 
 def post_approval_response(
@@ -2839,24 +2874,38 @@ def _receipt_approval_message_matches_plan(
         return False
 
     if schema_version == 2:
-        suffix = (
-            "\nThis one-time approval may be used only by the private production "
-            "mutation candidate for this exact plan. Registered/live apply "
-            "remains fail-closed."
+        suffixes = (
+            (
+                "\nThis one-time approval may be used only by the guarded registered "
+                "production apply path for this exact plan. The private production "
+                "executor is not registered directly."
+            ),
+            (
+                "\nThis one-time approval may be used only by the private production "
+                "mutation candidate for this exact plan. Registered/live apply "
+                "remains fail-closed."
+            ),
         )
     elif suffix_kind == "restore":
-        suffix = (
-            "\nThis one-time approval may be used only by the private disposable "
-            "restore candidate for this exact plan. Registered/live apply remains "
-            "fail-closed."
+        suffixes = (
+            (
+                "\nThis one-time approval may be used only by the private disposable "
+                "restore candidate for this exact plan. Registered/live apply remains "
+                "fail-closed."
+            ),
         )
     else:
-        suffix = "\nCurrent apply handler remains fail-closed and will not mutate."
+        suffixes = (
+            "\nCurrent apply handler remains fail-closed and will not mutate.",
+        )
 
-    if not message.startswith(prefix) or not message.endswith(suffix):
+    if not message.startswith(prefix):
         return False
-    diff = message[len(prefix):len(message) - len(suffix)]
-    return _sha_text(diff) == plan.get("diff_sha256")
+    for suffix in suffixes:
+        if message.endswith(suffix):
+            diff = message[len(prefix):len(message) - len(suffix)]
+            return _sha_text(diff) == plan.get("diff_sha256")
+    return False
 
 
 def _inspect_receipt_at_roots(
@@ -3791,9 +3840,10 @@ def _execute_production_plan_candidate(
 ) -> Dict[str, Any]:
     """Private P5-02G production-shaped executor.
 
-    This candidate is intentionally unregistered. It never uses the disposable
-    root guard. Mutation is possible only when the explicit production mode is
-    mutation_enabled and recovery-root preflight succeeds.
+    This executor is never registered directly. P5-02N permits the guarded
+    public wrapper to delegate here only in explicit mutation_enabled mode. It
+    never uses the disposable root guard, and mutation remains possible only
+    when recovery-root preflight and every qualified guard succeed.
     """
     preflight = _production_preflight(
         local_fs_probe=local_fs_probe,
@@ -4552,8 +4602,10 @@ def register(ctx):
     apply_schema = {
         "name": APPLY_TOOL,
         "description": (
-            "P5-01 approval-contract placeholder for a previously previewed Orion "
-            "vault plan. The current handler intentionally refuses all mutation."
+            "Guarded Orion apply path for a previously previewed vault plan. "
+            "Missing, disabled, preview-only, or invalid production mutation "
+            "mode refuses before approval; explicit mutation_enabled delegates "
+            "to the private qualified executor and its fresh human ALLOW ONCE gate."
         ),
         "parameters": {
             "type": "object",
@@ -4561,6 +4613,7 @@ def register(ctx):
                 "plan_token": {"type": "string"},
             },
             "required": ["plan_token"],
+            "additionalProperties": False,
         },
     }
 
@@ -4586,7 +4639,7 @@ def register(ctx):
         name=APPLY_TOOL,
         toolset="orion_vault",
         schema=apply_schema,
-        handler=apply_plan_placeholder,
+        handler=apply_plan_production_guarded,
     )
     ctx.register_hook("pre_tool_call", pre_tool_call)
     ctx.register_hook("post_approval_response", post_approval_response)
