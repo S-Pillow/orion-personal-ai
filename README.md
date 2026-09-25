@@ -130,7 +130,7 @@ Tracking:
 - draft PR #16 — Phase 4 P4-04 push-to-talk voice foundation
 - issue #19 — P4-04B resume native TTS/live voice acceptance after Edge connectivity stabilizes
 
-### Phase 5 - source/runtime qualification accepted through P5-02U move-source restore
+### Phase 5 - source/runtime qualification accepted through P5-02W installed protected-delete qualification
 
 Phase 5 has advanced through source qualification, preview-only COMPANION installation, installed-runtime disposable mutation qualification, production recovery-root acceptance, recovery-root persistence, and live runtime-ingestion verification.
 
@@ -150,14 +150,17 @@ Accepted checkpoints:
 - P5-02Q: first real Orion production mutation accepted — exactly one guarded `edit_note` on the controlled canary, fresh human `once` approval, committed schema-v2 recovery/receipt, zero recovery attention state, mutation mode returned to disabled, and Hermes remained manual-off;
 - P5-02R: production restore qualification accepted — the exact P5-02Q canary edit was restored from its committed recovery record through the guarded registered apply path and a fresh human `once`; a new committed restore recovery/receipt was created, the origin record remains valid as `committed_then_changed`, total recovery count is 2 with zero attention, mutation mode is disabled, and Hermes remains manual-off;
 - P5-02T: first production move accepted — the frozen P5-02S controlled draft moved through the guarded registered apply path with a fresh human `once`; source became absent, target became present at the frozen SHA-256, move recovery `8f79ba8396c2c5877bc9c28c8a5cdbfa55dda850c70ce18c324524d8a5e461a6` was valid/committed, total recovery count was 3 with zero attention, mutation mode returned to disabled, and Hermes remained manual-off;
-- P5-02U: move-source restore accepted — the committed P5-02T move recovery recreated the inbox source through the guarded registered apply path with a fresh human `once`; source and vault target are both present at SHA-256 `132ff51d62fd7fd8827d7222e233617e92c55dc21d40ff68164f2238ba0fd132`, origin move now reads `committed_then_changed`, new restore recovery `5c9b264a465f468c2f172f880fc89878e63368480c3eecfd0fb37212b159e175` is valid/committed, total recovery count is 4 with zero attention, mutation mode is disabled, and Hermes remains manual-off.
+- P5-02U: move-source restore accepted — the committed P5-02T move recovery recreated the inbox source through the guarded registered apply path with a fresh human `once`; source and vault target are both present at SHA-256 `132ff51d62fd7fd8827d7222e233617e92c55dc21d40ff68164f2238ba0fd132`, origin move now reads `committed_then_changed`, new restore recovery `5c9b264a465f468c2f172f880fc89878e63368480c3eecfd0fb37212b159e175` is valid/committed, total recovery count is 4 with zero attention, mutation mode is disabled, and Hermes remains manual-off;
+- P5-02V: protected-delete source candidate `0.3.0` accepted after compile, full Phase 5 tests, source plugin doctor, and unchanged P5-02U production-state verification;
+- P5-02W: exact P5-02V-qualified `0.3.0` plugin installed and runtime-qualified with rollback captured, protected-delete preview live in a five-tool `orion_vault` toolset, guarded apply/private-executor invariants intact, mutation disabled, recovery still 4/0, protected files/config unchanged, and Hermes restored to manual-off.
 
 Current installed/runtime boundary:
 
-- installed plugin source exactly matches P5-02N-qualified code head `faf8b4787d8e6fb668eb5e9d754104910b4b401a`;
-- installed plugin manifest version is `0.2.0`;
+- installed plugin source exactly matches P5-02V-qualified code head `211255ff9abfa04101760c7e3358b521a3e530ae`;
+- installed plugin manifest version is `0.3.0`;
 - `ORION_P5_PRODUCTION_RECOVERY_ROOT` is persisted and runtime-qualified;
 - `ORION_P5_MUTATION_MODE` is not persisted and resolves to `disabled`;
+- live `orion_vault` toolset contains five tools including read-only `orion_vault_preview_delete`;
 - registered `orion_vault_apply_plan` points to `apply_plan_production_guarded`;
 - disabled public apply refuses with `production_mutation_not_enabled` before human approval or private-executor delegation;
 - `_execute_production_plan_candidate()` remains private and unregistered;
@@ -178,7 +181,7 @@ P5-02O rollback capture:
 
 `C:\Users\spill\AppData\Local\hermes\profiles\companion\orion\backups\p5-02o-installed-disabled-20260923-040536`
 
-The P5-02Q edit, P5-02R restore, P5-02T first production move, and P5-02U move-source restore are accepted. Target deletion, any further edit/move/restore, or recovery-record cleanup remains a separate authorization boundary.
+The P5-02Q edit, P5-02R restore, P5-02T first production move, P5-02U move-source restore, P5-02V protected-delete source qualification, and P5-02W installed-disabled qualification are accepted. P5-02X target deletion is the next authorized closure gate; P5-02Y recovery cleanup follows only after the final post-delete recovery set is known.
 
 ## Accepted manual-off lifecycle
 
