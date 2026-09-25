@@ -90,12 +90,15 @@ class GuardedRegistrationTests(unittest.TestCase):
         ctx = Context()
         plugin.register(ctx)
 
-        self.assertEqual(len(ctx.tools), 4)
+        self.assertEqual(len(ctx.tools), 5)
         self.assertEqual(
             set(ctx.hooks), {"pre_tool_call", "post_approval_response"}
         )
         self.assertIs(
             ctx.tools[plugin.APPLY_TOOL], plugin.apply_plan_production_guarded
+        )
+        self.assertIs(
+            ctx.tools[plugin.PREVIEW_DELETE_TOOL], plugin.preview_delete
         )
         self.assertNotIn(
             plugin._execute_production_plan_candidate, ctx.tools.values()
@@ -107,7 +110,7 @@ class GuardedRegistrationTests(unittest.TestCase):
         self.assertIs(parameters["additionalProperties"], False)
 
         manifest = (PLUGIN_DIR / "plugin.yaml").read_text(encoding="utf-8")
-        self.assertIn('version: "0.2.0"', manifest)
+        self.assertIn('version: "0.3.0"', manifest)
         self.assertIn("guarded vault preview and apply plugin", manifest)
 
     def test_non_enabled_and_invalid_modes_refuse_before_executor(self):
