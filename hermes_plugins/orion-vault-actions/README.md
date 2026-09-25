@@ -16,12 +16,14 @@ Production mutation remains disabled:
 - disabled `pre_tool_call` blocks without creating an approval rule;
 - disabled public apply returns `production_mutation_not_enabled` without entering the private production executor;
 - `_execute_production_plan_candidate()` remains private and unregistered;
-- production recovery inventory contains exactly two valid records with zero attention state;
-- one real production `edit_note` and its separately authorized `restore_edit` have been accepted against the controlled Phase 5 canary only;
+- production recovery inventory contains exactly three valid records with zero attention state;
+- one real production `edit_note`, its separately authorized `restore_edit`, and one bounded production `move_draft` have been accepted through the guarded registered apply path;
 - the canary is restored to the frozen before-state with SHA-256 `ddb08a8ca9ab5d06185a692182a742210817cba1d5523c841d6a371dfdb57b4c`;
 - origin edit recovery `33d3dc72984b872778680106dabfc2260eab9a91be130b9e9d6dd1351483de3f` remains valid as `committed_then_changed`;
 - restore recovery `1b1e26014063b3156adb2152c703371bf5c78234af9dfe9ab51e045e652d7b27` is valid and `committed`;
-- mutation mode returned to disabled after the bounded restore.
+- move recovery `8f79ba8396c2c5877bc9c28c8a5cdbfa55dda850c70ce18c324524d8a5e461a6` is valid and `committed`;
+- controlled move source is absent and the vault target is present at SHA-256 `132ff51d62fd7fd8827d7222e233617e92c55dc21d40ff68164f2238ba0fd132`;
+- mutation mode returned to disabled after the bounded move.
 
 Accepted installed source:
 
