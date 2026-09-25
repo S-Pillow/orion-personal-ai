@@ -191,3 +191,35 @@ Windows-only file identity, ACL, local-volume, and handle semantics remain requi
 Do not treat this README, a source test, a plugin registration, an approval card, a persisted receipt, or a visual authority label as mutation authorization.
 
 Production mutation remains separately authorization-gated per action. P5-02Q accepted exactly one bounded canary edit, P5-02R accepted exactly one bounded restore, P5-02T accepted exactly one bounded move, and P5-02U accepted exactly one bounded move-source restore through the guarded P5-02N wrapper. After P5-02U `ORION_P5_MUTATION_MODE` is absent/disabled and Hermes remains manual-off. Target deletion, any further edit/move/restore, and recovery cleanup each require a new explicit gate.
+
+
+## P5-02V protected delete source candidate
+
+P5-02V adds a source-only protected delete action class while preserving the
+accepted P5-02U live boundary. Source manifest version is `0.3.0` and adds the
+read-only `orion_vault_preview_delete` tool. The existing
+`orion_vault_apply_plan` remains the only registered mutation entry point.
+
+Delete preview binds the exact canonical Markdown target, current SHA-256,
+Windows file identity when available, exact deletion diff, and immutable plan
+token. Production execution requires explicit `mutation_enabled`, fresh human
+`once` approval, post-approval stale-state revalidation, and a durable
+`deleted_target.bin` recovery artifact before target deletion.
+
+The live COMPANION plugin remains the accepted `0.2.0` installation until a
+separate installed-disabled qualification gate passes. P5-02V source
+preparation itself does not install the new plugin, delete the retained move
+target, or clean production recovery evidence.
+
+
+### P5-02V source qualification accepted
+
+The protected-delete source candidate `0.3.0` passed Windows source
+qualification: compile PASS, all Phase 5 tests PASS, source plugin doctor PASS,
+and the accepted P5-02U production state remained unchanged. The live installed
+plugin was not changed by P5-02V and remained the accepted `0.2.0`
+installation at that boundary.
+
+Next closure gate: P5-02W installs/qualifies exactly the P5-02V `0.3.0`
+candidate with mutation disabled. Target deletion remains P5-02X and recovery
+cleanup remains P5-02Y.

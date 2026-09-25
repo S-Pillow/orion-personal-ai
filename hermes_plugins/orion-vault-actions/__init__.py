@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Dict
 
-PLUGIN_VERSION = "p5-02n-0.2.0"
+PLUGIN_VERSION = "p5-02v-0.3.0"
 MAX_TEXT_CHARS = 100_000
 PREVIEW_TTL_SECONDS = 600.0
 PREVIEW_CACHE_LIMIT = 32
@@ -45,6 +45,7 @@ DEFAULT_INBOX_ROOT = r"C:\Personal\Orion-Inbox"
 
 PREVIEW_EDIT_TOOL = "orion_vault_preview_edit"
 PREVIEW_MOVE_TOOL = "orion_vault_preview_move_draft"
+PREVIEW_DELETE_TOOL = "orion_vault_preview_delete"
 RECOMMEND_TOOL = "orion_vault_recommend_destination"
 APPLY_TOOL = "orion_vault_apply_plan"
 
@@ -644,6 +645,61 @@ def preview_move_draft(params: Dict[str, Any], **_: Any) -> str:
     )
 
 
+def preview_delete(params: Dict[str, Any], **_: Any) -> str:
+    vault_root, _ = _roots()
+
+    target, target_rel = _resolve_under_root(
+        vault_root,
+        params.get("target_relative_path"),
+        must_exist=True,
+    )
+    _require_markdown(target_rel)
+
+    target_bytes, target_text = _read_utf8(target)
+    target_file_id = None
+    if os.name == "nt":
+        try:
+            target_file_id = _windows_path_file_identity(target)
+        except Exception:
+            return _json({
+                "success": False,
+                "error": "target_file_identity_unavailable",
+                "mutation_performed": False,
+            })
+
+    target_sha = _sha_bytes(target_bytes)
+    diff = _unified_diff(
+        target_text, "", f"vault/{target_rel}", "/dev/null"
+    )
+    plan = {
+        "schema_version": 1,
+        "preview_nonce": secrets.token_hex(16),
+        "action": "delete_note",
+        "target_relative_path": target_rel,
+        "target_canonical_path": str(target.resolve(strict=True)),
+        **({"target_file_id": target_file_id} if target_file_id else {}),
+        "target_sha256": target_sha,
+        "target_state": "present",
+        "diff_sha256": _sha_text(diff),
+    }
+    token = _plan_token(plan)
+    # Keep the exact bytes in the bounded preview cache so approval/revalidation
+    # can prove the delete still refers to the same object/content.
+    _remember_preview(token, plan, diff=diff, proposed_bytes=target_bytes)
+
+    return _json(
+        {
+            "success": True,
+            "mode": "preview",
+            "changed": True,
+            "plan_token": token,
+            "plan": plan,
+            "diff": diff,
+            "mutation_performed": False,
+        }
+    )
+
+
 def apply_plan_placeholder(params: Dict[str, Any], **_: Any) -> str:
     token = str(params.get("plan_token") or "").strip()
     plan = _lookup_preview(token) if token else None
@@ -740,6 +796,21 @@ def _approval_summary(plan: Dict[str, Any]) -> str:
             f"Source: {plan.get('source_canonical_path')}. "
             f"Target: {target}. "
             f"Source SHA-256: {plan.get('source_sha256')}.\n"
+            f"Exact unified diff:\n{diff}\n"
+            f"{_approval_execution_suffix(action)}"
+        )
+
+    if action == "delete_note":
+        if (
+            plan.get("target_state") != "present"
+            or _sha_bytes(proposed_bytes) != plan.get("target_sha256")
+        ):
+            raise ValueError("delete_content_mismatch")
+        return (
+            "Approve Orion vault delete preview? "
+            f"Target: {target}. "
+            f"Current SHA-256: {plan.get('target_sha256')}. "
+            "Resulting state: absent.\n"
             f"Exact unified diff:\n{diff}\n"
             f"{_approval_execution_suffix(action)}"
         )
@@ -1918,7 +1989,8 @@ def _inspect_recovery_record_at_roots(
         )
         or manifest.get("state") not in ("prepared", "committed")
         or action not in (
-            "edit_note", "move_draft", "restore_edit", "restore_move_source"
+            "edit_note", "move_draft", "delete_note",
+            "restore_edit", "restore_move_source"
         )
     ):
         return _candidate_result(success=False, error="recovery_manifest_invalid")
@@ -2031,6 +2103,58 @@ def _inspect_recovery_record_at_roots(
             source_sha256=source_current,
             after_sha256=after_sha,
             source_draft=source_rel,
+        )
+
+
+    if action == "delete_note":
+        target_rel = manifest.get("target_relative_path")
+        before_sha = manifest.get("before_sha256")
+        artifact_name = manifest.get("backup_file")
+        if (
+            artifact_name != "deleted_target.bin"
+            or manifest.get("after_state") != "absent"
+            or not isinstance(before_sha, str)
+        ):
+            return _candidate_result(success=False, error="recovery_manifest_invalid")
+        artifact = recovery_dir / artifact_name
+        if not artifact.is_file() or _is_reparse_point(artifact):
+            return _candidate_result(success=False, error="recovery_backup_missing")
+        backup_sha = _sha_bytes(artifact.read_bytes())
+        if backup_sha != before_sha:
+            return _candidate_result(success=False, error="recovery_backup_hash_mismatch")
+
+        target_sha, target_error = _candidate_hash_under_root(vault_root, target_rel)
+        if target_error:
+            return _candidate_result(success=False, error=target_error)
+
+        if manifest["state"] == "committed":
+            classification = (
+                "committed" if target_sha is None else "committed_then_changed"
+            )
+            recovery_required = False
+        elif target_sha == before_sha:
+            classification = "prepared_no_effect"
+            recovery_required = False
+        elif target_sha is None:
+            classification = "applied_unfinalized"
+            recovery_required = True
+        else:
+            classification = "divergent_unresolved"
+            recovery_required = True
+
+        return _candidate_result(
+            success=True,
+            mutation_performed=False,
+            recovery_required=recovery_required,
+            recovery_id=plan_token,
+            action=action,
+            manifest_state=manifest["state"],
+            classification=classification,
+            backup_sha256=backup_sha,
+            target_sha256=target_sha,
+            before_sha256=before_sha,
+            after_state="absent",
+            target_relative_path=target_rel,
         )
 
     backup_name = manifest.get("backup_file")
@@ -2474,6 +2598,72 @@ def _revalidate_edit_preview_at_roots(
         )
 
 
+def _revalidate_delete_preview_at_roots(
+    plan_token: str, vault_root: Path
+) -> Dict[str, Any]:
+    plan = _lookup_preview(plan_token)
+    if plan is None:
+        return _candidate_result(success=False, error="unknown_or_expired_plan")
+    if plan.get("action") != "delete_note":
+        return _candidate_result(success=False, error="not_delete_preview")
+    try:
+        _approval_summary(plan)
+        target, target_rel = _resolve_under_root(
+            vault_root, plan.get("target_relative_path"), must_exist=True
+        )
+        if (
+            target_rel != plan.get("target_relative_path")
+            or str(target.resolve(strict=True)) != plan.get("target_canonical_path")
+        ):
+            return _candidate_result(
+                success=False, error="delete_target_identity_changed"
+            )
+        if plan.get("target_state") != "present":
+            return _candidate_result(
+                success=False, error="delete_target_state_invalid"
+            )
+        if os.name == "nt":
+            expected_file_id = plan.get("target_file_id")
+            if not expected_file_id:
+                return _candidate_result(
+                    success=False, error="delete_target_file_id_missing"
+                )
+            try:
+                current_file_id = _windows_path_file_identity(target)
+            except Exception:
+                return _candidate_result(
+                    success=False, error="delete_target_file_identity_unavailable"
+                )
+            if current_file_id != expected_file_id:
+                return _candidate_result(
+                    success=False, error="delete_target_file_id_changed"
+                )
+        current = target.read_bytes()
+        if _sha_bytes(current) != plan.get("target_sha256"):
+            return _candidate_result(
+                success=False, error="delete_target_hash_changed"
+            )
+        proposed = plan.get("_proposed_bytes")
+        if (
+            not isinstance(proposed, bytes)
+            or _sha_bytes(proposed) != plan.get("target_sha256")
+        ):
+            return _candidate_result(
+                success=False, error="delete_preview_bytes_mismatch"
+            )
+        return _candidate_result(
+            success=True,
+            mutation_performed=False,
+            valid=True,
+            action="delete_note",
+            target_relative_path=target_rel,
+        )
+    except Exception as exc:
+        return _candidate_result(
+            success=False, error=f"delete_revalidation_error:{type(exc).__name__}"
+        )
+
+
 def _revalidate_move_preview_at_roots(
     plan_token: str, vault_root: Path, inbox_root: Path
 ) -> Dict[str, Any]:
@@ -2850,6 +3040,15 @@ def _receipt_approval_message_matches_plan(
             "Exact unified diff:\n"
         )
         suffix_kind = "ordinary"
+    elif action == "delete_note":
+        prefix = (
+            "Approve Orion vault delete preview? "
+            f"Target: {plan.get('target_canonical_path')}. "
+            f"Current SHA-256: {plan.get('target_sha256')}. "
+            "Resulting state: absent.\n"
+            "Exact unified diff:\n"
+        )
+        suffix_kind = "ordinary"
     elif action == "restore_edit":
         prefix = (
             "Approve Orion historical edit restore preview? "
@@ -2994,7 +3193,8 @@ def _inspect_receipt_at_roots(
     backup = recovery_dir / str(backup_name or "")
     if (
         backup_name not in (
-            "original.bin", "source.bin", "before_restore.bin", "created_source.bin"
+            "original.bin", "source.bin", "deleted_target.bin",
+            "before_restore.bin", "created_source.bin"
         )
         or not backup.is_file()
         or _is_reparse_point(backup)
@@ -3821,6 +4021,8 @@ def _production_revalidate_plan(
         return _revalidate_move_preview_at_roots(
             plan_token, vault_root, inbox_root
         )
+    if action == "delete_note":
+        return _revalidate_delete_preview_at_roots(plan_token, vault_root)
     if action in ("restore_edit", "restore_move_source"):
         return _revalidate_restore_preview_at_roots(
             plan_token, vault_root, inbox_root, recovery_root
@@ -3863,7 +4065,8 @@ def _execute_production_plan_candidate(
             success=False, error="unknown_or_expired_plan"
         )
     if plan.get("action") not in (
-        "edit_note", "move_draft", "restore_edit", "restore_move_source"
+        "edit_note", "move_draft", "delete_note",
+        "restore_edit", "restore_move_source"
     ):
         return _candidate_result(success=False, error="unsupported_action")
     try:
@@ -4074,6 +4277,142 @@ def _execute_production_plan_candidate(
                 action=action,
                 target_relative_path=target_rel,
             )
+
+        if action == "delete_note":
+            target, target_rel = _resolve_under_root(
+                vault_root, plan.get("target_relative_path"), must_exist=True
+            )
+            _require_markdown(target_rel)
+
+            if os.name == "nt":
+                try:
+                    source_guard = _WindowsSourceGuard(target)
+                except Exception:
+                    return _candidate_result(
+                        success=False, error="delete_target_handle_unavailable"
+                    )
+                if source_guard.file_identity != plan.get("target_file_id"):
+                    source_guard.close()
+                    source_guard = None
+                    return _candidate_result(
+                        success=False, error="delete_target_file_id_changed"
+                    )
+                before_bytes = source_guard.read_bytes()
+            else:
+                before_bytes = target.read_bytes()
+
+            if (
+                _sha_bytes(before_bytes) != plan.get("target_sha256")
+                or _sha_bytes(proposed) != plan.get("target_sha256")
+            ):
+                if source_guard is not None:
+                    source_guard.close()
+                    source_guard = None
+                return _candidate_result(
+                    success=False, error="delete_target_hash_changed"
+                )
+
+            recovery_dir = _candidate_recovery_dir(recovery_root, plan_token)
+            backup = recovery_dir / "deleted_target.bin"
+            manifest = recovery_dir / "manifest.json"
+            _durable_write_exclusive(backup, before_bytes)
+            _production_write_manifest(manifest, {
+                "state": "prepared",
+                "action": "delete_note",
+                "plan_token": plan_token,
+                "target_relative_path": target_rel,
+                "before_sha256": plan.get("target_sha256"),
+                "after_state": "absent",
+                "backup_file": "deleted_target.bin",
+            })
+            _production_write_receipt_prepared(
+                recovery_dir,
+                plan_token=plan_token,
+                plan=plan,
+                approval=approval,
+                backup_file="deleted_target.bin",
+                backup_sha256=_sha_bytes(before_bytes),
+            )
+            if not _candidate_mark_consumed(plan_token):
+                if source_guard is not None:
+                    source_guard.close()
+                    source_guard = None
+                return _candidate_result(
+                    success=False,
+                    error="plan_already_consumed",
+                    recovery_dir=str(recovery_dir),
+                )
+
+            _candidate_checkpoint(
+                "production_delete_after_recovery", failure_hook
+            )
+
+            latest_target = (
+                source_guard.read_bytes()
+                if source_guard is not None
+                else target.read_bytes()
+            )
+            if _sha_bytes(latest_target) != plan.get("target_sha256"):
+                if source_guard is not None:
+                    try:
+                        source_guard.close()
+                    finally:
+                        source_guard = None
+                return _candidate_result(
+                    success=False,
+                    error="delete_target_changed_before_delete",
+                    recovery_required=True,
+                    recovery_dir=str(recovery_dir),
+                )
+
+            _candidate_checkpoint(
+                "production_delete_before_target_delete", failure_hook
+            )
+            mutation_started = True
+            if source_guard is not None:
+                source_guard.mark_delete()
+                _candidate_checkpoint(
+                    "production_delete_after_delete_mark", failure_hook
+                )
+                source_guard.close()
+                source_guard = None
+            else:
+                target.unlink()
+
+            if target.exists() or os.path.lexists(target):
+                return _candidate_result(
+                    success=False,
+                    error="delete_postcondition_failed",
+                    mutation_performed=True,
+                    recovery_required=True,
+                    recovery_dir=str(recovery_dir),
+                )
+
+            _production_write_manifest(manifest, {
+                "state": "committed",
+                "action": "delete_note",
+                "plan_token": plan_token,
+                "target_relative_path": target_rel,
+                "before_sha256": plan.get("target_sha256"),
+                "after_state": "absent",
+                "backup_file": "deleted_target.bin",
+            })
+            _candidate_checkpoint(
+                "production_delete_before_receipt_commit", failure_hook
+            )
+            _commit_candidate_receipt(
+                recovery_dir, final_classification="committed"
+            )
+            return _candidate_result(
+                success=True,
+                mutation_performed=True,
+                recovery_required=False,
+                recovery_id=plan_token,
+                recovery_dir=str(recovery_dir),
+                action=action,
+                target_relative_path=target_rel,
+            )
+
 
         if action == "move_draft":
             source, source_rel = _resolve_under_root(
@@ -4576,6 +4915,23 @@ def register(ctx):
         },
     }
 
+    preview_delete_schema = {
+        "name": PREVIEW_DELETE_TOOL,
+        "description": (
+            "Read-only Orion vault delete preview. Returns exact deletion diff, "
+            "current hash, file identity when available, and an immutable plan "
+            "token. Performs no filesystem mutation."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "target_relative_path": {"type": "string"},
+            },
+            "required": ["target_relative_path"],
+            "additionalProperties": False,
+        },
+    }
+
     recommend_schema = {
         "name": RECOMMEND_TOOL,
         "description": (
@@ -4628,6 +4984,12 @@ def register(ctx):
         toolset="orion_vault",
         schema=preview_move_schema,
         handler=preview_move_draft,
+    )
+    ctx.register_tool(
+        name=PREVIEW_DELETE_TOOL,
+        toolset="orion_vault",
+        schema=preview_delete_schema,
+        handler=preview_delete,
     )
     ctx.register_tool(
         name=RECOMMEND_TOOL,

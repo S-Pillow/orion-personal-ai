@@ -1,11 +1,12 @@
 name: orion-vault-actions
-version: "0.2.0"
-description: "Orion Phase 5 guarded vault preview and apply plugin. Protected mutation remains disabled unless explicit mutation_enabled mode passes the qualified approval and recovery guardrails."
+version: "0.3.0"
+description: "Orion Phase 5 guarded vault preview and apply plugin with protected delete preview support. Protected mutation remains disabled unless explicit mutation_enabled mode passes the qualified approval and recovery guardrails."
 provides_hooks:
   - pre_tool_call
   - post_approval_response
 provides_tools:
   - orion_vault_preview_edit
   - orion_vault_preview_move_draft
+  - orion_vault_preview_delete
   - orion_vault_recommend_destination
   - orion_vault_apply_plan
