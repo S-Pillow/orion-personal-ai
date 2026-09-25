@@ -147,11 +147,30 @@ def main() -> int:
     if apply_entry.handler.__name__ != "apply_plan_production_guarded":
         raise RuntimeError("registered apply handler identity mismatch")
 
-    plugin = sys.modules.get(apply_entry.handler.__module__)
-    if plugin is None:
+    expected_plugin_file = (plugin_dir / "__init__.py").resolve(strict=True)
+    apply_module = sys.modules.get(apply_entry.handler.__module__)
+    preview_module = sys.modules.get(preview_entry.handler.__module__)
+    if apply_module is None or preview_module is None:
         raise RuntimeError("installed Orion plugin module unavailable")
+
+    apply_module_file = Path(getattr(apply_module, "__file__", "")).resolve(strict=True)
+    preview_module_file = Path(getattr(preview_module, "__file__", "")).resolve(strict=True)
+    if apply_module_file != expected_plugin_file:
+        raise RuntimeError(
+            "registered apply handler was not loaded from the verified installed plugin"
+        )
+    if preview_module_file != expected_plugin_file:
+        raise RuntimeError(
+            "registered preview handler was not loaded from the verified installed plugin"
+        )
+    if apply_module is not preview_module:
+        raise RuntimeError("registered Orion tools were loaded from different modules")
+
+    plugin = apply_module
     if apply_entry.handler is not plugin.apply_plan_production_guarded:
         raise RuntimeError("registered apply handler object mismatch")
+    if preview_entry.handler is not plugin.preview_edit:
+        raise RuntimeError("registered preview handler object mismatch")
     if plugin._execute_production_plan_candidate in {
         entry.handler for entry in registry.get_all_entries()
     }:
