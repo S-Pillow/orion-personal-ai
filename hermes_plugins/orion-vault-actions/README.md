@@ -210,3 +210,16 @@ The live COMPANION plugin remains the accepted `0.2.0` installation until a
 separate installed-disabled qualification gate passes. P5-02V source
 preparation itself does not install the new plugin, delete the retained move
 target, or clean production recovery evidence.
+
+
+### P5-02V source qualification accepted
+
+The protected-delete source candidate `0.3.0` passed Windows source
+qualification: compile PASS, all Phase 5 tests PASS, source plugin doctor PASS,
+and the accepted P5-02U production state remained unchanged. The live installed
+plugin was not changed by P5-02V and remained the accepted `0.2.0`
+installation at that boundary.
+
+Next closure gate: P5-02W installs/qualifies exactly the P5-02V `0.3.0`
+candidate with mutation disabled. Target deletion remains P5-02X and recovery
+cleanup remains P5-02Y.
