@@ -71,6 +71,41 @@ function Test-GatewayHealth {
     }
 }
 
+function Assert-NoReparseComponents {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    $full = [IO.Path]::GetFullPath($Path)
+    $root = [IO.Path]::GetPathRoot($full)
+    if ([string]::IsNullOrWhiteSpace($root)) {
+        throw "STOP: $Label has no filesystem root: $Path"
+    }
+
+    $current = $root
+    $relative = $full.Substring($root.Length).TrimStart([char]'\')
+    foreach ($part in ($relative -split '\\')) {
+        if ([string]::IsNullOrWhiteSpace($part)) {
+            continue
+        }
+        $current = Join-Path $current $part
+        $item = Get-Item -LiteralPath $current -Force
+        if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "STOP: $Label contains a reparse component: $current"
+        }
+    }
+
+    $resolved = (Resolve-Path -LiteralPath $Path).Path
+    if (-not [string]::Equals(
+        [IO.Path]::GetFullPath($resolved),
+        $full,
+        [StringComparison]::OrdinalIgnoreCase
+    )) {
+        throw "STOP: $Label canonical path differs from expected path."
+    }
+}
+
 function Get-EnvText {
     param([Parameter(Mandatory = $true)][string]$Path)
     $bytes = [IO.File]::ReadAllBytes($Path)
@@ -112,6 +147,9 @@ foreach ($dir in @($ExpectedVaultRoot, $ExpectedInboxRoot, $RecoveryRoot)) {
         throw "STOP: required directory missing: $dir"
     }
 }
+
+Assert-NoReparseComponents -Path $ExpectedInboxRoot -Label "accepted inbox root"
+Assert-NoReparseComponents -Path $ExpectedVaultRoot -Label "accepted vault root"
 foreach ($file in @($Config, $EnvFile, $PluginManifest, $EditCanary)) {
     if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
         throw "STOP: required baseline file missing: $file"
