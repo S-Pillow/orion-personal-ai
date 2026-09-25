@@ -130,7 +130,7 @@ Tracking:
 - draft PR #16 — Phase 4 P4-04 push-to-talk voice foundation
 - issue #19 — P4-04B resume native TTS/live voice acceptance after Edge connectivity stabilizes
 
-### Phase 5 - source/runtime qualification accepted through production restore P5-02R
+### Phase 5 - source/runtime qualification accepted through P5-02S move readiness
 
 Phase 5 has advanced through source qualification, preview-only COMPANION installation, installed-runtime disposable mutation qualification, production recovery-root acceptance, recovery-root persistence, and live runtime-ingestion verification.
 
@@ -291,4 +291,4 @@ Any fixture creation, production move, move-source restore, delete, or recovery 
 
 The safe project-status shorthand is:
 
-> Phase 3 presentation foundation accepted; Phase 4 voice work partially accepted with final live TTS/barge-in and wake disposition deferred; Phase 5 source/runtime safety is accepted through P5-02R, including the first bounded production edit and first production restore qualification; mutation mode is disabled and Hermes remains manual-off.
+> Phase 3 presentation foundation accepted; Phase 4 voice work partially accepted with final live TTS/barge-in and wake disposition deferred; Phase 5 source/runtime safety is accepted through P5-02S move readiness, including the first bounded production edit, first production restore qualification, and read-only first-move readiness; mutation mode is disabled, P5-02T remains separately authorization-gated, and Hermes remains manual-off.
