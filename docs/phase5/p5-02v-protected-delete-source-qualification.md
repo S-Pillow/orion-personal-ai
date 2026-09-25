@@ -1,6 +1,6 @@
 # P5-02V — Protected Delete Source Qualification
 
-Status: **AUTHORIZED / SOURCE IMPLEMENTED / WINDOWS QUALIFICATION PENDING**
+Status: **PASS / SOURCE QUALIFIED / LIVE INSTALL NOT YET PERFORMED**
 
 Authorization date: 2026-09-25
 
@@ -172,10 +172,38 @@ P5-02Y must satisfy the existing retention contract: no unresolved/attention
 records may be pruned, the exact records selected for removal must be explicit,
 and an audit record of what was removed must be retained.
 
+## Accepted Windows qualification result
+
+Observed operator result:
+
+```text
+P5_02V_SOURCE_QUALIFICATION=PASS
+P5_02V_SOURCE_PLUGIN_VERSION=0.3.0
+P5_02V_DELETE_PREVIEW_REGISTERED_IN_SOURCE=true
+P5_02V_PLUGIN_COMPILE=PASS
+P5_02V_PHASE5_TESTS=PASS
+P5_02V_SOURCE_PLUGIN_DOCTOR=PASS
+P5_02V_LIVE_INSTALLED_PLUGIN_UNCHANGED=true
+P5_02V_CONFIG_UNCHANGED=true
+P5_02V_ENV_UNCHANGED=true
+P5_02V_MOVE_SOURCE_UNCHANGED=true
+P5_02V_MOVE_TARGET_UNCHANGED=true
+P5_02V_EDIT_CANARY_UNCHANGED=true
+P5_02V_PRODUCTION_RECOVERY_COUNT=4
+P5_02V_MUTATION_INVOCATION=false
+P5_02V_LIVE_INSTALL_PERFORMED=false
+HERMES_MANUAL_OFF=true
+```
+
+P5-02V source qualification is accepted.
+
 ## Current stop point
 
-P5-02V source is prepared. No source qualification result has yet been accepted.
+The protected-delete source candidate `0.3.0` is qualified.
 
-No live plugin install, target deletion, recovery cleanup, config change, Hermes
-start, or production mutation has been performed by this source-preparation
-work.
+The live COMPANION plugin remains the accepted `0.2.0` installation. No live
+plugin install, target deletion, recovery cleanup, config change, Hermes start,
+or production mutation occurred during P5-02V qualification.
+
+The next authorized closure gate is P5-02W: install and qualify exactly this
+`0.3.0` source with production mutation still disabled.
