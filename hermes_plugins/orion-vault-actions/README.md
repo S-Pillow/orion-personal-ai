@@ -4,7 +4,7 @@ This directory contains Orion's native Hermes vault-actions plugin source.
 
 ## Current accepted state
 
-Phase 5 source qualification is accepted through P5-02N, installed/runtime qualification through P5-02O, the first bounded production canary edit through P5-02Q, and the first production restore qualification through P5-02R.
+Phase 5 source qualification is accepted through P5-02N, installed/runtime qualification through P5-02O, the first bounded production canary edit through P5-02Q, the first production restore qualification through P5-02R, and the first bounded production move through P5-02T.
 
 The plugin is installed and enabled under the COMPANION profile with access limited to the configured `iai-mcp` server. The live runtime has loaded the expected four-tool `orion_vault` toolset.
 
@@ -108,7 +108,7 @@ The accepted recovery root is:
 C:\Users\spill\AppData\Local\hermes\profiles\companion\orion\production-recovery
 ```
 
-P5-02J accepted its location and ACL. P5-02K persisted the exact path in COMPANION `.env` without persisting mutation mode. P5-02L proved the live runtime ingests it while mutation remains disabled. The inventory remained empty through P5-02P. P5-02Q created committed edit recovery `33d3dc72984b872778680106dabfc2260eab9a91be130b9e9d6dd1351483de3f`. P5-02R created committed restore recovery `1b1e26014063b3156adb2152c703371bf5c78234af9dfe9ab51e045e652d7b27`; both records remain retained, valid, and zero-attention.
+P5-02J accepted its location and ACL. P5-02K persisted the exact path in COMPANION `.env` without persisting mutation mode. P5-02L proved the live runtime ingests it while mutation remains disabled. The inventory remained empty through P5-02P. P5-02Q created committed edit recovery `33d3dc72984b872778680106dabfc2260eab9a91be130b9e9d6dd1351483de3f`. P5-02R created committed restore recovery `1b1e26014063b3156adb2152c703371bf5c78234af9dfe9ab51e045e652d7b27`. P5-02T created committed move recovery `8f79ba8396c2c5877bc9c28c8a5cdbfa55dda850c70ce18c324524d8a5e461a6`; production recovery now contains 3 valid records with zero attention.
 
 ## Configuration contract
 
@@ -187,4 +187,4 @@ Windows-only file identity, ACL, local-volume, and handle semantics remain requi
 
 Do not treat this README, a source test, a plugin registration, an approval card, a persisted receipt, or a visual authority label as mutation authorization.
 
-Production mutation remains separately authorization-gated per action. P5-02Q accepted exactly one bounded canary edit and P5-02R accepted exactly one bounded restore through the guarded P5-02N wrapper. After both actions `ORION_P5_MUTATION_MODE` is absent/disabled and Hermes remains manual-off. Any further edit/move/restore/delete or recovery cleanup requires a new explicit gate.
+Production mutation remains separately authorization-gated per action. P5-02Q accepted exactly one bounded canary edit, P5-02R accepted exactly one bounded restore, and P5-02T accepted exactly one bounded move through the guarded P5-02N wrapper. After P5-02T `ORION_P5_MUTATION_MODE` is absent/disabled and Hermes remains manual-off. P5-02U move-source restore, target deletion, any further edit/move/restore, and recovery cleanup each require a new explicit gate.
