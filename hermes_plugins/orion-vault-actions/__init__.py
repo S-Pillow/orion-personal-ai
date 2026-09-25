@@ -2392,142 +2392,6 @@ def _preview_restore_candidate_at_roots(
                 changed=current_sha != backup_sha,
             )
 
-
-        if action == "delete_note":
-            target, target_rel = _resolve_under_root(
-                vault_root, plan.get("target_relative_path"), must_exist=True
-            )
-            _require_markdown(target_rel)
-
-            if os.name == "nt":
-                try:
-                    source_guard = _WindowsSourceGuard(target)
-                except Exception:
-                    return _candidate_result(
-                        success=False, error="delete_target_handle_unavailable"
-                    )
-                if source_guard.file_identity != plan.get("target_file_id"):
-                    source_guard.close()
-                    source_guard = None
-                    return _candidate_result(
-                        success=False, error="delete_target_file_id_changed"
-                    )
-                before_bytes = source_guard.read_bytes()
-            else:
-                before_bytes = target.read_bytes()
-
-            if (
-                _sha_bytes(before_bytes) != plan.get("target_sha256")
-                or _sha_bytes(proposed) != plan.get("target_sha256")
-            ):
-                if source_guard is not None:
-                    source_guard.close()
-                    source_guard = None
-                return _candidate_result(
-                    success=False, error="delete_target_hash_changed"
-                )
-
-            recovery_dir = _candidate_recovery_dir(recovery_root, plan_token)
-            backup = recovery_dir / "deleted_target.bin"
-            manifest = recovery_dir / "manifest.json"
-            _durable_write_exclusive(backup, before_bytes)
-            _production_write_manifest(manifest, {
-                "state": "prepared",
-                "action": "delete_note",
-                "plan_token": plan_token,
-                "target_relative_path": target_rel,
-                "before_sha256": plan.get("target_sha256"),
-                "after_state": "absent",
-                "backup_file": "deleted_target.bin",
-            })
-            _production_write_receipt_prepared(
-                recovery_dir,
-                plan_token=plan_token,
-                plan=plan,
-                approval=approval,
-                backup_file="deleted_target.bin",
-                backup_sha256=_sha_bytes(before_bytes),
-            )
-            if not _candidate_mark_consumed(plan_token):
-                if source_guard is not None:
-                    source_guard.close()
-                    source_guard = None
-                return _candidate_result(
-                    success=False,
-                    error="plan_already_consumed",
-                    recovery_dir=str(recovery_dir),
-                )
-
-            _candidate_checkpoint(
-                "production_delete_after_recovery", failure_hook
-            )
-
-            latest_target = (
-                source_guard.read_bytes()
-                if source_guard is not None
-                else target.read_bytes()
-            )
-            if _sha_bytes(latest_target) != plan.get("target_sha256"):
-                if source_guard is not None:
-                    try:
-                        source_guard.close()
-                    finally:
-                        source_guard = None
-                return _candidate_result(
-                    success=False,
-                    error="delete_target_changed_before_delete",
-                    recovery_required=True,
-                    recovery_dir=str(recovery_dir),
-                )
-
-            _candidate_checkpoint(
-                "production_delete_before_target_delete", failure_hook
-            )
-            mutation_started = True
-            if source_guard is not None:
-                source_guard.mark_delete()
-                _candidate_checkpoint(
-                    "production_delete_after_delete_mark", failure_hook
-                )
-                source_guard.close()
-                source_guard = None
-            else:
-                target.unlink()
-
-            if target.exists() or os.path.lexists(target):
-                return _candidate_result(
-                    success=False,
-                    error="delete_postcondition_failed",
-                    mutation_performed=True,
-                    recovery_required=True,
-                    recovery_dir=str(recovery_dir),
-                )
-
-            _production_write_manifest(manifest, {
-                "state": "committed",
-                "action": "delete_note",
-                "plan_token": plan_token,
-                "target_relative_path": target_rel,
-                "before_sha256": plan.get("target_sha256"),
-                "after_state": "absent",
-                "backup_file": "deleted_target.bin",
-            })
-            _candidate_checkpoint(
-                "production_delete_before_receipt_commit", failure_hook
-            )
-            _commit_candidate_receipt(
-                recovery_dir, final_classification="committed"
-            )
-            return _candidate_result(
-                success=True,
-                mutation_performed=True,
-                recovery_required=False,
-                recovery_id=plan_token,
-                recovery_dir=str(recovery_dir),
-                action=action,
-                target_relative_path=target_rel,
-            )
-
         if action == "move_draft":
             source_rel = inspected.get("source_draft")
             source, normalized_rel = _resolve_under_root(
@@ -4413,6 +4277,142 @@ def _execute_production_plan_candidate(
                 action=action,
                 target_relative_path=target_rel,
             )
+
+        if action == "delete_note":
+            target, target_rel = _resolve_under_root(
+                vault_root, plan.get("target_relative_path"), must_exist=True
+            )
+            _require_markdown(target_rel)
+
+            if os.name == "nt":
+                try:
+                    source_guard = _WindowsSourceGuard(target)
+                except Exception:
+                    return _candidate_result(
+                        success=False, error="delete_target_handle_unavailable"
+                    )
+                if source_guard.file_identity != plan.get("target_file_id"):
+                    source_guard.close()
+                    source_guard = None
+                    return _candidate_result(
+                        success=False, error="delete_target_file_id_changed"
+                    )
+                before_bytes = source_guard.read_bytes()
+            else:
+                before_bytes = target.read_bytes()
+
+            if (
+                _sha_bytes(before_bytes) != plan.get("target_sha256")
+                or _sha_bytes(proposed) != plan.get("target_sha256")
+            ):
+                if source_guard is not None:
+                    source_guard.close()
+                    source_guard = None
+                return _candidate_result(
+                    success=False, error="delete_target_hash_changed"
+                )
+
+            recovery_dir = _candidate_recovery_dir(recovery_root, plan_token)
+            backup = recovery_dir / "deleted_target.bin"
+            manifest = recovery_dir / "manifest.json"
+            _durable_write_exclusive(backup, before_bytes)
+            _production_write_manifest(manifest, {
+                "state": "prepared",
+                "action": "delete_note",
+                "plan_token": plan_token,
+                "target_relative_path": target_rel,
+                "before_sha256": plan.get("target_sha256"),
+                "after_state": "absent",
+                "backup_file": "deleted_target.bin",
+            })
+            _production_write_receipt_prepared(
+                recovery_dir,
+                plan_token=plan_token,
+                plan=plan,
+                approval=approval,
+                backup_file="deleted_target.bin",
+                backup_sha256=_sha_bytes(before_bytes),
+            )
+            if not _candidate_mark_consumed(plan_token):
+                if source_guard is not None:
+                    source_guard.close()
+                    source_guard = None
+                return _candidate_result(
+                    success=False,
+                    error="plan_already_consumed",
+                    recovery_dir=str(recovery_dir),
+                )
+
+            _candidate_checkpoint(
+                "production_delete_after_recovery", failure_hook
+            )
+
+            latest_target = (
+                source_guard.read_bytes()
+                if source_guard is not None
+                else target.read_bytes()
+            )
+            if _sha_bytes(latest_target) != plan.get("target_sha256"):
+                if source_guard is not None:
+                    try:
+                        source_guard.close()
+                    finally:
+                        source_guard = None
+                return _candidate_result(
+                    success=False,
+                    error="delete_target_changed_before_delete",
+                    recovery_required=True,
+                    recovery_dir=str(recovery_dir),
+                )
+
+            _candidate_checkpoint(
+                "production_delete_before_target_delete", failure_hook
+            )
+            mutation_started = True
+            if source_guard is not None:
+                source_guard.mark_delete()
+                _candidate_checkpoint(
+                    "production_delete_after_delete_mark", failure_hook
+                )
+                source_guard.close()
+                source_guard = None
+            else:
+                target.unlink()
+
+            if target.exists() or os.path.lexists(target):
+                return _candidate_result(
+                    success=False,
+                    error="delete_postcondition_failed",
+                    mutation_performed=True,
+                    recovery_required=True,
+                    recovery_dir=str(recovery_dir),
+                )
+
+            _production_write_manifest(manifest, {
+                "state": "committed",
+                "action": "delete_note",
+                "plan_token": plan_token,
+                "target_relative_path": target_rel,
+                "before_sha256": plan.get("target_sha256"),
+                "after_state": "absent",
+                "backup_file": "deleted_target.bin",
+            })
+            _candidate_checkpoint(
+                "production_delete_before_receipt_commit", failure_hook
+            )
+            _commit_candidate_receipt(
+                recovery_dir, final_classification="committed"
+            )
+            return _candidate_result(
+                success=True,
+                mutation_performed=True,
+                recovery_required=False,
+                recovery_id=plan_token,
+                recovery_dir=str(recovery_dir),
+                action=action,
+                target_relative_path=target_rel,
+            )
+
 
         if action == "move_draft":
             source, source_rel = _resolve_under_root(
