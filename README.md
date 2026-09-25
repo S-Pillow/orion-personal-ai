@@ -148,7 +148,8 @@ Accepted checkpoints:
 - P5-02O: exact P5-02N-qualified plugin `0.2.0` installed into COMPANION with rollback captured, live guarded-wrapper registration verified, production mutation still disabled, recovery inventory still empty, config/`.env` unchanged, and Hermes restored to manual-off;
 - P5-02P: deterministic registered-dispatch approval proof passed, controlled canary fixture created, and read-only readiness froze the exact target, pre-edit Windows file identity, before/after hashes, and exact diff while mutation remained disabled;
 - P5-02Q: first real Orion production mutation accepted — exactly one guarded `edit_note` on the controlled canary, fresh human `once` approval, committed schema-v2 recovery/receipt, zero recovery attention state, mutation mode returned to disabled, and Hermes remained manual-off;
-- P5-02R: production restore qualification accepted — the exact P5-02Q canary edit was restored from its committed recovery record through the guarded registered apply path and a fresh human `once`; a new committed restore recovery/receipt was created, the origin record remains valid as `committed_then_changed`, total recovery count is 2 with zero attention, mutation mode is disabled, and Hermes remains manual-off.
+- P5-02R: production restore qualification accepted — the exact P5-02Q canary edit was restored from its committed recovery record through the guarded registered apply path and a fresh human `once`; a new committed restore recovery/receipt was created, the origin record remains valid as `committed_then_changed`, total recovery count is 2 with zero attention, mutation mode is disabled, and Hermes remains manual-off;
+- P5-02T: first production move accepted — the frozen P5-02S controlled draft moved through the guarded registered apply path with a fresh human `once`; source is absent, target is present at the frozen SHA-256, new move recovery `8f79ba8396c2c5877bc9c28c8a5cdbfa55dda850c70ce18c324524d8a5e461a6` is valid/committed, total recovery count is 3 with zero attention, mutation mode is disabled, and Hermes remains manual-off.
 
 Current installed/runtime boundary:
 
@@ -159,11 +160,14 @@ Current installed/runtime boundary:
 - registered `orion_vault_apply_plan` points to `apply_plan_production_guarded`;
 - disabled public apply refuses with `production_mutation_not_enabled` before human approval or private-executor delegation;
 - `_execute_production_plan_candidate()` remains private and unregistered;
-- production recovery inventory now contains exactly two valid records with zero attention state;
+- production recovery inventory now contains exactly three valid records with zero attention state;
 - controlled canary `C:\Personal\Me\_Orion-P5-Canary.md` is restored to the original `state: before` form with SHA-256 `ddb08a8ca9ab5d06185a692182a742210817cba1d5523c841d6a371dfdb57b4c`;
 - current canary Windows file identity is `5e1aeb8a1aeb5d91:428a0300000031000000000000000000`;
 - origin P5-02Q recovery ID `33d3dc72984b872778680106dabfc2260eab9a91be130b9e9d6dd1351483de3f` remains valid and reads `committed_then_changed`;
 - P5-02R restore recovery ID `1b1e26014063b3156adb2152c703371bf5c78234af9dfe9ab51e045e652d7b27` is valid and `committed`;
+- P5-02T move recovery ID `8f79ba8396c2c5877bc9c28c8a5cdbfa55dda850c70ce18c324524d8a5e461a6` is valid and `committed`;
+- controlled move source `C:\Personal\Orion-Inbox\_Orion-P5-Move-Canary.md` is absent after the accepted move;
+- controlled move target `C:\Personal\Me\_Orion-P5-Move-Canary.md` is present with SHA-256 `132ff51d62fd7fd8827d7222e233617e92c55dc21d40ff68164f2238ba0fd132`;
 - COMPANION `config.yaml` and `.env` remain unchanged;
 - Hermes is restored to manual-off;
 - `ORION_P5_MUTATION_MODE` remains unpersisted and resolves to disabled outside the bounded child process.
@@ -172,7 +176,7 @@ P5-02O rollback capture:
 
 `C:\Users\spill\AppData\Local\hermes\profiles\companion\orion\backups\p5-02o-installed-disabled-20260923-040536`
 
-The P5-02Q edit and P5-02R restore are both accepted. Any further edit, move, restore, delete, or recovery-record cleanup remains a separate authorization boundary.
+The P5-02Q edit, P5-02R restore, and P5-02T first production move are accepted. P5-02U move-source restore, target deletion, any further edit/move/restore, or recovery-record cleanup remains a separate authorization boundary.
 
 ## Accepted manual-off lifecycle
 
