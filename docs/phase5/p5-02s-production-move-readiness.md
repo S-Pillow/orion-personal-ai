@@ -18,10 +18,14 @@ Installed plugin source remains pinned to qualified P5-02N code
 
 ## Purpose
 
-Prepare the first production `move_draft` qualification without creating the
-fixture or moving any production file yet.
+P5-02S prepares and qualifies the first production `move_draft` without
+executing the move itself. Under separate authorization, P5-02S-A created the
+controlled inbox fixture and P5-02S-B completed read-only move readiness.
+P5-02T remains a separate production-mutation authorization boundary.
 
-This follows the controlling PRD v2.8 document-action contract:
+P5-02S was designed and executed under the then-controlling PRD v2.8
+document-action contract. Approved/current PRD v2.9 now supersedes v2.8 as the
+repository baseline; that PRD publication does not itself authorize P5-02T:
 
 - new drafts belong in the dedicated Orion inbox;
 - moving a draft outside the inbox requires approval;
@@ -389,12 +393,22 @@ the created vault target are not one authorization.
 
 ## Current stop point
 
-No P5-02S script has been run on the production Windows machine.
+P5-02S-A and P5-02S-B are complete and accepted.
 
-No move fixture exists as a result of this source preparation.
+The controlled source fixture exists at
+`C:\Personal\Orion-Inbox\_Orion-P5-Move-Canary.md` with frozen SHA-256
+`132ff51d62fd7fd8827d7222e233617e92c55dc21d40ff68164f2238ba0fd132`
+and frozen Windows file identity
+`5e1aeb8a1aeb5d91:eec0070000001f000000000000000000`.
 
-No production move is authorized.
+The future target `C:\Personal\Me\_Orion-P5-Move-Canary.md` remains absent.
+Production recovery remains at exactly two accepted records with zero attention.
+Mutation mode remains disabled and Hermes remains manual-off.
 
-No additional production recovery record has been created.
+No production move has been executed or authorized by P5-02S. Do not edit,
+rename, move, or delete the controlled source fixture outside a separately
+authorized later Orion gate.
 
-Mutation mode remains outside the scope of this source-only work.
+P5-02T is the next separate authorization boundary: the first bounded production
+`move_draft` against exactly the frozen source/target/hash/file-ID/diff
+contract. P5-02U move-source restore remains separately gated after P5-02T.
