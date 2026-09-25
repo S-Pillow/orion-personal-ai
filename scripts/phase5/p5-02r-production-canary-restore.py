@@ -234,9 +234,16 @@ def main() -> int:
     if apply_entry.handler.__name__ != "apply_plan_production_guarded":
         raise RuntimeError("registered apply handler identity mismatch")
 
+    expected_plugin_file = (plugin_dir / "__init__.py").resolve(strict=True)
     plugin = sys.modules.get(apply_entry.handler.__module__)
     if plugin is None:
         raise RuntimeError("installed Orion plugin module unavailable")
+
+    plugin_file = Path(getattr(plugin, "__file__", "")).resolve(strict=True)
+    if plugin_file != expected_plugin_file:
+        raise RuntimeError(
+            "registered apply handler was not loaded from the verified installed plugin"
+        )
     if apply_entry.handler is not plugin.apply_plan_production_guarded:
         raise RuntimeError("registered apply handler object mismatch")
     if plugin._execute_production_plan_candidate in {
