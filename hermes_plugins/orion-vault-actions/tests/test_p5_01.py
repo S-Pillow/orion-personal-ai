@@ -107,6 +107,7 @@ class P501VaultContractTests(unittest.TestCase):
             {
                 plugin.PREVIEW_EDIT_TOOL,
                 plugin.PREVIEW_MOVE_TOOL,
+                plugin.PREVIEW_DELETE_TOOL,
                 plugin.RECOMMEND_TOOL,
                 plugin.APPLY_TOOL,
             },
