@@ -610,8 +610,17 @@ Stop before mutation enablement if any of the following is true:
 
 ## Current stopping point
 
-P5-02O is the accepted installed/runtime boundary.
+P5-02P readiness is accepted. The separately authorized canary fixture exists at
+`C:\Personal\Me\_Orion-P5-Canary.md` with the frozen before SHA-256
+`ddb08a8ca9ab5d06185a692182a742210817cba1d5523c841d6a371dfdb57b4c`.
+P5-02P-B read-only readiness passed, including the frozen Windows file identity
+and exact target/hash/diff contract, and the deterministic registered-dispatch
+approval proof passed without invoking the real production executor.
 
-P5-02P planning/research is source-only preparation. No canary fixture has been
-created by this work, no mutation mode has been enabled, and no production
-vault/inbox/recovery content has been changed.
+Production mutation remains disabled, production recovery remains empty at the
+P5-02P stopping point, and Hermes remains manual-off. Do not recreate, edit,
+move, rename, or delete the controlled canary outside a separately authorized
+later Orion gate.
+
+P5-02Q is the next separate authorization boundary: one bounded `edit_note`
+against exactly the frozen canary contract.
