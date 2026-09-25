@@ -450,8 +450,14 @@ function showApproval(data) {
   syncProvenancePresentation();
   workspaceController.setApprovalFocus(true);
   ui.approvalPanel.classList.remove("hidden");
-  const summary = data.command || data.description || data.reason || data.tool_name || "Hermes requires an operator decision.";
-  ui.approvalDetail.textContent = String(summary).slice(0, 1000);
+  // Hermes sends the tool/command and the exact approval description separately.
+  // Keep both complete and render them as text, including diff lines and markup.
+  const details = [];
+  if (data.command) details.push(`Command / tool:\n${data.command}`);
+  if (data.description) details.push(`Description:\n${data.description}`);
+  if (!details.length) details.push(String(data.reason || data.tool_name || "Hermes requires an operator decision."));
+  ui.approvalDetail.textContent = details.join("\n\n");
+  ui.approvalDetail.scrollTop = 0;
   ui.approvalActions.replaceChildren();
 
   const canonical = ["once", "session", "always", "deny"];

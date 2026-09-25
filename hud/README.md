@@ -118,8 +118,16 @@ See:
 - `docs/phase2/hermes-v0206-api-contract.md`
 - `docs/phase2/phase2a-hud-bridge-design.md`
 
-## Next acceptance step
+## Current Phase 5 approval display check
 
-Run the Phase 2A read-only Windows preflight first. It records the installed Ollama version, confirms accepted manual-off task policy, and syntax/tests this bridge without starting the runtime.
+The P5-02A candidate displays the complete Hermes command and description as literal text in a scrollable, keyboard-focusable approval region. Earlier source preferred the command over the description and truncated it to 1,000 characters; neither behavior is suitable for exact vault diffs.
 
-Only after that passes should the controlled live typed proof begin.
+Local verification passes 74/74 Python HUD tests and 3/3 executable renderer tests. Run the latter with Node.js (no npm packages required):
+
+```text
+node --test hud/tests/test_approval_rendering.cjs
+```
+
+For the next Windows browser check, run `hud/tests/probe_approval_surface.py` with the existing Hermes venv's Python. It serves this HUD and bridge against a disposable in-memory fake API, using random loopback ports and a dummy credential. It does not load Hermes, read the COMPANION profile, or access the vault. Open the printed URL, **select `orion-hud-main` under SESSION**, then send `probe`. Inspect the complete diff through `END-OF-DIFF-100`, and choose DENY. Repeat with ALLOW ONCE, then close with Ctrl+C. The normal HUD requires a selected session before Send works. All results are simulated.
+
+Full instructions and evidence limits: [P5-02A approval integrity](../docs/phase5/p5-02a-approval-integrity.md#next-operator-check-isolated-hud-fixture). Windows browser confirmation remains pending. The fixture does not prove a real Hermes approval or safe file mutation.

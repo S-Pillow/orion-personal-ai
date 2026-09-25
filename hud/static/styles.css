@@ -782,7 +782,7 @@ textarea:focus { border-color: var(--line-strong); box-shadow: 0 0 0 1px rgba(87
 
 .approval-panel { border-color: rgba(255, 211, 122, 0.4); box-shadow: 0 0 28px rgba(255, 211, 122, 0.05); }
 .approval-panel .panel-title { color: var(--warn); }
-.approval-detail { color: #e9d9b2; font-size: 10px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.approval-detail { color: #e9d9b2; font-family: var(--font-mono); font-size: 12px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 45vh; overflow-y: auto; }
 .approval-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 9px; }
 .approval-actions button { border-color: rgba(255, 211, 122, 0.34); color: var(--warn); background: rgba(255, 211, 122, 0.05); }
 .approval-actions button.deny { border-color: rgba(255, 111, 135, 0.34); color: var(--bad); background: rgba(255, 111, 135, 0.05); }
