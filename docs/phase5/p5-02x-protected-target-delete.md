@@ -1,6 +1,6 @@
 # P5-02X — Protected Retained-Target Delete
 
-Status: **AUTHORIZED / GATE PREPARED / EXECUTION PENDING**
+Status: **PASS / PROTECTED TARGET DELETE ACCEPTED / HERMES MANUAL-OFF**
 
 Authorization date: 2026-09-25
 
@@ -204,10 +204,53 @@ the delete recovery ID exists.
 P5-02Y must name the exact records selected for removal and retain an audit
 record of the cleanup.
 
+## Accepted Windows execution result
+
+Observed operator result:
+
+```text
+P5_02X_PROTECTED_TARGET_DELETE=PASS
+P5_02X_APPLY_SUCCESS=true
+P5_02X_MUTATION_PERFORMED=true
+P5_02X_RECOVERY_REQUIRED=false
+P5_02X_RECOVERY_ID=e48123ceecc2be50afb2902511f64397f5dcfa35338ab9fd785cbf7278658b36
+P5_02X_DELETE_RECOVERY_RECORD_VALID=true
+P5_02X_DELETE_RECOVERY_MANIFEST_STATE=committed
+P5_02X_DELETE_RECOVERY_CLASSIFICATION=committed
+P5_02X_RECEIPT_STATE=committed
+P5_02X_RECEIPT_FINALIZED=true
+P5_02X_RECEIPT_RECONCILIATION_REQUIRED=false
+P5_02X_APPROVAL_SURFACE=cli
+P5_02X_APPROVAL_CHOICE=once
+P5_02X_AUTHORIZATION_REUSABLE=false
+P5_02X_SOURCE_STATE_AFTER=present
+P5_02X_SOURCE_SHA256=132ff51d62fd7fd8827d7222e233617e92c55dc21d40ff68164f2238ba0fd132
+P5_02X_SOURCE_FILE_ID=5e1aeb8a1aeb5d91:67660100000036010000000000000000
+P5_02X_TARGET_STATE_AFTER=absent
+P5_02X_PRODUCTION_RECOVERY_COUNT_AFTER=5
+P5_02X_PRODUCTION_RECOVERY_ATTENTION_AFTER=0
+P5_02X_MUTATION_MODE_AFTER=disabled
+P5_02X_AUTOMATIC_TARGET_RESTORE=false
+P5_02X_AUTOMATIC_SOURCE_MUTATION=false
+P5_02X_AUTOMATIC_RECOVERY_CLEANUP=false
+P5_02X_RECOVERY_EVIDENCE_PRESERVED=true
+HERMES_MANUAL_OFF=true
+P5_02X_GATE_RESULT=PASS
+```
+
+Accepted delete recovery ID:
+
+```text
+e48123ceecc2be50afb2902511f64397f5dcfa35338ab9fd785cbf7278658b36
+```
+
+P5-02X is accepted.
+
 ## Current stop point
 
-P5-02X is authorized and the guarded gate is prepared.
+The retained vault target is absent. The restored inbox source remains present
+at the frozen SHA-256 and accepted Windows file ID. Production recovery now
+contains exactly 5 valid records with zero attention; the new delete recovery is
+committed; mutation is disabled; Hermes is manual-off.
 
-The protected target deletion has not yet been executed by repository
-preparation. Production recovery remains at the accepted four-record P5-02U/W
-state until the Windows gate succeeds.
+The next authorized closure gate is P5-02Y exact audited recovery cleanup.
