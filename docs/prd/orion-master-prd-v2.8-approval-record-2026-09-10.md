@@ -2,7 +2,7 @@
 
 Date: 2026-09-10
 
-Status: APPROVED / CURRENT
+Status: APPROVED / SUPERSEDED BY v2.9
 
 Supersedes: Orion Master PRD v2.7
 
@@ -14,7 +14,7 @@ Artifact size: `60062` bytes
 
 ## Approval basis
 
-Steven approved Orion Master PRD v2.8 on 2026-09-10. Sections 0 through 22 are the current normative execution specification. Sections 23 and 24 contain authoritative references and the approval record. v2.8 supersedes v2.7 and all earlier PRDs unless Steven explicitly approves a newer controlling specification.
+Steven approved Orion Master PRD v2.8 on 2026-09-10. It was the controlling normative execution specification until Steven approved Orion Master PRD v2.9 on 2026-09-24. v2.9 now supersedes v2.8; this record and artifact are retained unchanged as provenance for the prior approved baseline.
 
 ## Controlling architecture
 
