@@ -4,9 +4,9 @@ This directory contains Orion's native Hermes vault-actions plugin source.
 
 ## Current accepted state
 
-Phase 5 source qualification is accepted through P5-02N, installed/runtime qualification through P5-02O, the first bounded production canary edit through P5-02Q, the first production restore qualification through P5-02R, the first bounded production move through P5-02T, and the move-source restore through P5-02U.
+Phase 5 source/runtime qualification is accepted through P5-02W, including the guarded wrapper, bounded production edit/restore/move/move-source-restore sequence, protected-delete source qualification, and installed-disabled protected-delete qualification.
 
-The plugin is installed and enabled under the COMPANION profile with access limited to the configured `iai-mcp` server. The live runtime has loaded the expected four-tool `orion_vault` toolset.
+The plugin is installed and enabled under the COMPANION profile with access limited to the configured `iai-mcp` server. The live runtime has loaded the expected five-tool `orion_vault` toolset, including read-only `orion_vault_preview_delete`.
 
 Production mutation remains disabled:
 
@@ -29,13 +29,13 @@ Production mutation remains disabled:
 Accepted installed source:
 
 ```text
-faf8b4787d8e6fb668eb5e9d754104910b4b401a
+211255ff9abfa04101760c7e3358b521a3e530ae
 ```
 
 Accepted installed plugin version:
 
 ```text
-0.2.0
+0.3.0
 ```
 
 P5-02O rollback capture:
@@ -65,6 +65,7 @@ P5-02N passed 129/129 Phase 5 tests, Hermes approval 3/3, Hermes dispatcher 2/2,
 
 - `orion_vault_preview_edit`: read-only edit preview;
 - `orion_vault_preview_move_draft`: read-only inbox-to-vault move preview;
+- `orion_vault_preview_delete`: read-only protected-delete preview with exact target/hash/file-ID/diff plan binding;
 - `orion_vault_recommend_destination`: read-only iai-backed destination recommendation;
 - `orion_vault_apply_plan`: guarded registered production wrapper, fail-closed unless explicit `mutation_enabled` is present;
 - `pre_tool_call`: plan validation plus disabled/preview-only/invalid mode blocking before approval;
@@ -223,3 +224,27 @@ installation at that boundary.
 Next closure gate: P5-02W installs/qualifies exactly the P5-02V `0.3.0`
 candidate with mutation disabled. Target deletion remains P5-02X and recovery
 cleanup remains P5-02Y.
+
+
+## P5-02W installed-disabled protected-delete qualification
+
+P5-02W installed exactly the P5-02V-qualified `0.3.0` source into COMPANION
+with rollback captured at:
+
+```text
+C:\Users\spill\AppData\Local\hermes\profiles\companion\orion\backups\p5-02w-installed-delete-disabled-20260925-035238
+```
+
+Installed-location doctor passed with 5 tools / 2 hooks. The live authenticated
+`orion_vault` toolset contained exactly five expected tools; delete preview was
+registered as `preview_delete`; the public apply schema remained plan-token
+only; the private executor remained unregistered; disabled pre-tool/apply paths
+created no approval attempt and did not call the private executor.
+
+Production mutation remained disabled. The exact four-record recovery evidence,
+restored move source, retained vault target, edit canary, COMPANION config, and
+`.env` were unchanged, and Hermes returned to manual-off.
+
+P5-02X is the next authorized closure gate for the exact retained-target delete.
+Recovery cleanup remains P5-02Y after the final post-delete recovery set is
+known.
