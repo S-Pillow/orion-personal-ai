@@ -1,6 +1,6 @@
 # P5-02W — Installed Protected-Delete Plugin, Mutation Disabled
 
-Status: **AUTHORIZED / GATE PREPARED / WINDOWS EXECUTION PENDING**
+Status: **PASS / INSTALLED-DISABLED QUALIFICATION ACCEPTED / HERMES MANUAL-OFF**
 
 Authorization date: 2026-09-25
 
@@ -139,9 +139,70 @@ Expected IDs and read-time classifications:
 - Hermes returned to manual-off;
 - no production mutation invoked.
 
+## Accepted Windows qualification result
+
+Observed operator result:
+
+```text
+P5_02W_ROLLBACK_CAPTURED=true
+P5_02W_RECOVERY_COUNT_BEFORE=4
+P5_02W_HERMES_MANUAL_OFF_PREINSTALL=true
+P5_02W_SOURCE_DOCTOR=PASS
+P5_02W_INSTALLED_DOCTOR=PASS
+P5_02W_INSTALLED_SOURCE_MATCH=true
+P5_02W_INSTALLED_PLUGIN_VERSION=0.3.0
+P5_02W_GATEWAY_HEALTHY=true
+P5_02W_HERMES_DOTENV_LOADED=true
+P5_02W_EFFECTIVE_RECOVERY_ROOT_MATCH=true
+PRODUCTION_MUTATION_MODE=disabled
+PRODUCTION_MUTATION_ALLOWED=false
+P5_02W_NATIVE_ROOT_VALIDATION=PASS
+P5_02W_RECOVERY_INVENTORY_COUNT=4
+P5_02W_RECOVERY_ATTENTION_COUNT=0
+P5_02W_RECOVERY_BASELINE_MATCH=true
+P5_02W_REGISTERED_APPLY_HANDLER=apply_plan_production_guarded
+P5_02W_PRIVATE_EXECUTOR_REGISTERED=false
+P5_02W_DELETE_PREVIEW_HANDLER=preview_delete
+P5_02W_APPLY_SCHEMA_PLAN_TOKEN_ONLY=true
+P5_02W_DELETE_PREVIEW_SCHEMA_TARGET_ONLY=true
+P5_02W_DELETE_PREVIEW_READ_ONLY=true
+P5_02W_DISABLED_PRETOOL_BLOCK=true
+P5_02W_DISABLED_APPLY_REFUSED=true
+P5_02W_DISABLED_APPROVAL_ATTEMPT_CREATED=false
+P5_02W_DISABLED_EXECUTOR_CALLED=false
+P5_02W_LIVE_ORION_TOOLSET_FOUND=true
+P5_02W_LIVE_ORION_TOOL_COUNT=5
+P5_02W_RUNTIME_VERIFY=PASS
+P5_02W_CONFIG_UNCHANGED=true
+P5_02W_ENV_UNCHANGED=true
+P5_02W_PRODUCTION_RECOVERY_UNCHANGED=true
+P5_02W_MOVE_SOURCE_UNCHANGED=true
+P5_02W_MOVE_TARGET_UNCHANGED=true
+P5_02W_EDIT_CANARY_UNCHANGED=true
+P5_02W_MUTATION_INVOCATION=false
+P5_02W_MUTATION_MODE_PERSISTED=false
+HERMES_MANUAL_OFF=true
+P5_02W_INSTALLED_DISABLED_QUALIFICATION=PASS
+```
+
+Rollback capture:
+
+```text
+C:\Users\spill\AppData\Local\hermes\profiles\companion\orion\backups\p5-02w-installed-delete-disabled-20260925-035238
+```
+
+P5-02W is accepted.
+
 ## Current stop point
 
-P5-02W gate is prepared. The live installed plugin is still `0.2.0` until the
-Windows gate executes successfully.
+The live COMPANION plugin now exactly matches the P5-02V-qualified `0.3.0`
+source. The protected delete preview is registered in the five-tool live Orion
+toolset, while mutation remains disabled.
 
-P5-02X target deletion and P5-02Y recovery cleanup remain later closure gates.
+Production recovery remains exactly 4 valid records / 0 attention; restored
+move source, retained vault target, edit canary, config, and `.env` are
+unchanged; Hermes is manual-off.
+
+The next authorized closure gate is P5-02X: one exact protected deletion of the
+retained vault target with fresh human `once` approval. P5-02Y recovery
+cleanup remains after X establishes the final recovery set.
