@@ -48,13 +48,23 @@ $Runner = Join-Path $PSScriptRoot "p5-02u-move-source-restore.py"
 $Stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $SourceWorktree = Join-Path $env:TEMP "orion-p5-02u-source-$Stamp"
 
-function Test-GatewayHealth {
+function Test-GatewayListening {
+    $client = [Net.Sockets.TcpClient]::new()
     try {
-        $response = Invoke-WebRequest -Uri "http://127.0.0.1:8642/health" -UseBasicParsing -TimeoutSec 2
-        return ($response.StatusCode -ge 200 -and $response.StatusCode -lt 300)
+        $connect = $client.BeginConnect("127.0.0.1", 8642, $null, $null)
+        if (-not $connect.AsyncWaitHandle.WaitOne(2000, $false)) {
+            return $false
+        }
+        try {
+            $client.EndConnect($connect)
+        }
+        catch {
+            return $false
+        }
+        return $client.Connected
     }
-    catch {
-        return $false
+    finally {
+        $client.Dispose()
     }
 }
 
@@ -118,8 +128,8 @@ if (Test-Path -LiteralPath $Source) {
     throw "STOP: P5-02U restore source already exists; preserve state for inspection."
 }
 
-if (Test-GatewayHealth) {
-    throw "STOP: Hermes gateway is running; P5-02U requires manual-off baseline."
+if (Test-GatewayListening) {
+    throw "STOP: port 8642 is listening; P5-02U requires Hermes manual-off baseline."
 }
 
 $RepoStatus = (& git -C $Repo status --porcelain=v1 2>&1 | Out-String).Trim()
@@ -274,8 +284,8 @@ try {
     Write-Host "P5_02U_PARENT_AUTOMATIC_RECOVERY_CLEANUP=false"
     Write-Host "P5_02U_PARENT_AUTOMATIC_FOLLOWUP_MUTATION=false"
 
-    if (Test-GatewayHealth) {
-        throw "STOP: P5-02U unexpectedly started Hermes gateway."
+    if (Test-GatewayListening) {
+        throw "STOP: port 8642 is listening after P5-02U; Hermes must remain manual-off."
     }
     if ((Get-FileHash -Algorithm SHA256 -LiteralPath $Config).Hash -ne $ConfigBefore) {
         throw "STOP: P5-02U changed COMPANION config."
