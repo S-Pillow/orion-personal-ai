@@ -4,7 +4,7 @@ This directory contains Orion's native Hermes vault-actions plugin source.
 
 ## Current accepted state
 
-Phase 5 source qualification is accepted through P5-02N. Installed/runtime qualification remains accepted through P5-02L.
+Phase 5 source qualification is accepted through P5-02N. Installed/runtime qualification is accepted through P5-02O.
 
 The plugin is installed and enabled under the COMPANION profile with access limited to the configured `iai-mcp` server. The live runtime has loaded the expected four-tool `orion_vault` toolset.
 
@@ -12,32 +12,34 @@ Production mutation remains disabled:
 
 - `ORION_P5_PRODUCTION_RECOVERY_ROOT` is persisted and runtime-qualified;
 - `ORION_P5_MUTATION_MODE` is not persisted and resolves to `disabled`;
-- registered `orion_vault_apply_plan` still points to `apply_plan_placeholder`;
-- the placeholder always returns `p5_01_mutation_not_authorized`;
+- registered `orion_vault_apply_plan` points to `apply_plan_production_guarded`;
+- disabled `pre_tool_call` blocks without creating an approval rule;
+- disabled public apply returns `production_mutation_not_enabled` without entering the private production executor;
 - `_execute_production_plan_candidate()` remains private and unregistered;
+- production recovery inventory remains empty;
 - no real vault/inbox mutation has been authorized or performed.
 
 Accepted installed source:
 
 ```text
-ce676a263f3dd2c18a7d7700b17a6023c6845904
+faf8b4787d8e6fb668eb5e9d754104910b4b401a
 ```
 
-Accepted installed `__init__.py` SHA-256:
+Accepted installed plugin version:
 
 ```text
-FCFA3DDC4A86B99691FB003CF4421027C5CC3CA22AC99ADBCCEEE8D3B3C7B5DA
+0.2.0
 ```
 
-P5-02L closure:
+P5-02O rollback capture:
 
 ```text
-243f778a2a09a4a9f2c603c437e8b94149d52e2b
+C:\Users\spill\AppData\Local\hermes\profiles\companion\orion\backups\p5-02o-installed-disabled-20260923-040536
 ```
 
 ## P5-02N accepted source
 
-The repository source on `feature/orion-phase5-p5-02n-registered-wrapper` implements and has qualified the P5-02M frozen guarded registration design. Qualified code head: `faf8b4787d8e6fb668eb5e9d754104910b4b401a`. This is source-only and has **not** replaced the accepted installed COMPANION plugin described above.
+The repository source on `feature/orion-phase5-p5-02n-registered-wrapper` implements and has qualified the P5-02M frozen guarded registration design. Qualified code head: `faf8b4787d8e6fb668eb5e9d754104910b4b401a`. P5-02O subsequently installed and runtime-qualified these exact plugin bytes while mutation remained disabled.
 
 Accepted source behavior:
 
@@ -57,9 +59,9 @@ P5-02N passed 129/129 Phase 5 tests, Hermes approval 3/3, Hermes dispatcher 2/2,
 - `orion_vault_preview_edit`: read-only edit preview;
 - `orion_vault_preview_move_draft`: read-only inbox-to-vault move preview;
 - `orion_vault_recommend_destination`: read-only iai-backed destination recommendation;
-- `orion_vault_apply_plan`: fail-closed placeholder;
-- `pre_tool_call`: plan validation and current no-write approval contract;
-- `post_approval_response`: fresh human-once observer used by qualified private candidates.
+- `orion_vault_apply_plan`: guarded registered production wrapper, fail-closed unless explicit `mutation_enabled` is present;
+- `pre_tool_call`: plan validation plus disabled/preview-only/invalid mode blocking before approval;
+- `post_approval_response`: fresh human-once observer used by the qualified private production executor when a later separately authorized mutation gate enables execution.
 
 Hermes doctor accepted the manifest with four tools and two hooks.
 
@@ -181,4 +183,4 @@ Windows-only file identity, ACL, local-volume, and handle semantics remain requi
 
 Do not treat this README, a source test, a plugin registration, an approval card, a persisted receipt, or a visual authority label as mutation authorization.
 
-Production mutation requires a separately authorized runtime gate. The P5-02N source wrapper remains fail-closed unless explicit `mutation_enabled` is present; the installed P5-02L runtime still uses the older placeholder and Hermes remains manual-off by default.
+Production mutation requires a separately authorized bounded action gate. The installed P5-02O runtime now uses the guarded P5-02N wrapper, remains fail-closed because `ORION_P5_MUTATION_MODE` is absent/disabled, and Hermes remains manual-off by default.
