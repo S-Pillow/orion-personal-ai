@@ -1,0 +1,626 @@
+# P5-02P — First Production Canary Edit Readiness
+
+Status: **PASS / READINESS COMPLETE / NO PRODUCTION MUTATION AUTHORIZED**
+
+Date: 2026-09-23
+
+Branch:
+
+```text
+feature/orion-phase5-p5-02p-production-canary-readiness
+```
+
+Depends on:
+
+- P5-02N source qualification accepted;
+- P5-02O installed/runtime qualification accepted;
+- installed Orion vault plugin is exact P5-02N-qualified `0.2.0` source;
+- `orion_vault_apply_plan` is registered to
+  `apply_plan_production_guarded`;
+- `_execute_production_plan_candidate()` remains private;
+- `ORION_P5_MUTATION_MODE` is absent/persisted nowhere and resolves to
+  `disabled`;
+- production recovery inventory is empty;
+- COMPANION is manual-off.
+
+## Purpose
+
+P5-02P is a planning/readiness gate for the first real production mutation.
+It does not create the canary, enable mutation, start COMPANION, or invoke a
+production apply.
+
+The goal is to make the eventual first mutation deliberately small,
+observable, recoverable, and easy to stop before any side effect.
+
+## PRD requirements carried forward
+
+The controlling PRD v2.8 requires:
+
+- side-effect-free preview generation;
+- canonical containment beneath the configured vault/inbox roots;
+- an explicit Hermes generic approval before mutation;
+- an approval payload with the exact target and exact diff/operation;
+- no mutation on denied, unresolved, expired, timed-out, or stale approval;
+- stale-state revalidation before execution;
+- bounded atomic execution;
+- recovery information for approved operations;
+- deletion as a separate explicit approval/action class.
+
+Therefore the first production mutation SHOULD NOT be a delete and SHOULD NOT
+combine multiple action classes.
+
+## External research findings
+
+### 1. Use a single edit as the first production mutation
+
+A one-file edit has a smaller failure surface than a move:
+
+- one existing target rather than source + destination;
+- no source deletion;
+- no target-create race;
+- recovery requires one captured original payload;
+- postcondition is a single target hash.
+
+The production edit implementation already performs the required sequence:
+preflight, exact preview lookup, fresh human approval, post-approval
+revalidation, second recovery-inventory check, durable recovery preparation,
+final file-id/hash validation, native replacement, post-write hash validation,
+manifest commit, then receipt commit.
+
+### 2. Keep the canary permanent through Phase 5
+
+The first target should be a deliberately created canary note containing no
+personal data. Do not plan to delete it immediately after the test.
+
+Reason:
+
+- deleting the canary introduces a second action class;
+- PRD OR-NOTE-008 requires deletion to have its own separate explicit approval;
+- retaining one known canary gives later edit/restore regression gates a stable,
+  low-value target.
+
+Proposed relative path, pending owner confirmation:
+
+```text
+_Orion-P5-Canary.md
+```
+
+Proposed before bytes (UTF-8, no BOM, LF newlines):
+
+```text
+# Orion Phase 5 Canary
+state: before
+gate: first-production-edit
+```
+
+Proposed after bytes:
+
+```text
+# Orion Phase 5 Canary
+state: after
+gate: first-production-edit
+```
+
+Frozen SHA-256 values:
+
+```text
+before = ddb08a8ca9ab5d06185a692182a742210817cba1d5523c841d6a371dfdb57b4c
+after  = 86e94184ef6ff2a80f5cdfa04749c42328079e029d153d3a23d42eab05059e19
+diff   = 6642d44372449d01e1ec3f5d325bd2b372f52cc58610293bcccf0e4e4ec996e8
+```
+
+Frozen exact unified diff:
+
+```diff
+--- vault/_Orion-P5-Canary.md
++++ vault/_Orion-P5-Canary.md
+@@ -1,3 +1,3 @@
+ # Orion Phase 5 Canary
+-state: before
++state: after
+ gate: first-production-edit
+```
+
+The canary fixture setup and readiness verifier both fail closed if the frozen
+bytes/hashes do not match. The exact Windows file identity is intentionally not
+hard-coded because it exists only after the canary file is created; P5-02P-B
+captures it and P5-02Q must require the same identity immediately before the
+bounded action.
+
+### 3. Windows file identity remains a required race guard
+
+Microsoft documents that `FILE_ID_INFO` combines volume serial number and a
+128-bit file identifier to uniquely identify a file on one computer. The Orion
+production edit rechecks this identity before replacement, in addition to the
+content hash.
+
+Reference:
+
+- https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-file_id_info
+- https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-getfileinformationbyhandleex
+
+### 4. ReplaceFileW is the correct existing primitive, but do not overclaim write-through
+
+Microsoft documents that `ReplaceFileW` replaces one file with another while
+preserving important attributes/ACL-related metadata from the replaced file.
+The original and replacement are required to be on the same volume.
+
+Microsoft also documents that `REPLACEFILE_WRITE_THROUGH` is not supported.
+Therefore P5-02P must not claim that this flag provides durability.
+
+Orion's actual safety case is instead:
+
+1. recovery bytes are written and fsynced first;
+2. recovery manifest and prepared receipt are written first;
+3. replacement bytes are written to an exclusive temporary file and fsynced;
+4. target file identity/hash are rechecked immediately before `ReplaceFileW`;
+5. the resulting target hash is checked;
+6. recovery manifest and receipt are committed;
+7. restart classification can reconcile a prepared record from actual
+   filesystem hashes if interruption occurs between protected steps.
+
+Reference:
+
+- https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-replacefilew
+- https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-flushfilebuffers
+
+No source hardening change is currently justified solely by the unsupported
+`REPLACEFILE_WRITE_THROUGH` flag because the qualified implementation already
+pre-flushes bytes and provides post-crash recovery classification. Treat a
+power-loss-specific durability enhancement as a separate evidence-backed
+change if later required.
+
+### 5. Preserve the human once-only approval path
+
+Hermes documents that:
+
+- `pre_tool_call` can block or escalate a tool before execution;
+- the Runs API emits an `approval.request` and parks the run in
+  `waiting_for_approval`;
+- `POST /v1/runs/{run_id}/approval` resolves that exact pending approval;
+- `once` authorizes only that request;
+- approval timeout denies/fails closed and an expired prompt requires a new
+  tool call.
+
+References:
+
+- https://hermes-agent.nousresearch.com/docs/developer-guide/plugins
+- https://hermes-agent.nousresearch.com/docs/user-guide/features/api-server
+- https://hermes-agent.nousresearch.com/docs/user-guide/security
+- https://hermes-agent.nousresearch.com/docs/developer-guide/agent-loop
+
+The first production gate must accept only `choice=once`. Session, always,
+smart/automatic approval, cron, single-query auto-approval, cached decisions,
+or a missing observer remain non-authorizing under the qualified plugin.
+
+### 6. Use explicit change-control records
+
+NIST configuration-change guidance emphasizes reviewed/approved changes,
+documented implementation, testing, and post-change review. Orion's current
+gate structure already follows that pattern and should retain:
+
+- exact source/runtime baseline;
+- exact target and hashes;
+- explicit owner authorization;
+- rollback/recovery before side effect;
+- captured result and postcondition;
+- manual-off restoration;
+- repository evidence after acceptance.
+
+References:
+
+- https://csrc.nist.gov/pubs/sp/800/128/upd1/final
+- https://nvlpubs.nist.gov/nistpubs/SpecialPublications/800-171r3/NIST.SP.800-171r3.html
+
+## Recommended gate decomposition
+
+Do not combine fixture creation, first production mutation, restore, move, and
+delete into one acceptance event.
+
+### P5-02P-A — canary fixture setup
+
+Separate owner authorization should name the exact canary target.
+
+Conditions:
+
+- Hermes manual-off;
+- production mutation mode absent;
+- production recovery inventory empty;
+- target does not already exist;
+- target parent is the accepted vault root and is not a reparse point;
+- create exactly the agreed before bytes;
+- verify SHA-256 immediately after creation;
+- leave the canary in place.
+
+This is an operator-created test fixture, not an Orion mutation acceptance.
+
+Prepared source artifact:
+
+```text
+scripts/phase5/p5-02p-create-canary-fixture.ps1
+```
+
+### P5-02P-B — read-only production readiness
+
+Before mutation enablement:
+
+- prove installed plugin still matches exact P5-02N source;
+- run installed plugin doctor;
+- prove `config.yaml` and `.env` still match the P5-02O accepted state;
+- prove no mutation/disposable settings are ambient or persisted;
+- prove recovery inventory is exactly zero with no attention/truncation;
+- prove the canary exists at the exact canonical target;
+- capture canary SHA-256 and Windows file identity;
+- compute exact proposed bytes/hash and unified diff without writing;
+- verify no reparse component and fixed local volume assumptions;
+- record the expected approval summary.
+
+Prepared source artifacts:
+
+```text
+scripts/phase5/p5-02p-canary-readiness.ps1
+scripts/phase5/p5-02p-canary-readiness.py
+```
+
+### P5-02Q — first Orion production canary edit
+
+This later live gate requires another explicit owner authorization naming:
+
+- action: `edit_note`;
+- exact canary relative/canonical path;
+- exact expected before SHA-256;
+- exact proposed after SHA-256;
+- exact approval diff;
+- exact accepted installed plugin source;
+- rollback/recovery expectations.
+
+Recommended execution order:
+
+1. require manual-off baseline;
+2. require P5-02P-B readiness PASS immediately before start;
+3. set `ORION_P5_MUTATION_MODE=mutation_enabled` **process-scoped only** for
+   the bounded COMPANION start; never persist it;
+4. start COMPANION and confirm health/toolset;
+5. create the exact edit preview;
+6. independently compare returned canonical target, before hash, after hash, and
+   diff hash to the frozen gate contract;
+7. invoke `orion_vault_apply_plan` through an interactive/gateway Hermes
+   execution context;
+8. present exactly one Hermes approval request;
+9. owner selects **Allow once** only;
+10. require the result to report success + `mutation_performed=true` +
+    `recovery_required=false`;
+11. verify canary after SHA-256 from disk;
+12. inspect the exact new schema-v2 recovery record/receipt read-only;
+13. verify inventory count becomes exactly 1 and the record classifies
+    `committed`, with no attention state;
+14. stop COMPANION;
+15. clear all process-scoped mutation state;
+16. prove persistent mutation mode is still absent;
+17. return Hermes to manual-off;
+18. commit acceptance evidence.
+
+### P5-02R — restore qualification
+
+Do not automatically restore the canary as part of P5-02Q.
+
+A restore is a distinct approved operation and is useful as its own production
+recovery acceptance. P5-02R should use the P5-02Q recovery record to generate a
+fresh restore preview and require a new human `ALLOW ONCE`.
+
+### Later move/delete
+
+- Production move should follow only after edit + restore are accepted.
+- Delete remains unimplemented and separately approval-gated by the PRD.
+
+## Deterministic invocation-path finding
+
+Research of the pinned Hermes runtime identified a safer candidate than a
+model-driven Runs API for the first production mutation.
+
+Hermes `model_tools.handle_function_call()` is the ordinary named-tool
+dispatcher used by the agent loop. For a direct named tool call it performs:
+
+1. argument coercion;
+2. tool-request middleware;
+3. the real `pre_tool_call` lifecycle;
+4. registry dispatch to the registered tool handler;
+5. the handler's own approval behavior;
+6. `post_tool_call` observation/result transforms.
+
+This lets an operator harness dispatch exactly
+`orion_vault_apply_plan` with exactly one `plan_token` without asking an LLM
+to choose a tool.
+
+That is preferable for the first canary because a model prompt is not a
+sufficient action-boundary control.
+
+Prepared non-production proof artifacts:
+
+```text
+scripts/phase5/p5-02p-deterministic-dispatch-probe.ps1
+scripts/phase5/p5-02p-deterministic-dispatch-probe.py
+```
+
+The proof deliberately:
+
+- discovers the installed plugin through the COMPANION profile;
+- requires the registered handler to be
+  `apply_plan_production_guarded`;
+- creates a preview only under disposable temporary roots;
+- sets `mutation_enabled` only inside the probe process;
+- replaces the private production executor in memory with an approval-only
+  function before dispatch;
+- invokes the exact registered apply tool through
+  `handle_function_call()`;
+- requires a real interactive Hermes human `once` approval;
+- verifies the plugin observer records the fresh CLI `once`;
+- verifies no disposable note bytes change and no recovery content appears;
+- restores the original executor and environment in a `finally` path.
+
+Therefore the real production executor cannot run during this proof.
+
+P5-02Q remains execution-blocked until this non-production dispatch probe
+passes on the accepted Windows/Hermes environment. If it passes, the same
+`handle_function_call()` route can be used by the later production harness
+without any model-selected tool invocation.
+
+The Runs API remains the correct product-facing asynchronous approval surface,
+but it is not required for the first deterministic canary gate.
+
+## Observed deterministic dispatch proof — PASS
+
+The non-production deterministic registered-dispatch proof passed on the accepted
+Windows/Hermes environment on 2026-09-23.
+
+Observed preconditions:
+
+```text
+P5_02P_DISPATCH_PRECHECK=PASS
+P5_02P_INSTALLED_SOURCE_MATCH=true
+P5_02P_PRODUCTION_RECOVERY_EMPTY=true
+P5_02P_HERMES_MANUAL_OFF=true
+```
+
+Hermes presented exactly one interactive plugin approval for the disposable
+preview and the owner selected `once`.
+
+Observed proof result:
+
+```text
+P5_02P_DETERMINISTIC_REGISTERED_DISPATCH=PASS
+P5_02P_REGISTERED_HANDLER=apply_plan_production_guarded
+P5_02P_PRE_TOOL_CALL_PATH_EXERCISED=true
+P5_02P_PRIVATE_PRODUCTION_EXECUTOR_CALLED=false
+P5_02P_APPROVAL_ONLY_PROBE_DELEGATIONS=1
+P5_02P_FRESH_HUMAN_ONCE_OBSERVED=true
+P5_02P_APPROVAL_SURFACE=cli
+P5_02P_AUTHORIZATION_REUSABLE=false
+P5_02P_PRODUCTION_FILESYSTEM_MUTATION=false
+P5_02P_DISPOSABLE_NOTE_UNCHANGED=true
+P5_02P_DISPOSABLE_RECOVERY_EMPTY=true
+P5_02P_DISPATCH_WRAPPER=PASS
+P5_02P_PRODUCTION_RECOVERY_STILL_EMPTY=true
+P5_02P_CONFIG_UNCHANGED=true
+P5_02P_PRODUCTION_MUTATION=false
+HERMES_MANUAL_OFF=true
+```
+
+This closes the previously open invocation-path question for the first bounded
+production canary: `model_tools.handle_function_call()` can deterministically
+dispatch the exact registered Orion apply tool while preserving the genuine
+Hermes generic approval observer, without using an LLM to select the tool.
+
+The real private production executor was not called during this proof.
+
+### Runtime warning observed
+
+The probe process emitted Hermes' existing warning that its linked SQLite
+3.40.1 is affected by the WAL-reset corruption issue and therefore Hermes is
+falling back to `journal_mode=DELETE` for the affected state database.
+
+This did not fail or alter the P5-02P proof and no state-database repair or
+Hermes upgrade is authorized by this gate. Track the warning separately before
+any future Hermes upgrade/maintenance ticket; do not mix that work into the
+first production canary gate.
+
+## Observed P5-02P-A canary fixture creation — PASS
+
+The separately authorized production canary fixture creation completed
+successfully on the accepted Windows environment.
+
+Observed result:
+
+```text
+P5_02P_CANARY_CREATE=PASS
+P5_02P_CANARY_RELATIVE_PATH=_Orion-P5-Canary.md
+P5_02P_CANARY_CANONICAL_PATH=C:\Personal\Me\_Orion-P5-Canary.md
+P5_02P_CANARY_BEFORE_SHA256=DDB08A8CA9AB5D06185A692182A742210817CBA1D5523C841D6A371DFDB57B4C
+P5_02P_CANARY_UTF8_NO_BOM=true
+P5_02P_CANARY_NEWLINES=LF
+PRODUCTION_MUTATION_MODE=disabled
+P5_02P_RECOVERY_INVENTORY_COUNT=0
+HERMES_MANUAL_OFF=true
+P5_02P_CANARY_RETAIN_FOR_FUTURE_GATES=true
+```
+
+The created fixture exactly matches the frozen before-hash contract.
+
+This was an operator-created test fixture, not an Orion mutation acceptance.
+No Orion apply tool was invoked, production mutation mode was not enabled,
+production recovery remained empty, and Hermes remained manual-off.
+
+The canary must now be treated as a controlled Phase 5 test asset. Do not edit,
+move, rename, or delete it outside the later explicitly authorized Orion gates.
+
+## Observed P5-02P-B read-only readiness — PASS
+
+The separately authorized read-only production-canary readiness gate completed
+successfully on the accepted Windows environment.
+
+Observed installed/runtime checks:
+
+```text
+P5_02P_INSTALLED_SOURCE_MATCH=true
+P5_02P_INSTALLED_PLUGIN_DOCTOR=PASS
+P5_02P_HERMES_MANUAL_OFF=true
+P5_02P_READINESS=PASS
+P5_02P_MUTATION_MODE=disabled
+P5_02P_MUTATION_ALLOWED=false
+P5_02P_RECOVERY_INVENTORY_COUNT=0
+P5_02P_RECOVERY_ATTENTION_COUNT=0
+```
+
+Frozen canary identity and content contract:
+
+```text
+P5_02P_CANARY_RELATIVE_PATH=_Orion-P5-Canary.md
+P5_02P_CANARY_CANONICAL_PATH=C:\Personal\Me\_Orion-P5-Canary.md
+P5_02P_CANARY_FILE_ID=5e1aeb8a1aeb5d91:cba20a00000012000000000000000000
+P5_02P_CANARY_BEFORE_SHA256=ddb08a8ca9ab5d06185a692182a742210817cba1d5523c841d6a371dfdb57b4c
+P5_02P_CANARY_AFTER_SHA256=86e94184ef6ff2a80f5cdfa04749c42328079e029d153d3a23d42eab05059e19
+P5_02P_CANARY_DIFF_SHA256=6642d44372449d01e1ec3f5d325bd2b372f52cc58610293bcccf0e4e4ec996e8
+```
+
+Exact unified diff:
+
+```diff
+--- vault/_Orion-P5-Canary.md
++++ vault/_Orion-P5-Canary.md
+@@ -1,3 +1,3 @@
+ # Orion Phase 5 Canary
+-state: before
++state: after
+ gate: first-production-edit
+```
+
+Observed side-effect-free/post-state checks:
+
+```text
+P5_02P_PREVIEW_MUTATION=false
+P5_02P_CANARY_UNCHANGED=true
+P5_02P_READINESS_WRAPPER=PASS
+P5_02P_MUTATION_INVOCATION=false
+HERMES_MANUAL_OFF=true
+```
+
+P5-02P readiness is therefore complete:
+
+- deterministic exact-tool Hermes dispatch with real human `once` approval is proven;
+- the controlled canary fixture exists and matches the frozen before bytes;
+- installed source still matches the P5-02N-qualified source;
+- the exact Windows file identity is frozen;
+- exact before/after/diff hashes are frozen;
+- production mutation remains disabled;
+- production recovery remains empty;
+- Hermes remains manual-off.
+
+P5-02Q is the next boundary and requires a separate owner authorization naming
+the exact `edit_note` action and this exact canary target/identity/hash/diff
+contract.
+
+## Prepared tomorrow-night command sequence
+
+These commands are documented for convenience. Their presence in source is not
+authorization to run a production mutation.
+
+### Step 1 — deterministic registered-dispatch approval proof
+
+This is non-production and uses disposable roots. It requires a human Hermes
+prompt; choose **ONCE** only.
+
+```powershell
+& "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" \
+  -NoProfile \
+  -ExecutionPolicy Bypass \
+  -File ".\scripts\phase5\p5-02p-deterministic-dispatch-probe.ps1" \
+  -AuthorizationToken "I_AUTHORIZE_P5_02P_DISPATCH_PROBE"
+```
+
+Do not proceed if the final markers do not include:
+
+```text
+P5_02P_DETERMINISTIC_REGISTERED_DISPATCH=PASS
+P5_02P_FRESH_HUMAN_ONCE_OBSERVED=true
+P5_02P_PRODUCTION_FILESYSTEM_MUTATION=false
+P5_02P_DISPATCH_WRAPPER=PASS
+P5_02P_PRODUCTION_RECOVERY_STILL_EMPTY=true
+HERMES_MANUAL_OFF=true
+```
+
+### Step 2 — canary fixture creation
+
+This step writes one known non-sensitive fixture into the production vault, so
+it requires a separate explicit owner authorization before execution.
+
+```powershell
+& "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" \
+  -NoProfile \
+  -ExecutionPolicy Bypass \
+  -File ".\scripts\phase5\p5-02p-create-canary-fixture.ps1" \
+  -AuthorizationToken "I_AUTHORIZE_P5_02P_CANARY_CREATE"
+```
+
+Expected frozen before hash:
+
+```text
+ddb08a8ca9ab5d06185a692182a742210817cba1d5523c841d6a371dfdb57b4c
+```
+
+### Step 3 — read-only canary readiness
+
+Run only after Step 2 is accepted.
+
+```powershell
+& "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" \
+  -NoProfile \
+  -ExecutionPolicy Bypass \
+  -File ".\scripts\phase5\p5-02p-canary-readiness.ps1" \
+  -AuthorizationToken "I_AUTHORIZE_P5_02P_READINESS"
+```
+
+The readiness output freezes the actual Windows file ID and requires the exact
+before, after, and diff hashes already recorded above.
+
+### Step 4 — stop and review
+
+Do not automatically continue into P5-02Q.
+
+After P5-02P-B passes, record its exact file ID/hash/diff evidence in GitHub,
+review the deterministic dispatch proof, and request a new authorization for
+the exact P5-02Q canary edit.
+
+## Stop conditions for tomorrow
+
+Stop before mutation enablement if any of the following is true:
+
+- P5-02O source/runtime identity has drifted;
+- repository/operator artifacts are dirty or unreviewed;
+- Hermes is already running unexpectedly;
+- mutation mode exists in persistent config/environment;
+- recovery inventory is nonzero before the canary-edit gate;
+- canary path/content/hash/file identity differ from the frozen contract;
+- preview target/diff/hashes differ from expected;
+- deterministic Hermes invocation path is unresolved;
+- approval surface does not show the exact canonical target/diff;
+- any choice other than fresh human `once` is observed;
+- any unrelated tool executes;
+- recovery preparation cannot be verified;
+- Hermes cannot be returned to manual-off.
+
+## Current stopping point
+
+P5-02P readiness is accepted. The separately authorized canary fixture exists at
+`C:\Personal\Me\_Orion-P5-Canary.md` with the frozen before SHA-256
+`ddb08a8ca9ab5d06185a692182a742210817cba1d5523c841d6a371dfdb57b4c`.
+P5-02P-B read-only readiness passed, including the frozen Windows file identity
+and exact target/hash/diff contract, and the deterministic registered-dispatch
+approval proof passed without invoking the real production executor.
+
+Production mutation remains disabled, production recovery remains empty at the
+P5-02P stopping point, and Hermes remains manual-off. Do not recreate, edit,
+move, rename, or delete the controlled canary outside a separately authorized
+later Orion gate.
+
+P5-02Q is the next separate authorization boundary: one bounded `edit_note`
+against exactly the frozen canary contract.

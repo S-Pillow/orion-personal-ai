@@ -270,6 +270,10 @@ P5-02M remains the integration/design-freeze review surface in PR #27. P5-02N so
 
 The installed COMPANION runtime now carries the P5-02N-qualified `0.2.0` guarded wrapper while production mutation remains disabled and Hermes remains manual-off.
 
+P5-02P production-canary readiness is accepted. The deterministic registered-dispatch proof passed with a real fresh human `once` approval and no production executor call; the controlled canary `C:\Personal\Me\_Orion-P5-Canary.md` was created under separate authorization; and read-only readiness froze Windows file identity `5e1aeb8a1aeb5d91:cba20a00000012000000000000000000`, before SHA-256 `ddb08a8ca9ab5d06185a692182a742210817cba1d5523c841d6a371dfdb57b4c`, after SHA-256 `86e94184ef6ff2a80f5cdfa04749c42328079e029d153d3a23d42eab05059e19`, and exact diff SHA-256 `6642d44372449d01e1ec3f5d325bd2b372f52cc58610293bcccf0e4e4ec996e8`. Production mutation remains disabled, recovery inventory remains empty, and Hermes remains manual-off.
+
+P5-02Q is the next separate authorization boundary: one bounded `edit_note` operation against exactly that frozen canary contract.
+
 The safe project-status shorthand is:
 
-> Phase 3 presentation foundation accepted; Phase 4 voice work partially accepted with final live TTS/barge-in and wake disposition deferred; Phase 5 source qualification accepted through P5-02N and installed/runtime qualification accepted through P5-02O; production mutation remains disabled.
+> Phase 3 presentation foundation accepted; Phase 4 voice work partially accepted with final live TTS/barge-in and wake disposition deferred; Phase 5 source qualification accepted through P5-02N, installed/runtime qualification accepted through P5-02O, and first-production-canary readiness accepted through P5-02P; production mutation remains disabled.
