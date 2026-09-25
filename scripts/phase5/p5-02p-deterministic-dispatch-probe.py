@@ -43,6 +43,7 @@ def main() -> int:
 
     os.environ["HERMES_HOME"] = str(profile)
 
+    import hermes_cli.plugins as hermes_plugins
     from hermes_cli.plugins import discover_plugins
     from model_tools import handle_function_call
     from tools.approval import (
@@ -71,6 +72,14 @@ def main() -> int:
         raise RuntimeError("private production executor unexpectedly registered")
 
     original_executor = plugin._execute_production_plan_candidate
+    original_pre_tool_dispatch = hermes_plugins._dispatch_pre_tool_call_hooks
+    pre_tool_hook_calls = 0
+
+    def observed_pre_tool_dispatch(*args, **kwargs):
+        nonlocal pre_tool_hook_calls
+        pre_tool_hook_calls += 1
+        return original_pre_tool_dispatch(*args, **kwargs)
+
     original_env = {
         name: os.environ.get(name)
         for name in (
@@ -142,6 +151,7 @@ def main() -> int:
                 )
 
             plugin._execute_production_plan_candidate = approval_only_executor
+            hermes_plugins._dispatch_pre_tool_call_hooks = observed_pre_tool_dispatch
             interactive_token = set_hermes_interactive_context(True)
 
             print("P5_02P_DISPATCH_PROBE_PROMPT_EXPECTED=true")
@@ -185,6 +195,10 @@ def main() -> int:
                 raise RuntimeError(
                     f"expected one private probe delegation, got {probe_executor_calls}"
                 )
+            if pre_tool_hook_calls != 1:
+                raise RuntimeError(
+                    f"expected one actual pre_tool_call hook dispatch, got {pre_tool_hook_calls}"
+                )
             if note.read_bytes() != before:
                 raise RuntimeError("disposable note changed during approval-only probe")
             if list(recovery.iterdir()):
@@ -193,6 +207,7 @@ def main() -> int:
             print("P5_02P_DETERMINISTIC_REGISTERED_DISPATCH=PASS")
             print("P5_02P_REGISTERED_HANDLER=apply_plan_production_guarded")
             print("P5_02P_PRE_TOOL_CALL_PATH_EXERCISED=true")
+            print("P5_02P_PRE_TOOL_CALL_HOOK_DISPATCH_COUNT=1")
             print("P5_02P_PRIVATE_PRODUCTION_EXECUTOR_CALLED=false")
             print("P5_02P_APPROVAL_ONLY_PROBE_DELEGATIONS=1")
             print("P5_02P_FRESH_HUMAN_ONCE_OBSERVED=true")
@@ -205,6 +220,7 @@ def main() -> int:
 
     finally:
         plugin._execute_production_plan_candidate = original_executor
+        hermes_plugins._dispatch_pre_tool_call_hooks = original_pre_tool_dispatch
         if interactive_token is not None:
             reset_hermes_interactive_context(interactive_token)
         for name, old in original_env.items():
