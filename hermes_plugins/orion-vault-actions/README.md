@@ -222,9 +222,9 @@ and the accepted P5-02U production state remained unchanged. The live installed
 plugin was not changed by P5-02V and remained the accepted `0.2.0`
 installation at that boundary.
 
-Next closure gate: P5-02W installs/qualifies exactly the P5-02V `0.3.0`
-candidate with mutation disabled. Target deletion remains P5-02X and recovery
-cleanup remains P5-02Y.
+P5-02W subsequently installed/qualified exactly the P5-02V `0.3.0`
+candidate with mutation disabled. P5-02X then completed the protected target
+delete, and P5-02Y completed the audited recovery cleanup.
 
 
 ## P5-02W installed-disabled protected-delete qualification
@@ -246,9 +246,8 @@ Production mutation remained disabled. The exact four-record recovery evidence,
 restored move source, retained vault target, edit canary, COMPANION config, and
 `.env` were unchanged, and Hermes returned to manual-off.
 
-P5-02X is the next authorized closure gate for the exact retained-target delete.
-Recovery cleanup remains P5-02Y after the final post-delete recovery set is
-known.
+P5-02X subsequently completed the exact retained-target delete. P5-02Y then
+completed audited cleanup after the final post-delete recovery set was known.
 
 
 ## P5-02X protected target delete accepted
@@ -261,7 +260,8 @@ SHA-256 and Windows file identity. Delete recovery
 is committed; production recovery is 5 valid records / 0 attention; mutation
 mode is disabled; Hermes is manual-off.
 
-P5-02Y exact audited recovery cleanup is the remaining authorized closure gate.
+P5-02Y exact audited recovery cleanup subsequently completed the controlled
+Phase 5 canary closure.
 
 
 ## P5-02Y audited recovery cleanup accepted
