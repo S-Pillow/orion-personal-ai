@@ -25,6 +25,7 @@ ACCEPTED_HERMES_COMMIT = "5fc308a70719a83cccdbba4c0e39c23f5a8239d5"
 EXPECTED_P4_LIVE_SHA256 = "ecfd6dd53610c24a81f078650a0b2b3e129478a50fdb5f353313fff6e12e3888"
 EXPECTED_P4_BACKUP_SHA256 = "8d87036dd488cb811dbabb7048102d0c28fbf54e0e658c464683000118537ec3"
 EXPECTED_P4_PATCH_ID = "ORION-P4-04A-HERMES-AUDIO-GATEWAY-v1"
+EXPECTED_POST_SHA256 = "e78422d1cf3788f1b9c8e06052470c23ebc4446e0a242992d35be8e5e6168288"
 
 SIG_OLD = '''        confirmed_runtime_lock: bool = False,
     ) -> tuple:
@@ -32,6 +33,7 @@ SIG_OLD = '''        confirmed_runtime_lock: bool = False,
 SIG_NEW = '''        confirmed_runtime_lock: bool = False,
         approval_notify_callback=None,
         approval_session_key: Optional[str] = None,
+        approval_cancel_event=None,
     ) -> tuple:
 '''
 
@@ -59,11 +61,18 @@ RUN_CALL_NEW = '''                    # ORION-P5-03A2-SESSION-CHAT-APPROVAL-COMP
                         )
                         approval_token = set_current_session_key(approval_session_key)
                         try:
-                            register_gateway_notify(
-                                approval_session_key,
-                                approval_notify_callback,
-                            )
-                            approval_registered = True
+                            # Disconnect may win before this worker reaches registration.
+                            # Check both before and after registration so the late-register
+                            # race cannot strand a callback or a blocking approval wait.
+                            if approval_cancel_event is None or not approval_cancel_event.is_set():
+                                register_gateway_notify(
+                                    approval_session_key,
+                                    approval_notify_callback,
+                                )
+                                approval_registered = True
+                                if approval_cancel_event is not None and approval_cancel_event.is_set():
+                                    unregister_gateway_notify(approval_session_key)
+                                    approval_registered = False
                         except Exception:
                             try:
                                 reset_current_session_key(approval_token)
@@ -98,6 +107,7 @@ SESSION_HOOK = '''        # ORION-P5-03A2-SESSION-CHAT-APPROVAL-COMPAT-v1
         # concurrent turns may share one Hermes session without sharing an
         # approval namespace.
         self._run_approval_sessions[run_id] = run_id
+        approval_cancel_event = threading.Event()
 
         def _approval_notify(approval_data: Dict[str, Any]) -> None:
             event = dict(approval_data or {})
@@ -134,6 +144,7 @@ SESSION_CALL_NEW = '''                    active_run_id=run_id,
                     gateway_session_key=gateway_session_key,
                     approval_notify_callback=_approval_notify,
                     approval_session_key=run_id,
+                    approval_cancel_event=approval_cancel_event,
                     route=route,
 '''
 
@@ -157,17 +168,44 @@ SESSION_CLEANUP_NEW = '''            finally:
                 await queue.put(_event_payload("done", {}))
 '''
 
-DISCONNECT_OLD = '''    ) -> None:
+DISCONNECT_CALL_RESET_OLD = '''            await self._drain_session_stream_task_on_disconnect(
+                run_id, task, interrupt_message="SSE client disconnected", shield_wait=False
+            )
+'''
+
+DISCONNECT_CALL_RESET_NEW = '''            await self._drain_session_stream_task_on_disconnect(
+                run_id, task, interrupt_message="SSE client disconnected", shield_wait=False,
+                approval_cancel_event=approval_cancel_event,
+            )
+'''
+
+DISCONNECT_CALL_CANCEL_OLD = '''            await self._drain_session_stream_task_on_disconnect(
+                run_id, task, interrupt_message="SSE task cancelled", shield_wait=True
+            )
+'''
+
+DISCONNECT_CALL_CANCEL_NEW = '''            await self._drain_session_stream_task_on_disconnect(
+                run_id, task, interrupt_message="SSE task cancelled", shield_wait=True,
+                approval_cancel_event=approval_cancel_event,
+            )
+'''
+
+DISCONNECT_OLD = '''        shield_wait: bool,
+    ) -> None:
         """Preserve live run control refs until the executor-backed turn actually exits."""
         agent = self._active_run_agents.get(run_id)
 '''
 
-DISCONNECT_NEW = '''    ) -> None:
+DISCONNECT_NEW = '''        shield_wait: bool,
+        approval_cancel_event=None,
+    ) -> None:
         """Preserve live run control refs until the executor-backed turn actually exits."""
         # ORION-P5-03A2-SESSION-CHAT-APPROVAL-COMPAT-v1
-        # unregister_gateway_notify wakes every blocked approval waiter for
-        # this run. This must happen before awaiting the executor-backed task,
-        # otherwise a disconnect during approval can deadlock the drain.
+        # Mark disconnect before unregistering. The worker checks this event
+        # both before and after callback registration, closing the race where
+        # registration happens just after an early unregister no-op.
+        if approval_cancel_event is not None:
+            approval_cancel_event.set()
         try:
             from tools.approval import unregister_gateway_notify
 
@@ -198,6 +236,8 @@ def patch_text(source: str) -> str:
     out = _replace_once(out, SESSION_HOOK_ANCHOR, SESSION_HOOK, "session-chat approval hook")
     out = _replace_once(out, SESSION_CALL_OLD, SESSION_CALL_NEW, "session-chat _run_agent call")
     out = _replace_once(out, SESSION_CLEANUP_OLD, SESSION_CLEANUP_NEW, "session-chat approval cleanup")
+    out = _replace_once(out, DISCONNECT_CALL_RESET_OLD, DISCONNECT_CALL_RESET_NEW, "session-chat reset disconnect guard")
+    out = _replace_once(out, DISCONNECT_CALL_CANCEL_OLD, DISCONNECT_CALL_CANCEL_NEW, "session-chat cancelled disconnect guard")
     out = _replace_once(out, DISCONNECT_OLD, DISCONNECT_NEW, "session-chat disconnect approval cleanup")
     compile(out, "api_server.py", "exec")
     return out
@@ -208,6 +248,7 @@ def required_markers() -> list[str]:
         PATCH_ID,
         "approval_notify_callback=None",
         "approval_session_key: Optional[str] = None",
+        "approval_cancel_event=None",
         "from tools.approval import (",
         "register_gateway_notify(",
         "set_current_session_key(approval_session_key)",
@@ -216,9 +257,13 @@ def required_markers() -> list[str]:
         "self._run_approval_sessions[run_id] = run_id",
         "approval_notify_callback=_approval_notify",
         "approval_session_key=run_id",
+        "approval_cancel_event=approval_cancel_event",
+        "approval_cancel_event = threading.Event()",
+        "approval_cancel_event.is_set()",
+        "approval_cancel_event.set()",
         "self._run_approval_sessions.pop(run_id, None)",
         "unregister_gateway_notify(run_id)",
-        "otherwise a disconnect during approval can deadlock the drain",
+        "registration happens just after an early unregister no-op",
         '"event": "approval.request"',
         '"waiting_for_approval"',
     ]
@@ -276,12 +321,38 @@ def plan(target: Path) -> int:
     missing = verify_patched_text(patched.decode("utf-8"))
     if missing:
         raise RuntimeError(f"planned source missing markers: {missing}")
+    planned_sha = sha256(patched)
+    if planned_sha != EXPECTED_POST_SHA256:
+        raise RuntimeError(
+            f"planned post SHA drift: expected {EXPECTED_POST_SHA256}, observed {planned_sha}"
+        )
     print("P5-03A2 PLAN PASS")
     print(f"Target={target}")
     print(f"PreSha256={EXPECTED_P4_LIVE_SHA256}")
-    print(f"PlannedPostSha256={sha256(patched)}")
+    print(f"PlannedPostSha256={planned_sha}")
     print("WritesPerformed=false")
     return 0
+
+
+def _cleanup_failed_apply_sidecars_if_base_unchanged(
+    target: Path, backup: Path, manifest: Path, pre_sha: str
+) -> bool:
+    """Remove P5 sidecars after a failed apply only if the live target stayed at pre-image."""
+    try:
+        if not target.is_file() or sha256(target.read_bytes()) != pre_sha:
+            return False
+    except OSError:
+        return False
+
+    cleaned = True
+    for artifact in (backup, manifest):
+        try:
+            artifact.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            cleaned = False
+    return cleaned
 
 
 def apply_patch(target: Path) -> int:
@@ -301,13 +372,17 @@ def apply_patch(target: Path) -> int:
         raise RuntimeError(f"patched source verification failed; missing: {missing}")
     patched_bytes = patched_text.encode("utf-8")
     post_sha = sha256(patched_bytes)
+    if post_sha != EXPECTED_POST_SHA256:
+        raise RuntimeError(
+            f"post-patch SHA drift: expected {EXPECTED_POST_SHA256}, observed {post_sha}"
+        )
 
-    backup.write_bytes(source_bytes)
+    pre_sha = sha256(source_bytes)
     metadata = {
         "patch_id": PATCH_ID,
         "accepted_hermes_commit": ACCEPTED_HERMES_COMMIT,
         "target": str(target),
-        "pre_sha256": sha256(source_bytes),
+        "pre_sha256": pre_sha,
         "post_sha256": post_sha,
         "rollback_restores": "accepted P4-04A patched state",
         "p4_patch_id": EXPECTED_P4_PATCH_ID,
@@ -315,13 +390,22 @@ def apply_patch(target: Path) -> int:
         "p4_backup_sha256": EXPECTED_P4_BACKUP_SHA256,
         "backup": str(backup),
     }
-    manifest.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
 
     temp = target.with_name(target.name + ".orion-p5-03a2-approval-compat.tmp")
     try:
+        backup.write_bytes(source_bytes)
+        manifest.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
         temp.write_bytes(patched_bytes)
         compile(temp.read_text(encoding="utf-8"), str(target), "exec")
         os.replace(temp, target)
+    except Exception:
+        # A target-replacement failure must not strand apparently-installed
+        # P5 sidecars around an unchanged P4 target. Retain them only when the
+        # target changed, where rollback evidence is more important than retry.
+        _cleanup_failed_apply_sidecars_if_base_unchanged(
+            target, backup, manifest, pre_sha
+        )
+        raise
     finally:
         try:
             temp.unlink()
@@ -476,6 +560,17 @@ def self_test() -> int:
         "            finally:\n"
         "                self._active_run_agents.pop(run_id, None)\n"
         "                await queue.put(_event_payload(\"done\", {}))\n"
+        "        task = asyncio.create_task(_run_and_signal())\n"
+        "        try:\n"
+        "            pass\n"
+        "        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, OSError):\n"
+        "            await self._drain_session_stream_task_on_disconnect(\n"
+        "                run_id, task, interrupt_message=\"SSE client disconnected\", shield_wait=False\n"
+        "            )\n"
+        "        except asyncio.CancelledError:\n"
+        "            await self._drain_session_stream_task_on_disconnect(\n"
+        "                run_id, task, interrupt_message=\"SSE task cancelled\", shield_wait=True\n"
+        "            )\n"
         "    async def _drain_session_stream_task_on_disconnect(\n"
         "        self,\n"
         "        run_id: str,\n"
@@ -493,6 +588,46 @@ def self_test() -> int:
         raise RuntimeError(f"self-test markers missing: {missing}")
     if patched.count(PATCH_ID) < 2:
         raise RuntimeError("self-test expected patch markers in both execution and session-stream seams")
+
+    class _FakePath:
+        def __init__(self, data: bytes = b"", exists: bool = True):
+            self.data = data
+            self.exists = exists
+
+        def is_file(self) -> bool:
+            return self.exists
+
+        def read_bytes(self) -> bytes:
+            if not self.exists:
+                raise FileNotFoundError
+            return self.data
+
+        def unlink(self) -> None:
+            if not self.exists:
+                raise FileNotFoundError
+            self.exists = False
+
+    pre = b"accepted-p4"
+    target = _FakePath(pre)
+    backup = _FakePath(b"backup")
+    manifest = _FakePath(b"manifest")
+    if not _cleanup_failed_apply_sidecars_if_base_unchanged(
+        target, backup, manifest, sha256(pre)
+    ):
+        raise RuntimeError("self-test expected unchanged-target sidecar cleanup")
+    if backup.is_file() or manifest.is_file():
+        raise RuntimeError("self-test failed to remove unchanged-target sidecars")
+
+    changed_target = _FakePath(b"changed")
+    changed_backup = _FakePath(b"backup")
+    changed_manifest = _FakePath(b"manifest")
+    if _cleanup_failed_apply_sidecars_if_base_unchanged(
+        changed_target, changed_backup, changed_manifest, sha256(pre)
+    ):
+        raise RuntimeError("self-test must retain sidecars when target changed")
+    if not changed_backup.is_file() or not changed_manifest.is_file():
+        raise RuntimeError("self-test unexpectedly removed recovery sidecars")
+
     print("P5-03A2 SELF-TEST PASS")
     return 0
 

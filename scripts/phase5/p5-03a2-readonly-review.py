@@ -20,11 +20,13 @@ import difflib
 import hashlib
 import importlib.util
 import sys
+import threading
 from pathlib import Path
 
-EXPECTED_POST_SHA256 = "d8765b1842f54c340b1d5686355e2919d81313e20fdcbe7f6338321bf515e0aa"
+EXPECTED_POST_SHA256 = "e78422d1cf3788f1b9c8e06052470c23ebc4446e0a242992d35be8e5e6168288"
 RUN_A = "orion-p5-03a2-review-run-a"
 RUN_B = "orion-p5-03a2-review-run-b"
+RUN_C = "orion-p5-03a2-review-run-c"
 
 
 def sha256(data: bytes) -> str:
@@ -71,9 +73,17 @@ def structural_checks(planned: str) -> None:
 
     run_agent = find_async_method(tree, "_run_agent")
     arg_names = [a.arg for a in run_agent.args.args]
-    for required in ("approval_notify_callback", "approval_session_key"):
+    for required in ("approval_notify_callback", "approval_session_key", "approval_cancel_event"):
         if required not in arg_names:
             raise RuntimeError(f"_run_agent missing {required}")
+
+    run_segment = ast.get_source_segment(planned, run_agent) or ""
+    for marker in (
+        "approval_cancel_event is None or not approval_cancel_event.is_set()",
+        "approval_cancel_event is not None and approval_cancel_event.is_set()",
+    ):
+        if marker not in run_segment:
+            raise RuntimeError(f"_run_agent late-registration guard missing marker: {marker}")
 
     calls = call_names(run_agent)
     for required in (
@@ -98,6 +108,8 @@ def structural_checks(planned: str) -> None:
         "self._run_approval_sessions[run_id] = run_id",
         "approval_notify_callback=_approval_notify",
         "approval_session_key=run_id",
+        "approval_cancel_event = threading.Event()",
+        "approval_cancel_event=approval_cancel_event",
         'event": "approval.request"',
         '"waiting_for_approval"',
         "self._run_approval_sessions.pop(run_id, None)",
@@ -106,16 +118,37 @@ def structural_checks(planned: str) -> None:
         if marker not in segment:
             raise RuntimeError(f"session-chat planned source missing marker: {marker}")
 
+    disconnect_calls = [
+        node for node in ast.walk(session)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "_drain_session_stream_task_on_disconnect"
+    ]
+    if len(disconnect_calls) != 2:
+        raise RuntimeError(
+            f"expected two session disconnect drain calls, found {len(disconnect_calls)}"
+        )
+    for call in disconnect_calls:
+        if "approval_cancel_event" not in {kw.arg for kw in call.keywords}:
+            raise RuntimeError("session disconnect drain call lacks approval_cancel_event")
+
     drain = find_async_method(tree, "_drain_session_stream_task_on_disconnect")
     drain_segment = ast.get_source_segment(planned, drain) or ""
+    cancel_pos = drain_segment.find("approval_cancel_event.set()")
     unregister_pos = drain_segment.find("unregister_gateway_notify(run_id)")
     agent_pos = drain_segment.find("agent = self._active_run_agents.get(run_id)")
-    if unregister_pos < 0 or agent_pos < 0 or unregister_pos > agent_pos:
+    if (
+        cancel_pos < 0
+        or unregister_pos < 0
+        or agent_pos < 0
+        or not (cancel_pos < unregister_pos < agent_pos)
+    ):
         raise RuntimeError(
-            "disconnect drain does not unregister approval before agent/task wait path"
+            "disconnect drain must mark cancellation, unregister approval, then enter agent/task wait path"
         )
 
     print("P5_03A2_STRUCTURAL_REVIEW=PASS")
+    print("P5_03A2_LATE_REGISTRATION_GUARD=PASS")
 
 
 def native_approval_isolation_probe() -> None:
@@ -129,6 +162,7 @@ def native_approval_isolation_probe() -> None:
     # Process-local cleanup only. Hermes server is not running.
     approval.unregister_gateway_notify(RUN_A)
     approval.unregister_gateway_notify(RUN_B)
+    approval.unregister_gateway_notify(RUN_C)
 
     try:
         callbacks: dict[str, list[dict]] = {RUN_A: [], RUN_B: []}
@@ -182,14 +216,87 @@ def native_approval_isolation_probe() -> None:
         finally:
             approval.reset_current_session_key(token_a)
 
+        cancel_event = threading.Event()
+
+        # Disconnect-before-register: pre-check must suppress registration.
+        cancel_event.set()
+        registered = False
+        if not cancel_event.is_set():
+            approval.register_gateway_notify(RUN_C, lambda _data: None)
+            registered = True
+            if cancel_event.is_set():
+                approval.unregister_gateway_notify(RUN_C)
+                registered = False
+        with approval._lock:
+            if RUN_C in approval._gateway_notify_cbs:
+                raise RuntimeError("pre-cancelled run registered an approval callback")
+
+        # Disconnect racing immediately after register: post-check must remove it.
+        cancel_event.clear()
+        if not cancel_event.is_set():
+            approval.register_gateway_notify(RUN_C, lambda _data: None)
+            registered = True
+            cancel_event.set()
+            if cancel_event.is_set():
+                approval.unregister_gateway_notify(RUN_C)
+                registered = False
+        with approval._lock:
+            if RUN_C in approval._gateway_notify_cbs:
+                raise RuntimeError("late-registration race left an approval callback")
+        if registered:
+            raise RuntimeError("late-registration guard retained registered state")
+
         print("P5_03A2_NATIVE_APPROVAL_ISOLATION=PASS")
         print("P5_03A2_NATIVE_UNREGISTER_WAKE=PASS")
         print("P5_03A2_NATIVE_CONTEXT_SCOPE=PASS")
+        print("P5_03A2_NATIVE_LATE_REGISTRATION_GUARD=PASS")
     finally:
         # Always remove synthetic process-local probe state, including on
         # assertion failure. This process exits after the review either way.
         approval.unregister_gateway_notify(RUN_A)
         approval.unregister_gateway_notify(RUN_B)
+        approval.unregister_gateway_notify(RUN_C)
+
+
+def failed_apply_cleanup_probe(patcher) -> None:
+    class _FakePath:
+        def __init__(self, data: bytes = b"", exists: bool = True):
+            self.data = data
+            self.exists = exists
+
+        def is_file(self) -> bool:
+            return self.exists
+
+        def read_bytes(self) -> bytes:
+            if not self.exists:
+                raise FileNotFoundError
+            return self.data
+
+        def unlink(self) -> None:
+            if not self.exists:
+                raise FileNotFoundError
+            self.exists = False
+
+    pre = b"accepted-p4"
+    target = _FakePath(pre)
+    backup = _FakePath(b"backup")
+    manifest = _FakePath(b"manifest")
+    cleaned = patcher._cleanup_failed_apply_sidecars_if_base_unchanged(
+        target, backup, manifest, sha256(pre)
+    )
+    if not cleaned or backup.is_file() or manifest.is_file():
+        raise RuntimeError("failed-apply cleanup did not remove sidecars for unchanged target")
+
+    target = _FakePath(b"changed")
+    backup = _FakePath(b"backup")
+    manifest = _FakePath(b"manifest")
+    cleaned = patcher._cleanup_failed_apply_sidecars_if_base_unchanged(
+        target, backup, manifest, sha256(pre)
+    )
+    if cleaned or not backup.is_file() or not manifest.is_file():
+        raise RuntimeError("failed-apply cleanup removed recovery sidecars after target change")
+
+    print("P5_03A2_FAILED_APPLY_SIDECAR_CLEANUP=PASS")
 
 
 def main() -> int:
@@ -214,6 +321,7 @@ def main() -> int:
 
         structural_checks(planned)
         native_approval_isolation_probe()
+        failed_apply_cleanup_probe(patcher)
 
         diff = "".join(
             difflib.unified_diff(
