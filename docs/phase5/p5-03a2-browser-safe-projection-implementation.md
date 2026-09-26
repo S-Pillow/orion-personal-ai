@@ -79,9 +79,9 @@ historical preview evidence with current actionability unavailable.
 Protected `succeeded` requires the accepted action-specific structured result
 shape, explicit `mutation_performed=true`, explicit
 `recovery_required=false`, a valid recovery identifier, no contradictory
-error, and the applicable target/source/origin identifiers. Incomplete or
-contradictory success-shaped evidence is projected as `unknown`, never as
-success. Any preview payload containing an `error` member is never projected
+error, an exact canonical action identifier, and byte-preserving applicable
+target/source/origin identifiers. Incomplete, normalized-away, or contradictory
+success-shaped evidence is projected as `unknown`, never as success. Any preview payload containing an `error` member is never projected
 as `preview_ready`, even when that member cannot be normalized into a safe
 error code. Preview evidence with a present non-false `recovery_required`
 member is likewise unavailable rather than actionable.

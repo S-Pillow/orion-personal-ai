@@ -47,6 +47,30 @@ class ActionProjectionTests(unittest.TestCase):
         self.assertEqual(name, "run.started")
         self.assertEqual(payload["run_id"], "run_1")
 
+    def test_terminal_stream_events_require_raw_exact_run_id(self):
+        for event_name in ("run.completed", "run.cancelled", "run.failed"):
+            for bad_run_id in (" run_1 ", 7, {"id": "run_1"}, ""):
+                with self.subTest(event=event_name, run_id=bad_run_id):
+                    self.assertIsNone(
+                        project_stream_event(
+                            event_name,
+                            {
+                                "event": event_name,
+                                "run_id": bad_run_id,
+                                "messages": [],
+                            },
+                        )
+                    )
+
+        for bad_run_id in (" run_1 ", 7):
+            with self.subTest(event="error", run_id=bad_run_id):
+                self.assertIsNone(
+                    project_stream_event(
+                        "error",
+                        {"event": "error", "run_id": bad_run_id},
+                    )
+                )
+
     def test_approval_request_is_allowlist_first_and_exact(self):
         description = (
             "Target: C:\\vault\\note.md\n"
@@ -446,6 +470,26 @@ class ActionProjectionTests(unittest.TestCase):
         }])
         self.assertEqual(conflict["state"], "unknown")
         self.assertEqual(conflict["reason"], "conflicting_action_result")
+
+
+        for field, bad_value in (
+            ("action", " edit_note "),
+            ("target_relative_path", " note.md"),
+            ("target_relative_path", "note.md "),
+            ("target_relative_path", "note\x00.md"),
+            ("target_relative_path", "x" * 1025),
+        ):
+            malformed = dict(base)
+            malformed[field] = bad_value
+            [projected] = project_action_evidence([{
+                "role": "tool",
+                "tool_name": "orion_vault_apply_plan",
+                "content": json.dumps(malformed),
+            }])
+            self.assertEqual(projected["state"], "unknown")
+            self.assertEqual(
+                projected["reason"], "success_evidence_incomplete"
+            )
 
     def test_preview_hydration_never_recreates_actionability(self):
         diff = "--- old\n+++ new"
