@@ -23,6 +23,7 @@ function renderer() {
   };
   const context = vm.createContext({
     state: {},
+    rememberActionProjection() { return null; },
     syncProvenancePresentation() {},
     workspaceController: { setApprovalFocus() {} },
     ui: { approvalPanel: { classList: { remove() {} } }, approvalDetail: detail, approvalActions: actions },
