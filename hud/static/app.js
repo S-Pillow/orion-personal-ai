@@ -602,6 +602,12 @@ async function decideApproval(choice) {
         body: JSON.stringify({ choice }),
       },
     );
+    if (
+      state.approvalEvent !== event ||
+      state.activeRunId !== runId
+    ) {
+      return;
+    }
     const projection = rememberActionProjection(response?.projection);
     hideApproval();
     if (!presentActionProjection(projection)) {
@@ -805,12 +811,19 @@ function handleStreamEvent(eventName, data, assistant) {
       setCore("FINALIZING", "Reconciling Hermes session...");
       break;
     case "run.completed": {
+      if (
+        !runId ||
+        !state.activeRunId ||
+        runId !== state.activeRunId
+      ) {
+        break;
+      }
       state.provenance = observeCompletionRuntime(
         state.provenance,
         data?.runtime,
       );
       syncProvenancePresentation();
-      if (!runId || runId === state.activeRunId) state.activeRunId = "";
+      state.activeRunId = "";
       hideApproval();
       const evidence = Array.isArray(data?.action_evidence)
         ? data.action_evidence
@@ -832,7 +845,14 @@ function handleStreamEvent(eventName, data, assistant) {
       break;
     }
     case "run.cancelled":
-      if (!runId || runId === state.activeRunId) state.activeRunId = "";
+      if (
+        !runId ||
+        !state.activeRunId ||
+        runId !== state.activeRunId
+      ) {
+        break;
+      }
+      state.activeRunId = "";
       hideApproval();
       if (state.actionProjection?.durability !== "completed_record") {
         state.actionProjection = null;
@@ -841,8 +861,14 @@ function handleStreamEvent(eventName, data, assistant) {
       updateRunControls();
       break;
     case "run.failed":
-    case "error":
-      if (!runId || runId === state.activeRunId) state.activeRunId = "";
+      if (
+        !runId ||
+        !state.activeRunId ||
+        runId !== state.activeRunId
+      ) {
+        break;
+      }
+      state.activeRunId = "";
       hideApproval();
       if (state.actionProjection?.durability !== "completed_record") {
         state.actionProjection = null;
@@ -850,6 +876,26 @@ function handleStreamEvent(eventName, data, assistant) {
       setCore(
         "ERROR",
         "Hermes run failed // protected action truth preserved separately",
+      );
+      updateRunControls();
+      break;
+    case "error":
+      if (
+        runId &&
+        (!state.activeRunId || runId !== state.activeRunId)
+      ) {
+        break;
+      }
+      if (runId && runId === state.activeRunId) {
+        state.activeRunId = "";
+        hideApproval();
+        if (state.actionProjection?.durability !== "completed_record") {
+          state.actionProjection = null;
+        }
+      }
+      setCore(
+        "ERROR",
+        "Hermes stream error // protected action truth preserved separately",
       );
       updateRunControls();
       break;

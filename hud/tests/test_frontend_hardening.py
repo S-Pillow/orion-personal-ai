@@ -155,9 +155,9 @@ class FrontendHardeningContractTests(unittest.TestCase):
             APP_JS,
         )
 
-    def test_health_refresh_preserves_hydrated_action_projection(self):
+    def test_health_refresh_preserves_only_durable_hydrated_projection(self):
         self.assertIn(
-            "if (state.sessionId && state.actionProjection)",
+            'state.actionProjection?.durability === "completed_record"',
             APP_JS,
         )
         self.assertIn(
@@ -177,12 +177,18 @@ class FrontendHardeningContractTests(unittest.TestCase):
             APP_JS,
         )
 
-    def test_health_poll_replays_only_completed_record_evidence(self):
-        self.assertIn(
-            'state.actionProjection?.durability === "completed_record"',
-            APP_JS,
+    def test_late_approval_receipt_is_discarded_after_terminal_state(self):
+        self.assertIn("state.approvalEvent !== event", APP_JS)
+        self.assertIn("state.activeRunId !== runId", APP_JS)
+
+    def test_terminal_run_events_require_active_run_match(self):
+        self.assertIn('case "run.completed": {', APP_JS)
+        self.assertIn('case "run.cancelled":', APP_JS)
+        self.assertIn('case "run.failed":', APP_JS)
+        self.assertGreaterEqual(
+            APP_JS.count("runId !== state.activeRunId"),
+            4,
         )
-        self.assertIn("state.actionProjection = null;", APP_JS)
 
     def test_startup_loads_persisted_session_history_once(self):
         self.assertIn(
