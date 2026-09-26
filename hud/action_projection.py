@@ -204,8 +204,9 @@ def _approval_choices(value: Any) -> list[str]:
 
 def project_approval_request(data: dict[str, Any]) -> dict[str, Any]:
     common = _common(data)
-    raw_command = data.get("command")
-    if not isinstance(raw_command, str):
+    if "command" in data:
+        raw_command = data.get("command")
+    else:
         raw_command = data.get("tool_name")
     command = _exact_text(raw_command, 240)
     command_exact = bool(
@@ -254,13 +255,17 @@ def project_approval_response(
         return None
     if payload.get("object") != "hermes.run.approval_response":
         return None
-    observed_run = _safe_id(payload.get("run_id"))
-    if not observed_run or observed_run != run_id:
+    if _safe_id(run_id) != run_id:
         return None
-    choice = str(payload.get("choice") or "").strip().lower()
-    requested = str(requested_choice or "").strip().lower()
+    observed_run = payload.get("run_id")
+    if not isinstance(observed_run, str) or observed_run != run_id:
+        return None
+    choice = payload.get("choice")
+    requested = requested_choice
     if (
-        choice not in CANONICAL_APPROVAL_CHOICES
+        not isinstance(choice, str)
+        or not isinstance(requested, str)
+        or choice not in CANONICAL_APPROVAL_CHOICES
         or requested not in CANONICAL_APPROVAL_CHOICES
         or choice != requested
     ):
@@ -472,11 +477,16 @@ def project_tool_message(
     if tool_name in PREVIEW_TOOLS:
         preview_error_present = "error" in result
         preview_error = _safe_code(result.get("error"))
+        preview_recovery_conflict = (
+            "recovery_required" in result
+            and result.get("recovery_required") is not False
+        )
         preview_claim = (
             result.get("success") is True
             and result.get("mode") == "preview"
             and result.get("mutation_performed") is False
             and not preview_error_present
+            and not preview_recovery_conflict
         )
         is_preview = preview_claim and _preview_evidence_complete(
             tool_name, result
@@ -500,6 +510,16 @@ def project_tool_message(
                 durability="completed_record",
                 common=common,
                 tool_name=tool_name,
+                hydrated=hydrated,
+            )
+        elif preview_recovery_conflict:
+            out = _projection(
+                "unavailable",
+                "vault_preview_result",
+                durability="completed_record" if hydrated else "turn_scoped",
+                common=common,
+                tool_name=tool_name,
+                reason="preview_recovery_conflict",
                 hydrated=hydrated,
             )
         else:

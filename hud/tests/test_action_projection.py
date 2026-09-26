@@ -63,17 +63,29 @@ class ActionProjectionTests(unittest.TestCase):
             "trailing ",
             "nul\x00command",
             "x" * 241,
+            {},
+            7,
         ):
             with self.subTest(command=repr(command)):
                 projected = project_approval_request({
                     **base,
                     "command": command,
+                    "tool_name": "orion_vault_apply_plan",
                 })
                 self.assertEqual(
                     projected["projection"]["state"],
                     "unavailable",
                 )
                 self.assertEqual(projected["choices"], [])
+
+        legacy = project_approval_request({
+            **base,
+            "tool_name": "orion_vault_apply_plan",
+        })
+        self.assertEqual(
+            legacy["projection"]["state"],
+            "approval_requested",
+        )
 
     def test_incomplete_approval_content_withholds_choices(self):
         projected = project_approval_request({
@@ -134,6 +146,24 @@ class ActionProjectionTests(unittest.TestCase):
                 "object": "hermes.run.approval_response",
                 "run_id": "run_1",
                 "choice": "deny",
+                "resolved": 1,
+            },
+            {
+                "object": "hermes.run.approval_response",
+                "run_id": " run_1 ",
+                "choice": "once",
+                "resolved": 1,
+            },
+            {
+                "object": "hermes.run.approval_response",
+                "run_id": "run_1",
+                "choice": " ONCE ",
+                "resolved": 1,
+            },
+            {
+                "object": "hermes.run.approval_response",
+                "run_id": "run_1",
+                "choice": "ONCE",
                 "resolved": 1,
             },
             {
@@ -277,6 +307,27 @@ class ActionProjectionTests(unittest.TestCase):
             [projected] = project_action_evidence([contradictory])
             self.assertEqual(projected["state"], "failed")
             self.assertNotEqual(projected["state"], "preview_ready")
+
+
+        for recovery_value in (True, "true", {"required": True}, 1):
+            contradictory = {
+                "role": "tool",
+                "tool_name": "orion_vault_preview_edit",
+                "content": json.dumps({
+                    "success": True,
+                    "mode": "preview",
+                    "mutation_performed": False,
+                    "plan_token": "a" * 64,
+                    "plan": plan,
+                    "diff": diff,
+                    "recovery_required": recovery_value,
+                }),
+            }
+            [projected] = project_action_evidence([contradictory])
+            self.assertEqual(projected["state"], "unavailable")
+            self.assertEqual(
+                projected["reason"], "preview_recovery_conflict"
+            )
 
     def test_success_requires_complete_action_contract_and_no_error(self):
         base = {

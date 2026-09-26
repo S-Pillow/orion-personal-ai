@@ -50,7 +50,9 @@ The bridge now:
 - exposes decision controls only when the approval event carries its own valid
   authoritative run ID and its command survives exact byte-preserving
   validation without truncation, NUL removal, or whitespace normalization;
-  the browser never falls back to another active run;
+  only an absent legacy `command` may fall back to `tool_name`, while an
+  explicit malformed command makes the request unavailable; the browser never
+  falls back to another active run;
 - strips raw `run.completed.messages` from the browser stream and replaces
   them with bounded action evidence;
 - sanitizes the ordinary transcript endpoint to user/assistant display rows;
@@ -60,7 +62,8 @@ The bridge now:
 - allowlists `GET /api/orion/runs/{run_id}`;
 - turns a successful approval POST into a decision-only Orion projection with
   `execution_proven=false` only when Hermes returns the canonical response
-  object, exact run ID, explicit matching choice, and positive resolved count;
+  object, raw byte-exact run ID, raw canonical matching choice, and positive
+  resolved count; normalization is not allowed to manufacture receipt equality;
 - never exposes recovery directory paths, preview nonces, proposed bytes,
   arbitrary raw tool arguments, stack/error text, or provider secrets through
   the action projection.
@@ -78,7 +81,8 @@ error, and the applicable target/source/origin identifiers. Incomplete or
 contradictory success-shaped evidence is projected as `unknown`, never as
 success. Any preview payload containing an `error` member is never projected
 as `preview_ready`, even when that member cannot be normalized into a safe
-error code.
+error code. Preview evidence with a present non-false `recovery_required`
+member is likewise unavailable rather than actionable.
 
 ## Browser truth behavior
 
