@@ -5,10 +5,11 @@ Status: **IMPLEMENTED ON FEATURE BRANCH / ACCEPTANCE PENDING**
 Branch: `feature/orion-phase5-p5-03b-action-evidence-hud`
 
 Base dependency: P5-03A2 browser-safe projection candidate
-`ffb5680d41d0333c6ab0687145400212e47cec75`.
+`5007f330c4d4f669015ce04e810d84ca124db51b`.
 
 ## Implemented
 
+- pending approval controls prioritized before contextual evidence;
 - contextual **Action Evidence** panel in the right rail;
 - state-specific semantic badge and summary;
 - operation, target, execution, and recovery facts;
@@ -17,7 +18,9 @@ Base dependency: P5-03A2 browser-safe projection candidate
 - collapsed allowlisted technical evidence;
 - explicit approval truth strip: approval is not execution evidence;
 - Phase 5 HUD labeling and responsive right-rail layout;
-- browser rendering driven only by the accepted P5-03A projection.
+- browser rendering driven only by the accepted P5-03A projection;
+- selected-session disappearance clears projected evidence and pending approval
+  presentation rather than leaving stale cross-session state.
 
 No new bridge endpoint, persistent browser store, action ledger, approval
 authority, vault mutation path, recovery executor, Hermes patch, or external

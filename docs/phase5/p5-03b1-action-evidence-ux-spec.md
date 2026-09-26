@@ -18,9 +18,10 @@ actionable plan, or use browser-local state as recovery/action truth.
 The right rail becomes a contextual action/evidence region.
 
 - **Agent Activity** remains descriptive live tool activity.
-- **Action Evidence** appears only when a protected-action projection exists.
-- **Approval Required** remains a separate amber decision surface and explicitly
+- **Approval Required** is prioritized ahead of Action Evidence whenever a
+  decision is pending, remains a separate amber decision surface, and explicitly
   states that approval is not execution evidence.
+- **Action Evidence** appears only when a protected-action projection exists.
 - Capabilities and boundary panels remain secondary.
 
 The action panel contains:
@@ -69,15 +70,19 @@ directory paths, and proposed file bytes are not rendered.
 
 P5-03B does not invent a new browser store. On load/session selection the
 existing P5-03A hydration endpoint remains the source of completed action
-evidence. Empty, failed, stale-session, or unavailable hydration clears the
-presentation rather than retaining another session's evidence.
+evidence. Empty, failed, stale-session, unavailable hydration, or disappearance
+of the selected session clears the presentation rather than retaining another
+session's evidence.
 
 ## Acceptance
 
 - approval accepted is visually distinct from execution succeeded;
 - exact diff remains byte-preserving text;
 - technical evidence is collapsed by default and allowlisted;
-- cross-session evidence cannot remain visible after clearing/hydration;
+- cross-session evidence cannot remain visible after clearing/hydration or
+  selected-session disappearance;
+- pending approval controls precede contextual evidence and are scrolled into
+  view when the decision surface opens;
 - recent evidence has no action controls;
 - no new browser persistence, runtime authority, approval engine, event store,
   recovery executor, or vault access is introduced.

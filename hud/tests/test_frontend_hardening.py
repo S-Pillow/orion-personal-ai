@@ -156,9 +156,9 @@ class FrontendHardeningContractTests(unittest.TestCase):
             APP_JS,
         )
 
-    def test_health_refresh_preserves_hydrated_action_projection(self):
+    def test_health_refresh_preserves_only_durable_hydrated_projection(self):
         self.assertIn(
-            "if (state.sessionId && state.actionProjection)",
+            'state.actionProjection?.durability === "completed_record"',
             APP_JS,
         )
         self.assertIn(
@@ -238,12 +238,25 @@ class FrontendHardeningContractTests(unittest.TestCase):
             APP_JS,
         )
 
-    def test_health_poll_replays_only_completed_record_evidence(self):
+    def test_disappearing_selected_session_clears_action_evidence(self):
+        anchor = 'else if (previous) {'
+        start = APP_JS.index(anchor)
+        self.assertGreaterEqual(start, 0)
+        block = APP_JS[start:start + 420]
+        self.assertIn('state.sessionId = "";', block)
+        self.assertIn("clearActionProjection();", block)
+        self.assertIn("hideApproval();", block)
+
+    def test_pending_approval_precedes_evidence_and_scrolls_controls_into_view(self):
+        approval_at = INDEX_HTML.index('id="approvalPanel"')
+        evidence_at = INDEX_HTML.index('id="actionEvidencePanel"')
+        self.assertGreaterEqual(approval_at, 0)
+        self.assertGreaterEqual(evidence_at, 0)
+        self.assertLess(approval_at, evidence_at)
         self.assertIn(
-            'state.actionProjection?.durability === "completed_record"',
+            'ui.approvalPanel.scrollIntoView({',
             APP_JS,
         )
-        self.assertIn("state.actionProjection = null;", APP_JS)
 
     def test_startup_loads_persisted_session_history_once(self):
         self.assertIn(

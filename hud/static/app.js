@@ -359,6 +359,8 @@ async function refreshSessions({ loadCurrent = true } = {}) {
       ui.sessionSelect.value = previous;
     } else if (previous) {
       state.sessionId = "";
+      clearActionProjection();
+      hideApproval();
       state.provenance = createProvenanceState();
       syncProvenancePresentation();
       localStorage.removeItem("orion.hermesSession");
@@ -794,6 +796,10 @@ function showApproval(data) {
   syncProvenancePresentation();
   workspaceController.setApprovalFocus(true);
   ui.approvalPanel.classList.remove("hidden");
+  ui.approvalPanel.scrollIntoView({
+    block: "start",
+    behavior: "smooth",
+  });
   // Hermes sends the tool/command and the exact approval description separately.
   // Keep both complete and render them as text, including diff lines and markup.
   const details = [];
