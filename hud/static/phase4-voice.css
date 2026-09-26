@@ -1,0 +1,66 @@
+.composer {
+  grid-template-columns:
+    minmax(0, 1fr)
+    minmax(9.5rem, auto)
+    minmax(11.25rem, auto)
+    86px
+    86px;
+  column-gap: 0.75rem;
+}
+
+.phase4-voice-button,
+.phase4-voice-toggle {
+  width: 100%;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.phase4-voice-button[aria-pressed="true"] {
+  border-color: currentColor;
+  font-weight: 700;
+}
+
+.phase4-voice-toggle {
+  border-color: rgba(141, 136, 255, 0.42);
+  color: #a6a2ff;
+  background: rgba(141, 136, 255, 0.055);
+}
+
+.phase4-voice-toggle:hover:not(:disabled) {
+  background: rgba(141, 136, 255, 0.12);
+}
+
+.phase4-voice-status {
+  margin-top: 0.45rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.78;
+}
+
+@media (max-width: 1050px) {
+  .composer {
+    grid-template-columns:
+      minmax(0, 1fr)
+      minmax(8.5rem, auto)
+      minmax(10.25rem, auto)
+      72px
+      72px;
+  }
+}
+
+@media (max-width: 900px) {
+  .composer {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .composer textarea {
+    grid-column: 1 / -1;
+  }
+
+  .phase4-voice-button,
+  .phase4-voice-toggle {
+    min-width: 0;
+  }
+}
