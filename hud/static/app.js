@@ -76,6 +76,8 @@ const state = {
   activeRunId: "",
   streaming: false,
   approvalEvent: null,
+  actionProjection: null,
+  actionEvidence: [],
   provenance: createProvenanceState(),
 };
 
@@ -365,9 +367,97 @@ function syncSessionLabels() {
   syncSystemWorkspace();
 }
 
+function rememberActionProjection(projection) {
+  if (!projection || typeof projection !== "object") return null;
+  const value = String(projection.state || "");
+  if (!value) return null;
+  state.actionProjection = projection;
+  return projection;
+}
+
+function presentActionProjection(projection, { hydrated = false } = {}) {
+  const observed = rememberActionProjection(projection);
+  if (!observed) return false;
+  const suffix = hydrated ? " // persisted Hermes evidence" : "";
+
+  switch (observed.state) {
+    case "approval_requested":
+      setCore("WAITING", `Operator approval required${suffix}`);
+      return true;
+    case "approval_accepted":
+      setCore(
+        "THINKING",
+        "Approval accepted by Hermes // awaiting execution evidence",
+      );
+      return true;
+    case "approval_denied":
+      setCore(
+        "READY",
+        "Approval denied // no protected action success claimed",
+      );
+      return true;
+    case "succeeded":
+      setCore("READY", `Protected action succeeded${suffix}`);
+      return true;
+    case "stale_plan":
+      setCore(
+        "READY",
+        `Plan stale // protected mutation not performed${suffix}`,
+      );
+      return true;
+    case "refused":
+      setCore(
+        "READY",
+        `Protected action refused // mutation not performed${suffix}`,
+      );
+      return true;
+    case "failed":
+      setCore(
+        hydrated ? "READY" : "ERROR",
+        `${hydrated ? "Last protected action failed" : "Protected action failed"}` +
+          `${observed.recovery_required ? " // recovery required" : ""}${suffix}`,
+      );
+      return true;
+    case "unavailable":
+      setCore(
+        "READY",
+        `Action evidence unavailable for current actionability${suffix}`,
+      );
+      return true;
+    case "unknown":
+      setCore("READY", `Protected action outcome unknown${suffix}`);
+      return true;
+    default:
+      return false;
+  }
+}
+
+async function refreshActionEvidence() {
+  if (!state.sessionId) {
+    state.actionEvidence = [];
+    state.actionProjection = null;
+    return;
+  }
+  try {
+    const payload = await api(
+      `/api/orion/sessions/${encodeURIComponent(state.sessionId)}/action-evidence`,
+    );
+    const items = arrayFrom(payload, ["items", "data"]);
+    state.actionEvidence = items;
+    const latest = items.length ? items[items.length - 1] : null;
+    if (latest && !state.streaming && !state.approvalEvent) {
+      presentActionProjection(latest, { hydrated: true });
+    }
+  } catch {
+    state.actionEvidence = [];
+  }
+}
+
 async function loadMessages() {
   if (!state.sessionId) {
     showTranscriptEmpty("Select or create a Hermes session to begin.");
+    state.actionEvidence = [];
+    state.actionProjection = null;
     return;
   }
   try {
@@ -376,6 +466,7 @@ async function loadMessages() {
   } catch (error) {
     showTranscriptEmpty(`Session history unavailable: ${error.message}`);
   }
+  await refreshActionEvidence();
 }
 
 async function createSession() {
@@ -447,6 +538,7 @@ function hideApproval() {
 
 function showApproval(data) {
   state.approvalEvent = data;
+  rememberActionProjection(data?.projection);
   syncProvenancePresentation();
   workspaceController.setApprovalFocus(true);
   ui.approvalPanel.classList.remove("hidden");
@@ -490,12 +582,21 @@ async function decideApproval(choice) {
   }
   for (const button of ui.approvalActions.querySelectorAll("button")) button.disabled = true;
   try {
-    await api(`/api/orion/runs/${encodeURIComponent(runId)}/approval`, {
-      method: "POST",
-      body: JSON.stringify({ choice }),
-    });
+    const response = await api(
+      `/api/orion/runs/${encodeURIComponent(runId)}/approval`,
+      {
+        method: "POST",
+        body: JSON.stringify({ choice }),
+      },
+    );
+    const projection = rememberActionProjection(response?.projection);
     hideApproval();
-    setCore("THINKING", `Approval recorded: ${choice}`);
+    if (!presentActionProjection(projection)) {
+      setCore(
+        "READY",
+        "Approval decision acknowledged // execution outcome unknown",
+      );
+    }
   } catch (error) {
     setCore("ERROR", `Approval reconciliation: ${error.message}`);
     for (const button of ui.approvalActions.querySelectorAll("button")) button.disabled = false;
@@ -613,6 +714,8 @@ function handleStreamEvent(eventName, data, assistant) {
   switch (eventName) {
     case "run.started":
       state.provenance = createProvenanceState();
+      state.actionProjection = null;
+      state.actionEvidence = [];
       state.activeRunId = runId;
       setCore("THINKING", runId ? `Hermes run ${runId}` : "Hermes run started");
       updateRunControls();
@@ -647,7 +750,14 @@ function handleStreamEvent(eventName, data, assistant) {
       setCore("THINKING", "Tool failed // Hermes is reconciling");
       break;
     case "approval.request":
-      setCore("WAITING", "Operator approval required");
+      if (data?.projection?.state !== "approval_requested") {
+        setCore(
+          "ERROR",
+          "Approval content unavailable // decision controls withheld",
+        );
+      } else {
+        setCore("WAITING", "Operator approval required");
+      }
       showApproval(data || {});
       break;
     case "assistant.completed":
@@ -663,7 +773,7 @@ function handleStreamEvent(eventName, data, assistant) {
 
       setCore("FINALIZING", "Reconciling Hermes session...");
       break;
-    case "run.completed":
+    case "run.completed": {
       state.provenance = observeCompletionRuntime(
         state.provenance,
         data?.runtime,
@@ -671,9 +781,24 @@ function handleStreamEvent(eventName, data, assistant) {
       syncProvenancePresentation();
       if (!runId || runId === state.activeRunId) state.activeRunId = "";
       hideApproval();
-      setCore("READY", "Turn complete");
+      const evidence = Array.isArray(data?.action_evidence)
+        ? data.action_evidence
+        : [];
+      state.actionEvidence = evidence;
+      const latest = evidence.length ? evidence[evidence.length - 1] : null;
+      if (!presentActionProjection(latest)) {
+        if (state.actionProjection?.state === "approval_accepted") {
+          setCore(
+            "READY",
+            "Turn complete // approval accepted; protected execution outcome unavailable",
+          );
+        } else {
+          setCore("READY", "Turn complete");
+        }
+      }
       updateRunControls();
       break;
+    }
     case "run.cancelled":
       if (!runId || runId === state.activeRunId) state.activeRunId = "";
       hideApproval();
@@ -683,7 +808,11 @@ function handleStreamEvent(eventName, data, assistant) {
     case "run.failed":
     case "error":
       if (!runId || runId === state.activeRunId) state.activeRunId = "";
-      setCore("ERROR", String(data?.message || data?.error || "Hermes run failed").slice(0, 180));
+      hideApproval();
+      setCore(
+        "ERROR",
+        "Hermes run failed // protected action truth preserved separately",
+      );
       updateRunControls();
       break;
     default:
