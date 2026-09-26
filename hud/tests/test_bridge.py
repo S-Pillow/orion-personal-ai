@@ -70,7 +70,13 @@ class FakeHermesHandler(BaseHTTPRequestHandler):
         elif self.path == "/v1/runs/run_1/stop":
             self._send(200, {"status": "stopping"})
         elif self.path == "/v1/runs/run_1/approval":
-            self._send(200, {"status": "accepted"})
+            choice = json.loads(raw).get("choice")
+            self._send(200, {
+                "object": "hermes.run.approval_response",
+                "run_id": "run_1",
+                "choice": choice,
+                "resolved": 1,
+            })
         elif self.path == "/api/sessions/session_1/chat/stream":
             frames = (
                 'event: run.started\ndata: {"run_id":"run_1","session_id":"session_1","seq":1}\n\n'
@@ -228,8 +234,11 @@ class BridgeIntegrationTests(unittest.TestCase):
     def test_approval_accepts_canonical_choices_only(self):
         status, _, _ = self.request("POST", "/api/orion/runs/run_1/approval", {"choice": "allow"})
         self.assertEqual(status, 400)
-        status, _, _ = self.request("POST", "/api/orion/runs/run_1/approval", {"choice": "once"})
+        status, _, data = self.request("POST", "/api/orion/runs/run_1/approval", {"choice": "once"})
         self.assertEqual(status, 200)
+        decision = json.loads(data)
+        self.assertEqual(decision["projection"]["state"], "approval_accepted")
+        self.assertFalse(decision["execution_proven"])
         call = next(c for c in FakeHermesHandler.calls if c["path"] == "/v1/runs/run_1/approval")
         self.assertEqual(json.loads(call["body"]), {"choice": "once"})
 
