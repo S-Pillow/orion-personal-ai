@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Orion // Phase 3 Workspace</title>
+  <title>Orion // Phase 5 Action Evidence</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -382,14 +382,54 @@
         </div>
       </section>
 
+      <section
+        id="actionEvidencePanel"
+        class="panel action-evidence-panel hidden"
+        aria-label="Protected action evidence"
+      >
+        <div class="panel-title"><span>ACTION EVIDENCE</span><b>05</b></div>
+        <div class="action-headline">
+          <span
+            id="actionStateBadge"
+            class="action-state-badge"
+            data-action-state="unknown"
+          >UNKNOWN</span>
+          <p id="actionSummary" class="action-summary">
+            No protected action evidence selected.
+          </p>
+        </div>
+        <dl class="action-facts">
+          <div><dt>Operation</dt><dd id="actionOperation">—</dd></div>
+          <div><dt>Target</dt><dd id="actionTarget">—</dd></div>
+          <div><dt>Execution</dt><dd id="actionExecution">UNKNOWN</dd></div>
+          <div><dt>Recovery</dt><dd id="actionRecovery">UNOBSERVED</dd></div>
+        </dl>
+        <div id="actionDiffWrap" class="action-diff-wrap hidden">
+          <div class="mini-title">EXACT DIFF</div>
+          <pre id="actionDiff" class="action-diff" tabindex="0" aria-label="Exact proposed diff"></pre>
+        </div>
+        <div class="action-history">
+          <div class="mini-title">RECENT EVIDENCE</div>
+          <div id="actionEvidenceList" class="action-evidence-list"></div>
+        </div>
+        <details id="actionTechnical" class="action-technical">
+          <summary>TECHNICAL EVIDENCE</summary>
+          <dl id="actionTechnicalList" class="action-technical-list"></dl>
+        </details>
+      </section>
+
       <section id="approvalPanel" class="panel approval-panel hidden">
         <div class="panel-title"><span>APPROVAL REQUIRED</span><b>!</b></div>
+        <div class="approval-truth">
+          <strong>DECISION PENDING</strong>
+          <span>Hermes approval is not execution evidence.</span>
+        </div>
         <div id="approvalDetail" class="approval-detail" tabindex="0" role="region" aria-label="Complete approval details"></div>
         <div id="approvalActions" class="approval-actions"></div>
       </section>
 
       <section class="panel secondary-panel">
-        <div class="panel-title"><span>CAPABILITIES</span><b>05</b></div>
+        <div class="panel-title"><span>CAPABILITIES</span><b>06</b></div>
         <dl class="status-list">
           <div><dt>Sessions</dt><dd id="capSessions">—</dd></div>
           <div><dt>Run stop</dt><dd id="capStop">—</dd></div>
@@ -410,14 +450,14 @@
       </section>
 
       <section class="panel boundary-panel secondary-panel">
-        <div class="panel-title"><span>BOUNDARY</span><b>06</b></div>
+        <div class="panel-title"><span>BOUNDARY</span><b>07</b></div>
         <p>HUD is a client only. It cannot start, stop, supervise, install, or update Hermes, Ollama, or iai.</p>
       </section>
     </aside>
   </main>
 
   <footer class="footer-line">
-    <span>ORION PHASE 3 // ADAPTIVE WORKSPACE // LOOPBACK TRANSPORT</span>
+    <span>ORION PHASE 5 // ACTION EVIDENCE // LOOPBACK TRANSPORT</span>
     <span id="footerSession">NO SESSION</span>
   </footer>
 
