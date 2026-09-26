@@ -23,7 +23,7 @@ import sys
 import threading
 from pathlib import Path
 
-EXPECTED_POST_SHA256 = "eff097373cb1fe91f2f82236f8111501c35ed08cd648b4fe4b435e5a335df41f"
+EXPECTED_POST_SHA256 = "7a206396aac7abe7e50fd5d346733fea85bb57160cb0a5d8a2e7feda29167c84"
 RUN_A = "orion-p5-03a2-review-run-a"
 RUN_B = "orion-p5-03a2-review-run-b"
 RUN_C = "orion-p5-03a2-review-run-c"
@@ -119,6 +119,7 @@ def structural_checks(planned: str) -> None:
         "approval_session_key=run_id",
         "approval_cancel_event = threading.Event()",
         "approval_cancel_event=approval_cancel_event",
+        "session chat approval transport disconnected",
         'event": "approval.request"',
         '"waiting_for_approval"',
         "self._run_approval_sessions.pop(run_id, None)",
@@ -259,7 +260,37 @@ def native_approval_isolation_probe() -> None:
         print("P5_03A2_NATIVE_APPROVAL_ISOLATION=PASS")
         print("P5_03A2_NATIVE_UNREGISTER_WAKE=PASS")
         print("P5_03A2_NATIVE_CONTEXT_SCOPE=PASS")
+        # A callback captured before disconnect must fail closed if invoked
+        # after disconnect. Hermes' native wait path must convert that notify
+        # failure into a nonblocking refusal and remove the synthetic queue entry.
+        stale_callback_cancel = threading.Event()
+        stale_callback_cancel.set()
+
+        def _stale_captured_notify(_data):
+            if stale_callback_cancel.is_set():
+                raise RuntimeError("session chat approval transport disconnected")
+
+        decision = approval._await_gateway_decision(
+            RUN_C,
+            _stale_captured_notify,
+            {
+                "command": "synthetic-after-disconnect",
+                "description": "synthetic approval after disconnect",
+                "pattern_key": "synthetic-after-disconnect",
+                "pattern_keys": ["synthetic-after-disconnect"],
+            },
+        )
+        if not decision.get("notify_failed") or decision.get("resolved"):
+            raise RuntimeError(
+                "stale captured approval callback did not fail closed without blocking"
+            )
+        if approval.list_gateway_approvals(RUN_C):
+            raise RuntimeError(
+                "stale captured approval callback left a pending approval entry"
+            )
+
         print("P5_03A2_NATIVE_LATE_REGISTRATION_GUARD=PASS")
+        print("P5_03A2_NATIVE_POST_DISCONNECT_NOTIFY_FAIL_CLOSED=PASS")
     finally:
         # Always remove synthetic process-local probe state, including on
         # assertion failure. This process exits after the review either way.

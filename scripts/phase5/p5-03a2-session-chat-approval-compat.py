@@ -25,7 +25,7 @@ ACCEPTED_HERMES_COMMIT = "5fc308a70719a83cccdbba4c0e39c23f5a8239d5"
 EXPECTED_P4_LIVE_SHA256 = "ecfd6dd53610c24a81f078650a0b2b3e129478a50fdb5f353313fff6e12e3888"
 EXPECTED_P4_BACKUP_SHA256 = "8d87036dd488cb811dbabb7048102d0c28fbf54e0e658c464683000118537ec3"
 EXPECTED_P4_PATCH_ID = "ORION-P4-04A-HERMES-AUDIO-GATEWAY-v1"
-EXPECTED_POST_SHA256 = "eff097373cb1fe91f2f82236f8111501c35ed08cd648b4fe4b435e5a335df41f"
+EXPECTED_POST_SHA256 = "7a206396aac7abe7e50fd5d346733fea85bb57160cb0a5d8a2e7feda29167c84"
 
 SIG_OLD = '''        confirmed_runtime_lock: bool = False,
     ) -> tuple:
@@ -118,6 +118,11 @@ SESSION_HOOK = '''        # ORION-P5-03A2-SESSION-CHAT-APPROVAL-COMPAT-v1
         approval_cancel_event = threading.Event()
 
         def _approval_notify(approval_data: Dict[str, Any]) -> None:
+            # A stale captured callback may run after disconnect unregisters
+            # the registry entry. Fail closed before publishing a prompt so
+            # Hermes drops the newly-created approval entry without waiting.
+            if approval_cancel_event.is_set():
+                raise RuntimeError("session chat approval transport disconnected")
             event = dict(approval_data or {})
             if "command" in event:
                 from gateway.run import _redact_approval_command
@@ -271,6 +276,7 @@ def required_markers() -> list[str]:
         "approval_cancelled = True",
         "session chat disconnected before approval-safe agent execution",
         "approval_cancel_event.set()",
+        "session chat approval transport disconnected",
         "self._run_approval_sessions.pop(run_id, None)",
         "unregister_gateway_notify(run_id)",
         "registration happens just after an early unregister no-op",

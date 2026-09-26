@@ -35,7 +35,7 @@ The patch:
 10. removes the run approval mapping in session-chat final cleanup;
 11. cleans P5 backup/manifest sidecars after a failed Apply when the live target is still the exact accepted P4 pre-image, while retaining sidecars if the target changed and recovery evidence may be needed.
 
-The disconnect event plus explicit unregister close both sides of the lifecycle race: an already-blocked waiter is woken, and a worker that reaches callback registration after disconnect has begun either skips registration or immediately unregisters it. If either registration-side check observes disconnect, the worker then terminates before entering `agent.run_conversation`, preventing a later approval request from recreating an orphaned waiter after the disconnect cleanup has already run.
+The disconnect event plus explicit unregister close the approval lifecycle across all race positions: an already-blocked waiter is woken; a worker that observes disconnect during the registration window aborts before `agent.run_conversation`; and a callback captured before unregister but invoked after disconnect raises immediately, causing Hermes' native approval wait path to drop the newly-created entry and return a fail-closed notify failure instead of blocking. If a later approval lookup occurs after unregister, Hermes sees no registered callback and follows its existing nonblocking fail-closed path.
 
 Apply failure handling is also fail-closed: if target replacement fails while the live Hermes file remains the exact P4 pre-image, P5 sidecars created by that attempt are removed so a transient Windows file lock is retryable. If the target changed, sidecars are retained for recovery instead of being discarded.
 
@@ -70,7 +70,7 @@ Before any `Apply`:
 - run `Plan` with Hermes stopped;
 - record the planned combined SHA-256;
 - review the generated source diff without modifying installed Hermes;
-- add/run focused no-mutation approval-isolation, late-registration race, and disconnect-before-run termination tests;
+- add/run focused no-mutation approval-isolation, late-registration race, disconnect-before-run termination, and stale-callback-after-disconnect tests;
 - verify failed-Apply sidecar cleanup without touching installed Hermes;
 - confirm ordinary session-chat/session history/runtime/model-lock behavior remains unchanged.
 
