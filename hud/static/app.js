@@ -59,6 +59,18 @@ const ui = {
   sendButton: $("sendButton"),
   stopButton: $("stopButton"),
   activity: $("activity"),
+  actionEvidencePanel: $("actionEvidencePanel"),
+  actionStateBadge: $("actionStateBadge"),
+  actionSummary: $("actionSummary"),
+  actionOperation: $("actionOperation"),
+  actionTarget: $("actionTarget"),
+  actionExecution: $("actionExecution"),
+  actionRecovery: $("actionRecovery"),
+  actionDiffWrap: $("actionDiffWrap"),
+  actionDiff: $("actionDiff"),
+  actionEvidenceList: $("actionEvidenceList"),
+  actionTechnical: $("actionTechnical"),
+  actionTechnicalList: $("actionTechnicalList"),
   approvalPanel: $("approvalPanel"),
   approvalDetail: $("approvalDetail"),
   approvalActions: $("approvalActions"),
@@ -367,11 +379,238 @@ function syncSessionLabels() {
   syncSystemWorkspace();
 }
 
+const ACTION_TECHNICAL_FIELDS = [
+  ["schema_version", "SCHEMA"],
+  ["source", "SOURCE"],
+  ["durability", "DURABILITY"],
+  ["run_id", "RUN ID"],
+  ["tool_name", "TOOL"],
+  ["plan_token", "PLAN TOKEN"],
+  ["recovery_id", "RECOVERY ID"],
+  ["origin_recovery_id", "ORIGIN RECOVERY"],
+  ["target_canonical_path", "TARGET CANONICAL"],
+  ["source_canonical_path", "SOURCE CANONICAL"],
+  ["reference_target_canonical_path", "REFERENCE TARGET"],
+  ["original_sha256", "ORIGINAL SHA"],
+  ["proposed_sha256", "PROPOSED SHA"],
+  ["source_sha256", "SOURCE SHA"],
+  ["target_sha256", "TARGET SHA"],
+  ["before_sha256", "BEFORE SHA"],
+  ["after_sha256", "AFTER SHA"],
+  ["current_sha256", "CURRENT SHA"],
+  ["restore_sha256", "RESTORE SHA"],
+  ["target_file_id", "TARGET FILE ID"],
+  ["source_file_id", "SOURCE FILE ID"],
+  ["error", "ERROR CLASS"],
+  ["reason", "EVIDENCE NOTE"],
+];
+
+function actionStatePresentation(projection) {
+  const stateName = String(projection?.state || "unknown");
+  const map = {
+    preview_ready: {
+      label: "PREVIEW READY",
+      summary: "Exact preview is available for review. No mutation is claimed.",
+      execution: "NOT EXECUTED",
+      tone: "ready",
+    },
+    approval_requested: {
+      label: "DECISION REQUIRED",
+      summary: "Hermes is waiting for an operator approval decision.",
+      execution: "AWAITING DECISION",
+      tone: "attention",
+    },
+    approval_accepted: {
+      label: "DECISION ACCEPTED",
+      summary: "Hermes accepted the decision. Protected execution remains unproven.",
+      execution: "UNPROVEN",
+      tone: "attention",
+    },
+    approval_denied: {
+      label: "DENIED",
+      summary: "The approval was denied. No protected action success is claimed.",
+      execution: "NOT EXECUTED",
+      tone: "neutral",
+    },
+    succeeded: {
+      label: "SUCCEEDED",
+      summary: "Authoritative protected-action result reports successful execution.",
+      execution: "SUCCEEDED",
+      tone: "success",
+    },
+    stale_plan: {
+      label: "STALE",
+      summary: "The protected plan became stale and mutation was not performed.",
+      execution: "NOT PERFORMED",
+      tone: "attention",
+    },
+    refused: {
+      label: "REFUSED",
+      summary: "The protected action was refused before mutation.",
+      execution: "NOT PERFORMED",
+      tone: "attention",
+    },
+    failed: {
+      label: "FAILED",
+      summary: "Authoritative protected-action evidence reports failure.",
+      execution: "FAILED",
+      tone: "failure",
+    },
+    unavailable: {
+      label: "UNAVAILABLE",
+      summary: "Current actionability cannot be established from authoritative evidence.",
+      execution: "UNAVAILABLE",
+      tone: "neutral",
+    },
+    unknown: {
+      label: "UNKNOWN",
+      summary: "Protected-action outcome cannot be established from available evidence.",
+      execution: "UNKNOWN",
+      tone: "neutral",
+    },
+  };
+  return map[stateName] || map.unknown;
+}
+
+function actionOperation(projection) {
+  return String(
+    projection?.action ||
+    projection?.command ||
+    projection?.tool_name ||
+    "—"
+  );
+}
+
+function actionPrimaryTarget(projection) {
+  const source = String(
+    projection?.source_canonical_path ||
+    projection?.source_draft ||
+    ""
+  );
+  const target = String(
+    projection?.target_canonical_path ||
+    projection?.target_relative_path ||
+    ""
+  );
+  if (source && target) return `${source} → ${target}`;
+  return target || source || "—";
+}
+
+function actionRecoveryLabel(projection) {
+  if (projection?.recovery_required === true) return "REQUIRED";
+  if (projection?.recovery_state) {
+    return String(projection.recovery_state).toUpperCase();
+  }
+  if (projection?.recovery_id) return "LINKED // STATUS UNAVAILABLE";
+  return "UNOBSERVED";
+}
+
+function technicalEvidenceRows(projection) {
+  if (!projection || typeof projection !== "object") return [];
+  const rows = [];
+  for (const [key, label] of ACTION_TECHNICAL_FIELDS) {
+    if (!(key in projection)) continue;
+    const value = projection[key];
+    if (value === null || value === undefined || value === "") continue;
+    rows.push([
+      label,
+      typeof value === "boolean" ? String(value) : String(value),
+    ]);
+  }
+  return rows;
+}
+
+function appendDefinitionRow(list, label, value) {
+  const row = document.createElement("div");
+  const term = document.createElement("dt");
+  const detail = document.createElement("dd");
+  term.textContent = label;
+  detail.textContent = value;
+  row.append(term, detail);
+  list.append(row);
+}
+
+function renderActionEvidenceHistory() {
+  ui.actionEvidenceList.replaceChildren();
+  const recent = state.actionEvidence.slice(-5).reverse();
+  if (!recent.length) {
+    const empty = document.createElement("div");
+    empty.className = "muted-line";
+    empty.textContent = "No completed protected-action evidence in this session.";
+    ui.actionEvidenceList.append(empty);
+    return;
+  }
+  for (const evidence of recent) {
+    const meta = actionStatePresentation(evidence);
+    const item = document.createElement("div");
+    item.className = "action-evidence-item";
+    item.dataset.actionState = String(evidence?.state || "unknown");
+    const stateLine = document.createElement("strong");
+    stateLine.textContent = meta.label;
+    const detail = document.createElement("span");
+    detail.textContent =
+      `${actionOperation(evidence)} // ${actionPrimaryTarget(evidence)}`;
+    item.append(stateLine, detail);
+    ui.actionEvidenceList.append(item);
+  }
+}
+
+function renderActionWorkspace(projection) {
+  if (!projection || typeof projection !== "object") {
+    ui.actionEvidencePanel.classList.add("hidden");
+    ui.actionEvidencePanel.dataset.actionState = "none";
+    ui.actionStateBadge.textContent = "UNKNOWN";
+    ui.actionStateBadge.dataset.actionState = "unknown";
+    ui.actionSummary.textContent = "No protected action evidence selected.";
+    ui.actionOperation.textContent = "—";
+    ui.actionTarget.textContent = "—";
+    ui.actionExecution.textContent = "UNKNOWN";
+    ui.actionRecovery.textContent = "UNOBSERVED";
+    ui.actionDiff.textContent = "";
+    ui.actionDiffWrap.classList.add("hidden");
+    ui.actionEvidenceList.replaceChildren();
+    ui.actionTechnicalList.replaceChildren();
+    ui.actionTechnical.open = false;
+    return;
+  }
+
+  const meta = actionStatePresentation(projection);
+  const stateName = String(projection.state || "unknown");
+  ui.actionEvidencePanel.classList.remove("hidden");
+  ui.actionEvidencePanel.dataset.actionState = stateName;
+  ui.actionStateBadge.textContent = meta.label;
+  ui.actionStateBadge.dataset.actionState = stateName;
+  ui.actionSummary.textContent = meta.summary;
+  ui.actionOperation.textContent = actionOperation(projection);
+  ui.actionTarget.textContent = actionPrimaryTarget(projection);
+  ui.actionExecution.textContent = meta.execution;
+  ui.actionRecovery.textContent = actionRecoveryLabel(projection);
+
+  const diff = typeof projection.diff === "string" ? projection.diff : "";
+  ui.actionDiff.textContent = diff;
+  ui.actionDiffWrap.classList.toggle("hidden", !diff);
+
+  renderActionEvidenceHistory();
+
+  ui.actionTechnicalList.replaceChildren();
+  for (const [label, value] of technicalEvidenceRows(projection)) {
+    appendDefinitionRow(ui.actionTechnicalList, label, value);
+  }
+  if (!ui.actionTechnicalList.children.length) {
+    appendDefinitionRow(
+      ui.actionTechnicalList,
+      "EVIDENCE",
+      "No additional allowlisted technical fields.",
+    );
+  }
+}
+
 function rememberActionProjection(projection) {
   if (!projection || typeof projection !== "object") return null;
   const value = String(projection.state || "");
   if (!value) return null;
   state.actionProjection = projection;
+  renderActionWorkspace(projection);
   return projection;
 }
 
@@ -435,6 +674,7 @@ function presentActionProjection(projection, { hydrated = false } = {}) {
 function clearActionProjection(detail = "") {
   state.actionEvidence = [];
   state.actionProjection = null;
+  renderActionWorkspace(null);
   if (detail && !state.streaming && !state.approvalEvent) {
     setCore("READY", detail);
   }
@@ -469,8 +709,7 @@ async function refreshActionEvidence() {
 async function loadMessages() {
   if (!state.sessionId) {
     showTranscriptEmpty("Select or create a Hermes session to begin.");
-    state.actionEvidence = [];
-    state.actionProjection = null;
+    clearActionProjection();
     return;
   }
   try {
@@ -732,8 +971,7 @@ function handleStreamEvent(eventName, data, assistant) {
   switch (eventName) {
     case "run.started":
       state.provenance = createProvenanceState();
-      state.actionProjection = null;
-      state.actionEvidence = [];
+      clearActionProjection();
       state.activeRunId = runId;
       setCore("THINKING", runId ? `Hermes run ${runId}` : "Hermes run started");
       updateRunControls();

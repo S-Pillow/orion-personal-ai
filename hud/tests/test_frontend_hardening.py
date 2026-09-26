@@ -7,6 +7,7 @@ from pathlib import Path
 HUD_ROOT = Path(__file__).resolve().parents[1]
 APP_JS = (HUD_ROOT / "static" / "app.js").read_text(encoding="utf-8")
 STYLES = (HUD_ROOT / "static" / "styles.css").read_text(encoding="utf-8")
+INDEX_HTML = (HUD_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 
 
 class FrontendHardeningContractTests(unittest.TestCase):
@@ -162,6 +163,66 @@ class FrontendHardeningContractTests(unittest.TestCase):
         )
         self.assertIn(
             "{ hydrated: true },",
+            APP_JS,
+        )
+
+
+    def test_action_evidence_workspace_is_contextual_and_structured(self):
+        for marker in (
+            'id="actionEvidencePanel"',
+            'class="panel action-evidence-panel hidden"',
+            'id="actionStateBadge"',
+            'id="actionDiff"',
+            'id="actionEvidenceList"',
+            'id="actionTechnicalList"',
+        ):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, INDEX_HTML)
+        self.assertIn("function renderActionWorkspace(projection)", APP_JS)
+        self.assertIn("renderActionWorkspace(null);", APP_JS)
+        self.assertIn("ui.actionEvidencePanel.classList.add(\"hidden\")", APP_JS)
+
+    def test_action_workspace_keeps_approval_distinct_from_execution(self):
+        self.assertIn(
+            "Hermes approval is not execution evidence.",
+            INDEX_HTML,
+        )
+        self.assertIn(
+            'execution: "UNPROVEN"',
+            APP_JS,
+        )
+        self.assertIn(
+            "Protected execution remains unproven.",
+            APP_JS,
+        )
+
+    def test_action_workspace_renders_exact_diff_and_allowlisted_technical_fields(self):
+        self.assertIn(
+            'ui.actionDiff.textContent = diff;',
+            APP_JS,
+        )
+        self.assertIn(
+            "const ACTION_TECHNICAL_FIELDS = [",
+            APP_JS,
+        )
+        self.assertIn(
+            "technicalEvidenceRows(projection)",
+            APP_JS,
+        )
+        self.assertIn("white-space: pre;", STYLES)
+        self.assertNotIn("JSON.stringify(projection", APP_JS)
+
+    def test_action_workspace_recent_evidence_is_presentation_only(self):
+        self.assertIn(
+            "state.actionEvidence.slice(-5).reverse()",
+            APP_JS,
+        )
+        self.assertIn(
+            'item.className = "action-evidence-item";',
+            APP_JS,
+        )
+        self.assertNotIn(
+            "actionEvidenceList.addEventListener",
             APP_JS,
         )
 
