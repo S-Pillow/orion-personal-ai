@@ -21,6 +21,32 @@ from action_projection import (
 
 
 class ActionProjectionTests(unittest.TestCase):
+    def test_run_started_requires_raw_exact_run_id(self):
+        for bad_run_id in (" run_1 ", 7, {"id": "run_1"}, ""):
+            with self.subTest(run_id=bad_run_id):
+                self.assertIsNone(
+                    project_stream_event(
+                        "run.started",
+                        {
+                            "event": "run.started",
+                            "run_id": bad_run_id,
+                        },
+                    )
+                )
+
+        projected = project_stream_event(
+            "run.started",
+            {
+                "event": "run.started",
+                "run_id": "run_1",
+                "session_id": "session_1",
+            },
+        )
+        self.assertIsNotNone(projected)
+        name, payload = projected
+        self.assertEqual(name, "run.started")
+        self.assertEqual(payload["run_id"], "run_1")
+
     def test_approval_request_is_allowlist_first_and_exact(self):
         description = (
             "Target: C:\\vault\\note.md\n"

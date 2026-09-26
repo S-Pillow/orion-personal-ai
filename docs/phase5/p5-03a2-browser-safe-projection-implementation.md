@@ -47,10 +47,10 @@ The bridge now:
 
 - parses session SSE server-side;
 - allowlists approval content and removes rule/pattern keys and raw tool args;
-- exposes decision controls only when the approval event carries its own raw
-  byte-exact valid authoritative run ID, that ID matches the active streamed
-  run established by `run.started`, and its command survives exact
-  byte-preserving validation without truncation, NUL removal, or whitespace
+- exposes decision controls only when both `run.started` and the approval
+  event carry raw byte-exact valid authoritative run IDs, those IDs match, and
+  the command survives exact byte-preserving validation without truncation,
+  NUL removal, or whitespace
   normalization; only an absent legacy `command` may fall back to
   `tool_name`, while an explicit malformed command makes the request
   unavailable; the browser never falls back to another active run;
@@ -109,7 +109,10 @@ In particular:
 - periodic health refresh re-presents only durable `completed_record`
   action evidence rather than transient approval state;
 - terminal completion without action evidence, failure, or cancellation cannot
-  leave an accepted approval looking like execution is still pending.
+  leave an accepted approval looking like execution is still pending;
+- late approval POST receipts are discarded once the pending approval or active
+  run has cleared or changed, and terminal events for a non-active run are
+  ignored before they can alter approval, evidence, or core presentation.
 
 ## Runtime evidence before implementation
 

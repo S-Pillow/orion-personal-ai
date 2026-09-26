@@ -258,6 +258,19 @@ class FrontendHardeningContractTests(unittest.TestCase):
             APP_JS,
         )
 
+    def test_late_approval_receipt_is_discarded_after_terminal_state(self):
+        self.assertIn("state.approvalEvent !== event", APP_JS)
+        self.assertIn("state.activeRunId !== runId", APP_JS)
+
+    def test_terminal_run_events_require_active_run_match(self):
+        self.assertIn('case "run.completed": {', APP_JS)
+        self.assertIn('case "run.cancelled":', APP_JS)
+        self.assertIn('case "run.failed":', APP_JS)
+        self.assertGreaterEqual(
+            APP_JS.count("runId !== state.activeRunId"),
+            4,
+        )
+
     def test_startup_loads_persisted_session_history_once(self):
         self.assertIn(
             "async function refreshStatus(loadCurrentSession = false)",
