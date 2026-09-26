@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import http.client
+import json
 import queue
 import sys
 import threading
@@ -14,6 +15,17 @@ HUD_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(HUD_ROOT))
 
 import orion_hud_bridge as bridge
+
+
+def parse_projected_frame(frame: bytes) -> tuple[str, dict]:
+    event_name = ""
+    data_lines = []
+    for line in frame.decode("utf-8").splitlines():
+        if line.startswith("event:"):
+            event_name = line[6:].strip()
+        elif line.startswith("data:"):
+            data_lines.append(line[5:].lstrip())
+    return event_name, json.loads("\n".join(data_lines))
 
 
 class StreamDeliveryTests(unittest.TestCase):
@@ -137,7 +149,10 @@ class StreamDeliveryTests(unittest.TestCase):
                 first = received.get(timeout=1.5)
             except queue.Empty:
                 self.fail("run.started was buffered while upstream awaited the delta gate")
-            self.assertEqual(first, frames[0])
+            first_name, first_data = parse_projected_frame(first)
+            self.assertEqual(first_name, "run.started")
+            self.assertEqual(first_data["run_id"], "probe_run")
+            self.assertEqual(first_data["event"], "run.started")
             self.assertFalse(finished.is_set())
 
             allow_delta.set()
@@ -146,14 +161,24 @@ class StreamDeliveryTests(unittest.TestCase):
                 delta = received.get(timeout=1.5)
             except queue.Empty:
                 self.fail("assistant.delta was buffered while upstream awaited completion")
-            self.assertEqual(delta, frames[1])
+            delta_name, delta_data = parse_projected_frame(delta)
+            self.assertEqual(delta_name, "assistant.delta")
+            self.assertEqual(delta_data["delta"], "early café")
+            self.assertEqual(delta_data["event"], "assistant.delta")
             self.assertFalse(finished.is_set())
 
             allow_finish.set()
-            self.assertEqual(received.get(timeout=2), frames[2])
+            completed = received.get(timeout=2)
+            completed_name, completed_data = parse_projected_frame(completed)
+            self.assertEqual(completed_name, "run.completed")
+            self.assertEqual(completed_data["run_id"], "probe_run")
+            self.assertEqual(completed_data["event"], "run.completed")
+            self.assertEqual(completed_data["action_evidence"], [])
             reader.join(timeout=3)
             self.assertFalse(reader.is_alive(), "Client did not observe stream EOF")
-            self.assertEqual(bytes(received_bytes), b"".join(frames))
+            self.assertIn(b"event: run.started", bytes(received_bytes))
+            self.assertIn(b"event: assistant.delta", bytes(received_bytes))
+            self.assertIn(b"event: run.completed", bytes(received_bytes))
             self.assertTrue(received.empty(), "Duplicate or unexpected SSE frames")
             self.assertEqual(failures, [])
         finally:
