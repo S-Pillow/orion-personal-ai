@@ -25,12 +25,21 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-BRIDGE_VERSION = "2a-0.2"
+from action_projection import (
+    project_action_evidence_payload,
+    project_approval_response,
+    project_run_status,
+    project_stream_event,
+    project_transcript_payload,
+)
+
+BRIDGE_VERSION = "2a-0.3-p5-03a2"
 DEFAULT_BIND_HOST = "127.0.0.1"
 DEFAULT_BIND_PORT = 8765
 DEFAULT_HERMES_URL = "http://127.0.0.1:8642"
 MAX_REQUEST_BYTES = 128 * 1024
 MAX_PROXY_BYTES = 2 * 1024 * 1024
+MAX_SSE_FRAME_BYTES = 512 * 1024
 ID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,160}$")
 APPROVAL_CHOICES = frozenset({"once", "session", "always", "deny"})
 STATIC_FILES = {
@@ -374,18 +383,144 @@ class OrionHandler(BaseHTTPRequestHandler):
             self._proxy_json("GET", upstream)
             return
 
-        match = re.fullmatch(r"/api/orion/sessions/([^/]+)(/messages)?", path)
+        match = re.fullmatch(r"/api/orion/sessions/([^/]+)/action-evidence", path)
         if match and self._valid_id(match.group(1)):
-            suffix = "/messages" if match.group(2) else ""
-            self._proxy_json("GET", f"/api/sessions/{match.group(1)}{suffix}")
+            self._handle_action_evidence(match.group(1))
+            return
+
+        match = re.fullmatch(r"/api/orion/sessions/([^/]+)/messages", path)
+        if match and self._valid_id(match.group(1)):
+            self._handle_session_messages(match.group(1))
+            return
+
+        match = re.fullmatch(r"/api/orion/sessions/([^/]+)", path)
+        if match and self._valid_id(match.group(1)):
+            self._proxy_json("GET", f"/api/sessions/{match.group(1)}")
             return
 
         match = re.fullmatch(r"/api/orion/runs/([^/]+)", path)
         if match and self._valid_id(match.group(1)):
-            self._proxy_json("GET", f"/v1/runs/{match.group(1)}")
+            self._handle_run_status(match.group(1))
             return
 
         self._send_json(404, {"error": "operation_not_allowlisted"})
+
+    def _safe_upstream_json(
+        self,
+        method: str,
+        path: str,
+        *,
+        body: dict[str, Any] | None = None,
+    ) -> tuple[int, Any] | None:
+        try:
+            status, content_type, data = self.hermes.request(
+                method,
+                path,
+                body=body,
+            )
+        except BridgeConfigError:
+            self._send_json(503, {"error": "hermes_credentials_unavailable"})
+            return None
+        except (OSError, http.client.HTTPException, RuntimeError):
+            self._send_json(502, {"error": "hermes_unavailable"})
+            return None
+        if "json" not in content_type.lower():
+            self._send_json(502, {"error": "unexpected_hermes_content_type"})
+            return None
+        try:
+            payload = json.loads(data.decode("utf-8"))
+        except (UnicodeError, json.JSONDecodeError):
+            self._send_json(502, {"error": "invalid_hermes_json"})
+            return None
+        return status, payload
+
+    def _handle_session_messages(self, session_id: str) -> None:
+        upstream = self._safe_upstream_json(
+            "GET", f"/api/sessions/{session_id}/messages"
+        )
+        if upstream is None:
+            return
+        status, payload = upstream
+        if status < 200 or status >= 300:
+            self._send_json(
+                status if 400 <= status < 600 else 502,
+                {
+                    "error": "hermes_session_messages_unavailable",
+                    "upstream_status": status,
+                },
+            )
+            return
+        self._send_json(200, project_transcript_payload(payload))
+
+    def _handle_action_evidence(self, session_id: str) -> None:
+        upstream = self._safe_upstream_json(
+            "GET",
+            f"/api/sessions/{session_id}/messages?order=oldest&limit=500",
+        )
+        if upstream is None:
+            return
+        status, payload = upstream
+        if status < 200 or status >= 300:
+            self._send_json(
+                status if 400 <= status < 600 else 502,
+                {
+                    "error": "hermes_action_evidence_unavailable",
+                    "upstream_status": status,
+                },
+            )
+            return
+        self._send_json(
+            200,
+            project_action_evidence_payload(payload, session_id=session_id),
+        )
+
+    def _handle_run_status(self, run_id: str) -> None:
+        upstream = self._safe_upstream_json("GET", f"/v1/runs/{run_id}")
+        if upstream is None:
+            return
+        status, payload = upstream
+        if status < 200 or status >= 300:
+            self._send_json(
+                status if 400 <= status < 600 else 502,
+                {
+                    "error": "hermes_run_status_unavailable",
+                    "upstream_status": status,
+                },
+            )
+            return
+        projected = project_run_status(payload)
+        if projected is None:
+            self._send_json(
+                502, {"error": "hermes_run_status_projection_failed"}
+            )
+            return
+        self._send_json(200, projected)
+
+    def _handle_approval_decision(self, run_id: str, choice: str) -> None:
+        upstream = self._safe_upstream_json(
+            "POST",
+            f"/v1/runs/{run_id}/approval",
+            body={"choice": choice},
+        )
+        if upstream is None:
+            return
+        status, payload = upstream
+        if status < 200 or status >= 300:
+            self._send_json(
+                status if 400 <= status < 600 else 502,
+                {
+                    "error": "hermes_approval_rejected",
+                    "upstream_status": status,
+                },
+            )
+            return
+        projected = project_approval_response(run_id, choice, payload)
+        if projected is None:
+            self._send_json(
+                502, {"error": "hermes_approval_projection_failed"}
+            )
+            return
+        self._send_json(200, projected)
 
     def _handle_status(self) -> None:
         hermes_online = False
@@ -511,9 +646,7 @@ class OrionHandler(BaseHTTPRequestHandler):
                     },
                 )
                 return
-            self._proxy_json(
-                "POST", f"/v1/runs/{run_id}/approval", body={"choice": choice}
-            )
+            self._handle_approval_decision(run_id, choice)
             return
 
         self._send_json(404, {"error": "operation_not_allowlisted"})
@@ -556,19 +689,91 @@ class OrionHandler(BaseHTTPRequestHandler):
             self.send_header("X-Accel-Buffering", "no")
             self.end_headers()
 
+            frame_parts: list[bytes] = []
+            frame_size = 0
             while True:
-                # Forward available SSE bytes without waiting to fill the buffer.
-                # Early run/approval events must arrive before upstream completion.
-                chunk = response.read1(4096)
-                if not chunk:
+                line = response.readline(MAX_SSE_FRAME_BYTES + 1)
+                if not line:
+                    if frame_parts:
+                        projected = self._project_sse_frame(
+                            b"".join(frame_parts)
+                        )
+                        if projected:
+                            self.wfile.write(projected)
+                            self.wfile.flush()
                     break
-                self.wfile.write(chunk)
-                self.wfile.flush()
+                if len(line) > MAX_SSE_FRAME_BYTES:
+                    raise RuntimeError("upstream_sse_line_too_large")
+                frame_parts.append(line)
+                frame_size += len(line)
+                if frame_size > MAX_SSE_FRAME_BYTES:
+                    raise RuntimeError("upstream_sse_frame_too_large")
+                if line in (b"\n", b"\r\n"):
+                    projected = self._project_sse_frame(
+                        b"".join(frame_parts)
+                    )
+                    frame_parts = []
+                    frame_size = 0
+                    if projected:
+                        self.wfile.write(projected)
+                        self.wfile.flush()
             self.close_connection = True
         except (BrokenPipeError, ConnectionResetError):
             self.close_connection = True
+        except (UnicodeError, ValueError, RuntimeError):
+            try:
+                self.wfile.write(
+                    self._encode_sse(
+                        "error",
+                        {
+                            "event": "error",
+                            "message": (
+                                "Orion projection rejected unsafe or "
+                                "malformed upstream event"
+                            ),
+                            "run_error_observed": True,
+                        },
+                    )
+                )
+                self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            self.close_connection = True
         finally:
             conn.close()
+
+    @staticmethod
+    def _encode_sse(event_name: str, data: dict[str, Any]) -> bytes:
+        payload = json.dumps(
+            data,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        return f"event: {event_name}\ndata: {payload}\n\n".encode("utf-8")
+
+    def _project_sse_frame(self, frame: bytes) -> bytes:
+        text = frame.decode("utf-8", errors="strict")
+        lines = text.splitlines()
+        if lines and all(
+            (not line) or line.startswith(":") for line in lines
+        ):
+            return b": keepalive\n\n"
+
+        event_name = ""
+        data_lines: list[str] = []
+        for line in lines:
+            if line.startswith("event:"):
+                event_name = line[6:].strip()
+            elif line.startswith("data:"):
+                data_lines.append(line[5:].lstrip())
+        if not data_lines:
+            return b""
+        payload = json.loads("\n".join(data_lines))
+        projected = project_stream_event(event_name, payload)
+        if projected is None:
+            raise ValueError("unsupported_sse_payload")
+        projected_name, projected_payload = projected
+        return self._encode_sse(projected_name, projected_payload)
 
 
 def build_state(args: argparse.Namespace) -> BridgeState:
