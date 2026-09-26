@@ -47,12 +47,13 @@ The bridge now:
 
 - parses session SSE server-side;
 - allowlists approval content and removes rule/pattern keys and raw tool args;
-- exposes decision controls only when the approval event carries its own valid
-  authoritative run ID and its command survives exact byte-preserving
-  validation without truncation, NUL removal, or whitespace normalization;
-  only an absent legacy `command` may fall back to `tool_name`, while an
-  explicit malformed command makes the request unavailable; the browser never
-  falls back to another active run;
+- exposes decision controls only when the approval event carries its own raw
+  byte-exact valid authoritative run ID, that ID matches the active streamed
+  run established by `run.started`, and its command survives exact
+  byte-preserving validation without truncation, NUL removal, or whitespace
+  normalization; only an absent legacy `command` may fall back to
+  `tool_name`, while an explicit malformed command makes the request
+  unavailable; the browser never falls back to another active run;
 - strips raw `run.completed.messages` from the browser stream and replaces
   them with bounded action evidence;
 - sanitizes the ordinary transcript endpoint to user/assistant display rows;
@@ -68,11 +69,12 @@ The bridge now:
   arbitrary raw tool arguments, stack/error text, or provider secrets through
   the action projection.
 
-Live `preview_ready` requires a complete structured plan, exact diff, and
-matching diff hash. Incomplete success-shaped preview evidence is unavailable,
-not actionable. Persisted preview history never recreates current plan
-actionability. Hydration reports historical preview evidence with current
-actionability unavailable.
+Live `preview_ready` requires a complete structured plan, exact diff,
+matching diff hash, and approval-visible path fields that survive projection
+byte-for-byte without trimming, NUL removal, or truncation. Incomplete or
+normalized-away preview evidence is unavailable, not actionable. Persisted
+preview history never recreates current plan actionability. Hydration reports
+historical preview evidence with current actionability unavailable.
 
 Protected `succeeded` requires the accepted action-specific structured result
 shape, explicit `mutation_performed=true`, explicit
@@ -104,8 +106,10 @@ In particular:
   so a late response from another session is discarded;
 - persisted action hydration explicitly requests Hermes' latest bounded
   500-message page rather than an oldest-history prefix;
-- periodic health refresh preserves an already-hydrated action projection
-  rather than overwriting it with generic online status.
+- periodic health refresh re-presents only durable `completed_record`
+  action evidence rather than transient approval state;
+- terminal completion without action evidence, failure, or cancellation cannot
+  leave an accepted approval looking like execution is still pending.
 
 ## Runtime evidence before implementation
 
