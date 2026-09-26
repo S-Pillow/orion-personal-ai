@@ -55,13 +55,22 @@ The bridge now:
   from authoritative persisted Hermes session messages;
 - allowlists `GET /api/orion/runs/{run_id}`;
 - turns a successful approval POST into a decision-only Orion projection with
-  `execution_proven=false`;
+  `execution_proven=false` only when Hermes returns the canonical response
+  object, exact run ID, explicit matching choice, and positive resolved count;
 - never exposes recovery directory paths, preview nonces, proposed bytes,
   arbitrary raw tool arguments, stack/error text, or provider secrets through
   the action projection.
 
-Persisted preview history never recreates current plan actionability. Hydration
-reports historical preview evidence with current actionability unavailable.
+Live `preview_ready` requires a complete structured plan, exact diff, and
+matching diff hash. Incomplete success-shaped preview evidence is unavailable,
+not actionable. Persisted preview history never recreates current plan
+actionability. Hydration reports historical preview evidence with current
+actionability unavailable.
+
+Protected `succeeded` requires the accepted action-specific structured result
+shape, a valid recovery identifier, no contradictory error, and the applicable
+target/source/origin identifiers. Incomplete or contradictory success-shaped
+evidence is projected as `unknown`, never as success.
 
 ## Browser truth behavior
 
@@ -76,7 +85,11 @@ In particular:
 - a structured plugin failure overrides generic run/tool completion;
 - approval visuals are cleared on terminal run failure;
 - completed action evidence is rehydrated from the new read-only server
-  projection after transcript load.
+  projection after transcript load;
+- changing sessions, empty action history, or hydration failure clears any
+  prior action projection so evidence cannot bleed between sessions;
+- periodic health refresh preserves an already-hydrated action projection
+  rather than overwriting it with generic online status.
 
 ## Runtime evidence before implementation
 
@@ -103,7 +116,10 @@ Before merge:
 7. Confirm approval response cannot be rendered as execution success.
 8. Confirm stale/recovery-required precedence.
 9. Confirm ordinary transcript still renders persisted user/assistant messages.
-10. Confirm branch worktree clean.
+10. Confirm exact projected SSE bytes are stable in the gated stream fixture.
+11. Confirm empty/failed hydration clears prior session action state and health
+    polling preserves a current hydrated projection.
+12. Confirm branch worktree clean.
 
 No installed runtime deploy or live protected action is authorized by this
 implementation unit.
