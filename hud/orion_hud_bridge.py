@@ -455,7 +455,7 @@ class OrionHandler(BaseHTTPRequestHandler):
     def _handle_action_evidence(self, session_id: str) -> None:
         upstream = self._safe_upstream_json(
             "GET",
-            f"/api/sessions/{session_id}/messages?order=oldest&limit=500",
+            f"/api/sessions/{session_id}/messages?order=latest&limit=500",
         )
         if upstream is None:
             return

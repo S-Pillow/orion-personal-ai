@@ -61,6 +61,20 @@ class ActionProjectionTests(unittest.TestCase):
         self.assertEqual(projected["choices"], [])
         self.assertEqual(projected["projection"]["state"], "unavailable")
 
+        missing_run = project_approval_request({
+            "command": "orion_vault_apply_plan",
+            "description": "exact approval content",
+            "choices": ["once", "deny"],
+        })
+        self.assertEqual(missing_run["choices"], [])
+        self.assertEqual(
+            missing_run["projection"]["state"], "unavailable"
+        )
+        self.assertEqual(
+            missing_run["projection"]["reason"],
+            "approval_run_id_unavailable",
+        )
+
     def test_approval_response_is_decision_not_execution(self):
         projected = project_approval_response(
             "run_1",
@@ -218,6 +232,23 @@ class ActionProjectionTests(unittest.TestCase):
             projected["reason"], "preview_evidence_incomplete"
         )
 
+        contradictory = {
+            "role": "tool",
+            "tool_name": "orion_vault_preview_edit",
+            "content": json.dumps({
+                "success": True,
+                "mode": "preview",
+                "mutation_performed": False,
+                "plan_token": "a" * 64,
+                "plan": plan,
+                "diff": diff,
+                "error": "preview_contract_error",
+            }),
+        }
+        [projected] = project_action_evidence([contradictory])
+        self.assertEqual(projected["state"], "failed")
+        self.assertEqual(projected["error"], "preview_contract_error")
+
     def test_success_requires_complete_action_contract_and_no_error(self):
         base = {
             "success": True,
@@ -245,6 +276,19 @@ class ActionProjectionTests(unittest.TestCase):
         self.assertEqual(
             incomplete["reason"], "success_evidence_incomplete"
         )
+
+        missing_recovery_flag = dict(base)
+        missing_recovery_flag.pop("recovery_required")
+        [missing_flag] = project_action_evidence([{
+            "role": "tool",
+            "tool_name": "orion_vault_apply_plan",
+            "content": json.dumps(missing_recovery_flag),
+        }])
+        self.assertEqual(missing_flag["state"], "unknown")
+        self.assertEqual(
+            missing_flag["reason"], "success_evidence_incomplete"
+        )
+        self.assertNotIn("recovery_required", missing_flag)
 
         contradictory = dict(base, error="post_write_hash_mismatch")
         [conflict] = project_action_evidence([{

@@ -16,6 +16,7 @@ import orion_hud_bridge as bridge
 
 class ProjectionHermesHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
+    requested_paths = []
 
     def log_message(self, fmt, *args):
         return
@@ -29,6 +30,7 @@ class ProjectionHermesHandler(BaseHTTPRequestHandler):
         self.wfile.write(raw)
 
     def do_GET(self):
+        type(self).requested_paths.append(self.path)
         if self.path.startswith("/api/sessions/session_1/messages"):
             self._send(200, {
                 "object": "list",
@@ -122,6 +124,7 @@ class ProjectionHermesHandler(BaseHTTPRequestHandler):
                                 "recovery_required": False,
                                 "recovery_id": "d" * 64,
                                 "action": "edit_note",
+                                "target_relative_path": "note.md",
                                 "recovery_dir": (
                                     "C:/private/DO-NOT-LEAK"
                                 ),
@@ -148,6 +151,7 @@ class ProjectionHermesHandler(BaseHTTPRequestHandler):
 
 class ProjectionBridgeTests(unittest.TestCase):
     def setUp(self):
+        ProjectionHermesHandler.requested_paths = []
         self.hermes = ThreadingHTTPServer(
             ("127.0.0.1", 0), ProjectionHermesHandler
         )
@@ -227,6 +231,10 @@ class ProjectionBridgeTests(unittest.TestCase):
         )
         self.assertEqual(status, 200)
         evidence = json.loads(raw)
+        self.assertIn(
+            "/api/sessions/session_1/messages?order=latest&limit=500",
+            ProjectionHermesHandler.requested_paths,
+        )
         self.assertEqual(evidence["items"][0]["state"], "succeeded")
         self.assertEqual(
             evidence["current_recovery_visibility"], "unavailable"

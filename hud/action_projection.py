@@ -207,7 +207,13 @@ def project_approval_request(data: dict[str, Any]) -> dict[str, Any]:
     command = _bounded_text(data.get("command") or data.get("tool_name"), 240)
     description = _exact_text(data.get("description"))
     choices = _approval_choices(data.get("choices"))
-    exact_ready = bool(command and description and choices)
+    run_id = common.get("run_id")
+    exact_ready = bool(run_id and command and description and choices)
+    unavailable_reason = (
+        "approval_run_id_unavailable"
+        if not run_id
+        else "canonical_approval_content_unavailable"
+    )
     projection = _projection(
         "approval_requested" if exact_ready else "unavailable",
         "hermes_approval_event",
@@ -216,7 +222,7 @@ def project_approval_request(data: dict[str, Any]) -> dict[str, Any]:
         command=command,
         description=description,
         choices=choices if exact_ready else [],
-        reason=None if exact_ready else "canonical_approval_content_unavailable",
+        reason=None if exact_ready else unavailable_reason,
     )
     return {
         **common,
@@ -453,10 +459,12 @@ def project_tool_message(
 
     common = _common(message)
     if tool_name in PREVIEW_TOOLS:
+        preview_error = _safe_code(result.get("error"))
         preview_claim = (
             result.get("success") is True
             and result.get("mode") == "preview"
             and result.get("mutation_performed") is False
+            and not preview_error
         )
         is_preview = preview_claim and _preview_evidence_complete(
             tool_name, result
@@ -473,7 +481,7 @@ def project_tool_message(
                 current_actionability="unavailable" if hydrated else "turn_scoped",
                 hydrated=hydrated,
             )
-        elif result.get("success") is False or _safe_code(result.get("error")):
+        elif result.get("success") is False or preview_error:
             out = _projection(
                 "failed",
                 "vault_preview_result",
@@ -502,33 +510,48 @@ def project_tool_message(
         if result.get("success") is not None:
             out["success"] = result.get("success") is True
         out["mutation_performed"] = result.get("mutation_performed") is True
-        error = _safe_code(result.get("error"))
-        if error:
-            out["error"] = error
+        if preview_error:
+            out["error"] = preview_error
         return out
 
-    success = result.get("success") is True
-    mutation = result.get("mutation_performed") is True
-    recovery_required = result.get("recovery_required") is True
+    raw_success = result.get("success")
+    raw_mutation = result.get("mutation_performed")
+    raw_recovery = result.get("recovery_required")
+    success = raw_success is True
+    mutation = raw_mutation is True
+    recovery_required = raw_recovery is True
+    mutation_false = raw_mutation is False
+    recovery_false = raw_recovery is False
     error = _safe_code(result.get("error"))
 
-    success_claim = success and mutation and not recovery_required
-    if success_claim and error:
+    if success and mutation and raw_recovery is not False:
+        state = "unknown"
+        projection_reason = (
+            "conflicting_action_result"
+            if recovery_required
+            else "success_evidence_incomplete"
+        )
+    elif success and mutation and error:
         state = "unknown"
         projection_reason = "conflicting_action_result"
-    elif success_claim and _success_evidence_complete(result):
+    elif (
+        success
+        and mutation
+        and recovery_false
+        and _success_evidence_complete(result)
+    ):
         state = "succeeded"
         projection_reason = None
-    elif success_claim:
+    elif success and mutation and recovery_false:
         state = "unknown"
         projection_reason = "success_evidence_incomplete"
-    elif error in STALE_ERRORS and not mutation and not recovery_required:
+    elif error in STALE_ERRORS and mutation_false and recovery_false:
         state = "stale_plan"
         projection_reason = None
-    elif error in REFUSAL_ERRORS and not mutation:
+    elif error in REFUSAL_ERRORS and mutation_false:
         state = "refused"
         projection_reason = None
-    elif result.get("success") is False or error:
+    elif raw_success is False or error:
         state = "failed"
         projection_reason = None
     else:
@@ -541,9 +564,13 @@ def project_tool_message(
         durability="completed_record",
         common=common,
         tool_name=tool_name,
-        success=success,
-        mutation_performed=mutation,
-        recovery_required=recovery_required,
+        success=raw_success if isinstance(raw_success, bool) else None,
+        mutation_performed=(
+            raw_mutation if isinstance(raw_mutation, bool) else None
+        ),
+        recovery_required=(
+            raw_recovery if isinstance(raw_recovery, bool) else None
+        ),
         error=error or None,
         reason=projection_reason,
         hydrated=hydrated,

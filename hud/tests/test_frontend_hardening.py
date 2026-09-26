@@ -132,6 +132,28 @@ class FrontendHardeningContractTests(unittest.TestCase):
             APP_JS,
         )
         self.assertIn("clearActionProjection();", APP_JS)
+        self.assertIn(
+            "const requestedSessionId = state.sessionId;",
+            APP_JS,
+        )
+        self.assertIn(
+            "if (state.sessionId !== requestedSessionId) return;",
+            APP_JS,
+        )
+        self.assertIn(
+            "if (state.sessionId === requestedSessionId)",
+            APP_JS,
+        )
+
+    def test_approval_decision_requires_event_run_id(self):
+        self.assertIn(
+            "const runId = event?.run_id;",
+            APP_JS,
+        )
+        self.assertNotIn(
+            "event?.run_id || state.activeRunId",
+            APP_JS,
+        )
 
     def test_health_refresh_preserves_hydrated_action_projection(self):
         self.assertIn(

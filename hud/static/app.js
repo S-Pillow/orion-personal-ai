@@ -445,10 +445,12 @@ async function refreshActionEvidence() {
     clearActionProjection("No protected action evidence selected");
     return;
   }
+  const requestedSessionId = state.sessionId;
   try {
     const payload = await api(
-      `/api/orion/sessions/${encodeURIComponent(state.sessionId)}/action-evidence`,
+      `/api/orion/sessions/${encodeURIComponent(requestedSessionId)}/action-evidence`,
     );
+    if (state.sessionId !== requestedSessionId) return;
     const items = arrayFrom(payload, ["items", "data"]);
     state.actionEvidence = items;
     const latest = items.length ? items[items.length - 1] : null;
@@ -458,7 +460,9 @@ async function refreshActionEvidence() {
       clearActionProjection("No protected action evidence in selected session");
     }
   } catch {
-    clearActionProjection("Action evidence unavailable for selected session");
+    if (state.sessionId === requestedSessionId) {
+      clearActionProjection("Action evidence unavailable for selected session");
+    }
   }
 }
 
@@ -584,7 +588,7 @@ function showApproval(data) {
 
 async function decideApproval(choice) {
   const event = state.approvalEvent;
-  const runId = event?.run_id || state.activeRunId;
+  const runId = event?.run_id;
   if (!runId) {
     setCore("ERROR", "Approval has no active Hermes run");
     return;

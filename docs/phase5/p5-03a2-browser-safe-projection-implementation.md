@@ -47,6 +47,8 @@ The bridge now:
 
 - parses session SSE server-side;
 - allowlists approval content and removes rule/pattern keys and raw tool args;
+- exposes decision controls only when the approval event carries its own valid
+  authoritative run ID; the browser never falls back to another active run;
 - strips raw `run.completed.messages` from the browser stream and replaces
   them with bounded action evidence;
 - sanitizes the ordinary transcript endpoint to user/assistant display rows;
@@ -68,9 +70,12 @@ actionability. Hydration reports historical preview evidence with current
 actionability unavailable.
 
 Protected `succeeded` requires the accepted action-specific structured result
-shape, a valid recovery identifier, no contradictory error, and the applicable
-target/source/origin identifiers. Incomplete or contradictory success-shaped
-evidence is projected as `unknown`, never as success.
+shape, explicit `mutation_performed=true`, explicit
+`recovery_required=false`, a valid recovery identifier, no contradictory
+error, and the applicable target/source/origin identifiers. Incomplete or
+contradictory success-shaped evidence is projected as `unknown`, never as
+success. Error-bearing preview evidence is never projected as
+`preview_ready`.
 
 ## Browser truth behavior
 
@@ -88,6 +93,10 @@ In particular:
   projection after transcript load;
 - changing sessions, empty action history, or hydration failure clears any
   prior action projection so evidence cannot bleed between sessions;
+- asynchronous hydration is bound to the session ID that initiated the request,
+  so a late response from another session is discarded;
+- persisted action hydration explicitly requests Hermes' latest bounded
+  500-message page rather than an oldest-history prefix;
 - periodic health refresh preserves an already-hydrated action projection
   rather than overwriting it with generic online status.
 
