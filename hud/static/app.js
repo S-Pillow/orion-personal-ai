@@ -737,6 +737,16 @@ function handleStreamEvent(eventName, data, assistant) {
 
   switch (eventName) {
     case "run.started":
+      if (
+        !runId ||
+        (state.activeRunId && runId !== state.activeRunId)
+      ) {
+        setCore(
+          "ERROR",
+          "Run identity mismatch // stream state not adopted",
+        );
+        break;
+      }
       state.provenance = createProvenanceState();
       state.actionProjection = null;
       state.actionEvidence = [];

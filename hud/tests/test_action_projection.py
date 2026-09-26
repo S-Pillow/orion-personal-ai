@@ -47,6 +47,30 @@ class ActionProjectionTests(unittest.TestCase):
         self.assertEqual(name, "run.started")
         self.assertEqual(payload["run_id"], "run_1")
 
+    def test_terminal_stream_events_require_raw_exact_run_id(self):
+        for event_name in ("run.completed", "run.cancelled", "run.failed"):
+            for bad_run_id in (" run_1 ", 7, {"id": "run_1"}, ""):
+                with self.subTest(event=event_name, run_id=bad_run_id):
+                    self.assertIsNone(
+                        project_stream_event(
+                            event_name,
+                            {
+                                "event": event_name,
+                                "run_id": bad_run_id,
+                                "messages": [],
+                            },
+                        )
+                    )
+
+        for bad_run_id in (" run_1 ", 7):
+            with self.subTest(event="error", run_id=bad_run_id):
+                self.assertIsNone(
+                    project_stream_event(
+                        "error",
+                        {"event": "error", "run_id": bad_run_id},
+                    )
+                )
+
     def test_approval_request_is_allowlist_first_and_exact(self):
         description = (
             "Target: C:\\vault\\note.md\n"

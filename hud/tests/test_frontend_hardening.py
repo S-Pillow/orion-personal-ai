@@ -166,6 +166,16 @@ class FrontendHardeningContractTests(unittest.TestCase):
         )
 
 
+    def test_run_started_cannot_replace_a_different_active_run(self):
+        self.assertIn(
+            "Run identity mismatch // stream state not adopted",
+            APP_JS,
+        )
+        self.assertIn(
+            "(state.activeRunId && runId !== state.activeRunId)",
+            APP_JS,
+        )
+
     def test_approval_event_must_match_active_streamed_run(self):
         self.assertIn("runId !== state.activeRunId", APP_JS)
         self.assertIn(

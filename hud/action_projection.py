@@ -841,7 +841,14 @@ def project_stream_event(
         return name, out
 
     if name == "run.completed":
-        out = {**common, "event": name}
+        raw_run_id = data.get("run_id")
+        if (
+            not isinstance(raw_run_id, str)
+            or not raw_run_id
+            or _safe_id(raw_run_id) != raw_run_id
+        ):
+            return None
+        out = {**common, "run_id": raw_run_id, "event": name}
         runtime = _runtime(data.get("runtime"))
         if runtime:
             out["runtime"] = runtime
@@ -850,9 +857,31 @@ def project_stream_event(
         )
         return name, out
 
-    if name in {"run.cancelled", "run.failed", "error", "done"}:
+    if name in {"run.cancelled", "run.failed"}:
+        raw_run_id = data.get("run_id")
+        if (
+            not isinstance(raw_run_id, str)
+            or not raw_run_id
+            or _safe_id(raw_run_id) != raw_run_id
+        ):
+            return None
+        out = {**common, "run_id": raw_run_id, "event": name}
+        if name == "run.failed":
+            out["run_error_observed"] = True
+        return name, out
+
+    if name in {"error", "done"}:
         out = {**common, "event": name}
-        if name in {"run.failed", "error"}:
+        if "run_id" in data:
+            raw_run_id = data.get("run_id")
+            if (
+                not isinstance(raw_run_id, str)
+                or not raw_run_id
+                or _safe_id(raw_run_id) != raw_run_id
+            ):
+                return None
+            out["run_id"] = raw_run_id
+        if name == "error":
             out["run_error_observed"] = True
         return name, out
 
