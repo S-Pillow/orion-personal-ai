@@ -862,6 +862,12 @@ async function decideApproval(choice) {
       );
     }
   } catch (error) {
+    if (
+      state.approvalEvent !== event ||
+      state.activeRunId !== runId
+    ) {
+      return;
+    }
     setCore("ERROR", `Approval reconciliation: ${error.message}`);
     for (const button of ui.approvalActions.querySelectorAll("button")) button.disabled = false;
   }

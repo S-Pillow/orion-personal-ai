@@ -604,7 +604,7 @@ def project_tool_message(
     elif error in STALE_ERRORS and mutation_false and recovery_false:
         state = "stale_plan"
         projection_reason = None
-    elif error in REFUSAL_ERRORS and mutation_false:
+    elif error in REFUSAL_ERRORS and mutation_false and recovery_false:
         state = "refused"
         projection_reason = None
     elif raw_success is False or error:

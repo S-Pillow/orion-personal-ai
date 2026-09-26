@@ -110,9 +110,13 @@ In particular:
   action evidence rather than transient approval state;
 - terminal completion without action evidence, failure, or cancellation cannot
   leave an accepted approval looking like execution is still pending;
-- late approval POST receipts are discarded once the pending approval or active
-  run has cleared or changed, and terminal events for a non-active run are
-  ignored before they can alter approval, evidence, or core presentation.
+- late approval POST success or rejection is discarded once the pending
+  approval or active run has cleared or changed, and terminal events for a
+  non-active run are ignored before they can alter approval, evidence, or core
+  presentation;
+- refusal is projected only with explicit no-mutation and no-recovery evidence;
+  recovery-required refusal-shaped results are failures so recovery warning
+  cannot be suppressed.
 
 ## Runtime evidence before implementation
 
