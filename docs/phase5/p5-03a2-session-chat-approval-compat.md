@@ -30,12 +30,12 @@ The patch:
 5. registers session-chat's generated `run_id` in `_run_approval_sessions`;
 6. emits a redacted native-shaped `approval.request` through the existing session-chat SSE queue;
 7. passes the run-scoped approval callback/key into `_run_agent`;
-8. creates a per-turn disconnect event, passes it into the executor and disconnect drain, and checks it both before and immediately after native approval callback registration so disconnect cannot lose a late registration race;
+8. creates a per-turn disconnect event, passes it into the executor and disconnect drain, checks it before and immediately after native approval callback registration, and aborts the worker before `agent.run_conversation` whenever that registration window observes disconnect;
 9. unregisters the run-scoped gateway notify callback both in session-chat terminal cleanup and before disconnect drain waits, so a worker already blocked on approval is actively released;
 10. removes the run approval mapping in session-chat final cleanup;
 11. cleans P5 backup/manifest sidecars after a failed Apply when the live target is still the exact accepted P4 pre-image, while retaining sidecars if the target changed and recovery evidence may be needed.
 
-The disconnect event plus explicit unregister close both sides of the lifecycle race: an already-blocked waiter is woken, and a worker that reaches callback registration after disconnect has begun either skips registration or immediately unregisters it. This prevents a late callback from becoming an orphaned blocking approval wait.
+The disconnect event plus explicit unregister close both sides of the lifecycle race: an already-blocked waiter is woken, and a worker that reaches callback registration after disconnect has begun either skips registration or immediately unregisters it. If either registration-side check observes disconnect, the worker then terminates before entering `agent.run_conversation`, preventing a later approval request from recreating an orphaned waiter after the disconnect cleanup has already run.
 
 Apply failure handling is also fail-closed: if target replacement fails while the live Hermes file remains the exact P4 pre-image, P5 sidecars created by that attempt are removed so a transient Windows file lock is retryable. If the target changed, sidecars are retained for recovery instead of being discarded.
 
@@ -70,7 +70,7 @@ Before any `Apply`:
 - run `Plan` with Hermes stopped;
 - record the planned combined SHA-256;
 - review the generated source diff without modifying installed Hermes;
-- add/run focused no-mutation approval-isolation and late-registration race tests;
+- add/run focused no-mutation approval-isolation, late-registration race, and disconnect-before-run termination tests;
 - verify failed-Apply sidecar cleanup without touching installed Hermes;
 - confirm ordinary session-chat/session history/runtime/model-lock behavior remains unchanged.
 

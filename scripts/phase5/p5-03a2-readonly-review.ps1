@@ -9,13 +9,13 @@ $ExpectedBranch = "feature/orion-phase5-p5-03a2-session-chat-approval-compat"
 $ExpectedCandidateCommit = "74dfd2039d7bbff1e982f087a78827a48331097e"
 $ExpectedHermesHead = "5fc308a70719a83cccdbba4c0e39c23f5a8239d5"
 $ExpectedHermesSha = "ecfd6dd53610c24a81f078650a0b2b3e129478a50fdb5f353313fff6e12e3888"
-$ExpectedPostSha = "e78422d1cf3788f1b9c8e06052470c23ebc4446e0a242992d35be8e5e6168288"
+$ExpectedPostSha = "eff097373cb1fe91f2f82236f8111501c35ed08cd648b4fe4b435e5a335df41f"
 
 $ExpectedCandidateBlobs = [ordered]@{
-    "docs/phase5/p5-03a2-session-chat-approval-compat.md" = "93702d462cb5c0f2aa01631c09f8ec47e99e06b6"
-    "scripts/phase5/p5-03a2-readonly-review.py" = "1717e144f687d77af453d5fb268b5f7a677d168a"
+    "docs/phase5/p5-03a2-session-chat-approval-compat.md" = "e725984dd7969945744f79c573cc27b9092689d6"
+    "scripts/phase5/p5-03a2-readonly-review.py" = "dcca9222247cbf2e416f07d304c6b68d751c438f"
     "scripts/phase5/p5-03a2-session-chat-approval-compat.ps1" = "e6609c4771a2849443f2364cc3175af2b93e13a2"
-    "scripts/phase5/p5-03a2-session-chat-approval-compat.py" = "942d32dfac2d5dbc7811f5c2d93cc1cd6465d796"
+    "scripts/phase5/p5-03a2-session-chat-approval-compat.py" = "ee6cd8ff95a0ffe000bffabf21f3e74e0f0ba422"
 }
 
 $Repo = (Resolve-Path -LiteralPath $ExpectedRepo).Path

@@ -25,7 +25,7 @@ ACCEPTED_HERMES_COMMIT = "5fc308a70719a83cccdbba4c0e39c23f5a8239d5"
 EXPECTED_P4_LIVE_SHA256 = "ecfd6dd53610c24a81f078650a0b2b3e129478a50fdb5f353313fff6e12e3888"
 EXPECTED_P4_BACKUP_SHA256 = "8d87036dd488cb811dbabb7048102d0c28fbf54e0e658c464683000118537ec3"
 EXPECTED_P4_PATCH_ID = "ORION-P4-04A-HERMES-AUDIO-GATEWAY-v1"
-EXPECTED_POST_SHA256 = "e78422d1cf3788f1b9c8e06052470c23ebc4446e0a242992d35be8e5e6168288"
+EXPECTED_POST_SHA256 = "eff097373cb1fe91f2f82236f8111501c35ed08cd648b4fe4b435e5a335df41f"
 
 SIG_OLD = '''        confirmed_runtime_lock: bool = False,
     ) -> tuple:
@@ -52,6 +52,7 @@ RUN_CALL_NEW = '''                    # ORION-P5-03A2-SESSION-CHAT-APPROVAL-COMP
                     # sole resolver used by POST /v1/runs/{run_id}/approval.
                     approval_token = None
                     approval_registered = False
+                    approval_cancelled = False
                     if approval_notify_callback is not None and approval_session_key:
                         from tools.approval import (
                             register_gateway_notify,
@@ -64,7 +65,9 @@ RUN_CALL_NEW = '''                    # ORION-P5-03A2-SESSION-CHAT-APPROVAL-COMP
                             # Disconnect may win before this worker reaches registration.
                             # Check both before and after registration so the late-register
                             # race cannot strand a callback or a blocking approval wait.
-                            if approval_cancel_event is None or not approval_cancel_event.is_set():
+                            if approval_cancel_event is not None and approval_cancel_event.is_set():
+                                approval_cancelled = True
+                            else:
                                 register_gateway_notify(
                                     approval_session_key,
                                     approval_notify_callback,
@@ -73,6 +76,7 @@ RUN_CALL_NEW = '''                    # ORION-P5-03A2-SESSION-CHAT-APPROVAL-COMP
                                 if approval_cancel_event is not None and approval_cancel_event.is_set():
                                     unregister_gateway_notify(approval_session_key)
                                     approval_registered = False
+                                    approval_cancelled = True
                         except Exception:
                             try:
                                 reset_current_session_key(approval_token)
@@ -80,6 +84,10 @@ RUN_CALL_NEW = '''                    # ORION-P5-03A2-SESSION-CHAT-APPROVAL-COMP
                                 approval_token = None
                             raise
                     try:
+                        if approval_cancelled:
+                            raise RuntimeError(
+                                "session chat disconnected before approval-safe agent execution"
+                            )
                         result = agent.run_conversation(
                             user_message=user_message,
                             conversation_history=conversation_history,
@@ -260,6 +268,8 @@ def required_markers() -> list[str]:
         "approval_cancel_event=approval_cancel_event",
         "approval_cancel_event = threading.Event()",
         "approval_cancel_event.is_set()",
+        "approval_cancelled = True",
+        "session chat disconnected before approval-safe agent execution",
         "approval_cancel_event.set()",
         "self._run_approval_sessions.pop(run_id, None)",
         "unregister_gateway_notify(run_id)",

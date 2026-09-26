@@ -23,7 +23,7 @@ import sys
 import threading
 from pathlib import Path
 
-EXPECTED_POST_SHA256 = "e78422d1cf3788f1b9c8e06052470c23ebc4446e0a242992d35be8e5e6168288"
+EXPECTED_POST_SHA256 = "eff097373cb1fe91f2f82236f8111501c35ed08cd648b4fe4b435e5a335df41f"
 RUN_A = "orion-p5-03a2-review-run-a"
 RUN_B = "orion-p5-03a2-review-run-b"
 RUN_C = "orion-p5-03a2-review-run-c"
@@ -79,11 +79,20 @@ def structural_checks(planned: str) -> None:
 
     run_segment = ast.get_source_segment(planned, run_agent) or ""
     for marker in (
-        "approval_cancel_event is None or not approval_cancel_event.is_set()",
+        "approval_cancelled = False",
         "approval_cancel_event is not None and approval_cancel_event.is_set()",
+        "approval_cancelled = True",
+        "session chat disconnected before approval-safe agent execution",
     ):
         if marker not in run_segment:
             raise RuntimeError(f"_run_agent late-registration guard missing marker: {marker}")
+
+    abort_pos = run_segment.find("if approval_cancelled:")
+    run_pos = run_segment.find("result = agent.run_conversation(")
+    if abort_pos < 0 or run_pos < 0 or abort_pos > run_pos:
+        raise RuntimeError(
+            "disconnect cancellation does not abort before agent.run_conversation"
+        )
 
     calls = call_names(run_agent)
     for required in (
@@ -149,6 +158,7 @@ def structural_checks(planned: str) -> None:
 
     print("P5_03A2_STRUCTURAL_REVIEW=PASS")
     print("P5_03A2_LATE_REGISTRATION_GUARD=PASS")
+    print("P5_03A2_DISCONNECT_ABORT_BEFORE_RUN=PASS")
 
 
 def native_approval_isolation_probe() -> None:
