@@ -80,6 +80,116 @@ class FrontendHardeningContractTests(unittest.TestCase):
                     APP_JS,
                 )
 
+    def test_action_projection_separates_approval_from_execution(self):
+        self.assertIn(
+            "Approval accepted by Hermes // awaiting execution evidence",
+            APP_JS,
+        )
+        self.assertIn(
+            "approval accepted; protected execution outcome unavailable",
+            APP_JS,
+        )
+        self.assertNotIn(
+            "Approval recorded:",
+            APP_JS,
+        )
+
+    def test_completed_action_hydration_uses_server_projection(self):
+        self.assertIn(
+            "/action-evidence",
+            APP_JS,
+        )
+        self.assertIn(
+            "presentActionProjection(latest, { hydrated: true })",
+            APP_JS,
+        )
+        self.assertIn(
+            "data?.action_evidence",
+            APP_JS,
+        )
+
+    def test_run_failure_clears_stale_approval_visual(self):
+        self.assertIn(
+            'case "run.failed":',
+            APP_JS,
+        )
+        self.assertIn(
+            'hideApproval();',
+            APP_JS,
+        )
+        self.assertIn(
+            "protected action truth preserved separately",
+            APP_JS,
+        )
+
+    def test_empty_or_failed_hydration_clears_prior_action_projection(self):
+        self.assertIn(
+            'clearActionProjection("No protected action evidence in selected session")',
+            APP_JS,
+        )
+        self.assertIn(
+            'clearActionProjection("Action evidence unavailable for selected session")',
+            APP_JS,
+        )
+        self.assertIn("clearActionProjection();", APP_JS)
+        self.assertIn(
+            "const requestedSessionId = state.sessionId;",
+            APP_JS,
+        )
+        self.assertIn(
+            "if (state.sessionId !== requestedSessionId) return;",
+            APP_JS,
+        )
+        self.assertIn(
+            "if (state.sessionId === requestedSessionId)",
+            APP_JS,
+        )
+
+    def test_approval_decision_requires_event_run_id(self):
+        self.assertIn(
+            "const runId = event?.run_id;",
+            APP_JS,
+        )
+        self.assertNotIn(
+            "event?.run_id || state.activeRunId",
+            APP_JS,
+        )
+
+    def test_health_refresh_preserves_only_durable_hydrated_projection(self):
+        self.assertIn(
+            'state.actionProjection?.durability === "completed_record"',
+            APP_JS,
+        )
+        self.assertIn(
+            "{ hydrated: true },",
+            APP_JS,
+        )
+
+
+    def test_approval_event_must_match_active_streamed_run(self):
+        self.assertIn("runId !== state.activeRunId", APP_JS)
+        self.assertIn(
+            "Approval run mismatch // decision controls withheld",
+            APP_JS,
+        )
+        self.assertNotIn(
+            "if (runId && !state.activeRunId)",
+            APP_JS,
+        )
+
+    def test_late_approval_receipt_is_discarded_after_terminal_state(self):
+        self.assertIn("state.approvalEvent !== event", APP_JS)
+        self.assertIn("state.activeRunId !== runId", APP_JS)
+
+    def test_terminal_run_events_require_active_run_match(self):
+        self.assertIn('case "run.completed": {', APP_JS)
+        self.assertIn('case "run.cancelled":', APP_JS)
+        self.assertIn('case "run.failed":', APP_JS)
+        self.assertGreaterEqual(
+            APP_JS.count("runId !== state.activeRunId"),
+            4,
+        )
+
     def test_startup_loads_persisted_session_history_once(self):
         self.assertIn(
             "async function refreshStatus(loadCurrentSession = false)",

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import http.client
+import json
 import queue
 import sys
 import threading
@@ -16,12 +17,28 @@ sys.path.insert(0, str(HUD_ROOT))
 import orion_hud_bridge as bridge
 
 
+def parse_projected_frame(frame: bytes) -> tuple[str, dict]:
+    event_name = ""
+    data_lines = []
+    for line in frame.decode("utf-8").splitlines():
+        if line.startswith("event:"):
+            event_name = line[6:].strip()
+        elif line.startswith("data:"):
+            data_lines.append(line[5:].lstrip())
+    return event_name, json.loads("\n".join(data_lines))
+
+
 class StreamDeliveryTests(unittest.TestCase):
     def check_delivery(self, framing: str) -> None:
         frames = (
             b'event: run.started\ndata: {"run_id":"probe_run"}\n\n',
             'event: assistant.delta\ndata: {"delta":"early caf\u00e9"}\n\n'.encode("utf-8"),
             b'event: run.completed\ndata: {"run_id":"probe_run"}\n\n',
+        )
+        expected_frames = (
+            b'event: run.started\ndata: {"run_id":"probe_run","event":"run.started"}\n\n',
+            'event: assistant.delta\ndata: {"event":"assistant.delta","delta":"early café"}\n\n'.encode("utf-8"),
+            b'event: run.completed\ndata: {"run_id":"probe_run","event":"run.completed","action_evidence":[]}\n\n',
         )
         first_flushed = threading.Event()
         allow_delta = threading.Event()
@@ -137,7 +154,7 @@ class StreamDeliveryTests(unittest.TestCase):
                 first = received.get(timeout=1.5)
             except queue.Empty:
                 self.fail("run.started was buffered while upstream awaited the delta gate")
-            self.assertEqual(first, frames[0])
+            self.assertEqual(first, expected_frames[0])
             self.assertFalse(finished.is_set())
 
             allow_delta.set()
@@ -146,14 +163,18 @@ class StreamDeliveryTests(unittest.TestCase):
                 delta = received.get(timeout=1.5)
             except queue.Empty:
                 self.fail("assistant.delta was buffered while upstream awaited completion")
-            self.assertEqual(delta, frames[1])
+            self.assertEqual(delta, expected_frames[1])
             self.assertFalse(finished.is_set())
 
             allow_finish.set()
-            self.assertEqual(received.get(timeout=2), frames[2])
+            completed = received.get(timeout=2)
+            self.assertEqual(completed, expected_frames[2])
             reader.join(timeout=3)
             self.assertFalse(reader.is_alive(), "Client did not observe stream EOF")
-            self.assertEqual(bytes(received_bytes), b"".join(frames))
+            self.assertEqual(
+                bytes(received_bytes),
+                b"".join(expected_frames),
+            )
             self.assertTrue(received.empty(), "Duplicate or unexpected SSE frames")
             self.assertEqual(failures, [])
         finally:
