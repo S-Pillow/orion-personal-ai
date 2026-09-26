@@ -110,6 +110,21 @@ class ActionProjectionTests(unittest.TestCase):
             "approval_run_id_unavailable",
         )
 
+        for bad_run_id in (" run_1 ", 7, {"id": "run_1"}):
+            with self.subTest(run_id=bad_run_id):
+                projected = project_approval_request({
+                    "run_id": bad_run_id,
+                    "command": "orion_vault_apply_plan",
+                    "description": "exact approval content",
+                    "choices": ["once", "deny"],
+                })
+                self.assertEqual(projected["choices"], [])
+                self.assertNotIn("run_id", projected)
+                self.assertEqual(
+                    projected["projection"]["state"],
+                    "unavailable",
+                )
+
     def test_approval_response_is_decision_not_execution(self):
         projected = project_approval_response(
             "run_1",
@@ -327,6 +342,33 @@ class ActionProjectionTests(unittest.TestCase):
             self.assertEqual(projected["state"], "unavailable")
             self.assertEqual(
                 projected["reason"], "preview_recovery_conflict"
+            )
+
+
+        for bad_target in (
+            " note.md",
+            "note.md ",
+            "note\x00.md",
+            "x" * 1025,
+        ):
+            bad_plan = dict(plan)
+            bad_plan["target_relative_path"] = bad_target
+            contradictory = {
+                "role": "tool",
+                "tool_name": "orion_vault_preview_edit",
+                "content": json.dumps({
+                    "success": True,
+                    "mode": "preview",
+                    "mutation_performed": False,
+                    "plan_token": "a" * 64,
+                    "plan": bad_plan,
+                    "diff": diff,
+                }),
+            }
+            [projected] = project_action_evidence([contradictory])
+            self.assertEqual(projected["state"], "unavailable")
+            self.assertEqual(
+                projected["reason"], "preview_evidence_incomplete"
             )
 
     def test_success_requires_complete_action_contract_and_no_error(self):

@@ -204,6 +204,14 @@ def _approval_choices(value: Any) -> list[str]:
 
 def project_approval_request(data: dict[str, Any]) -> dict[str, Any]:
     common = _common(data)
+    raw_run_id = data.get("run_id")
+    run_id_exact = (
+        isinstance(raw_run_id, str)
+        and bool(raw_run_id)
+        and _safe_id(raw_run_id) == raw_run_id
+    )
+    if not run_id_exact:
+        common.pop("run_id", None)
     if "command" in data:
         raw_command = data.get("command")
     else:
@@ -217,7 +225,7 @@ def project_approval_request(data: dict[str, Any]) -> dict[str, Any]:
     )
     description = _exact_text(data.get("description"))
     choices = _approval_choices(data.get("choices"))
-    run_id = common.get("run_id")
+    run_id = raw_run_id if run_id_exact else None
     exact_ready = bool(
         run_id and command_exact and description and choices
     )
@@ -378,6 +386,14 @@ def _present_text(value: Any, limit: int = 4096) -> bool:
     return bool(_bounded_text(value, limit))
 
 
+def _present_text_exact(value: Any, limit: int = 1024) -> bool:
+    return (
+        isinstance(value, str)
+        and bool(value)
+        and _bounded_text(value, limit) == value
+    )
+
+
 def _preview_evidence_complete(
     tool_name: str,
     result: dict[str, Any],
@@ -407,23 +423,23 @@ def _preview_evidence_complete(
 
     if expected_action == "edit_note":
         return (
-            _present_text(plan.get("target_relative_path"))
-            and _present_text(plan.get("target_canonical_path"))
+            _present_text_exact(plan.get("target_relative_path"))
+            and _present_text_exact(plan.get("target_canonical_path"))
             and _valid_hash(plan.get("original_sha256"))
             and _valid_hash(plan.get("proposed_sha256"))
         )
     if expected_action == "move_draft":
         return (
-            _present_text(plan.get("source_draft"))
-            and _present_text(plan.get("source_canonical_path"))
-            and _present_text(plan.get("target_relative_path"))
-            and _present_text(plan.get("target_canonical_path"))
+            _present_text_exact(plan.get("source_draft"))
+            and _present_text_exact(plan.get("source_canonical_path"))
+            and _present_text_exact(plan.get("target_relative_path"))
+            and _present_text_exact(plan.get("target_canonical_path"))
             and _valid_hash(plan.get("source_sha256"))
             and plan.get("target_state") == "absent"
         )
     return (
-        _present_text(plan.get("target_relative_path"))
-        and _present_text(plan.get("target_canonical_path"))
+        _present_text_exact(plan.get("target_relative_path"))
+        and _present_text_exact(plan.get("target_canonical_path"))
         and _valid_hash(plan.get("target_sha256"))
         and plan.get("target_state") == "present"
     )
