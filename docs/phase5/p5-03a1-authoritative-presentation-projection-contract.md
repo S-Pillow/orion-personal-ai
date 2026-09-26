@@ -347,7 +347,6 @@ The stale-plan presentation class must be driven by an explicit allowlist of kno
 - `delete_target_file_id_changed`
 - `delete_target_hash_changed`
 - `delete_target_changed_before_delete`
-- `source_changed_before_delete`
 - `restore_recovery_record_changed`
 - `restore_backup_changed`
 - `restore_target_identity_changed`
@@ -356,6 +355,10 @@ The stale-plan presentation class must be driven by an explicit allowlist of kno
 - `restore_source_identity_changed`
 - `restore_source_parent_changed`
 - `restore_source_no_longer_absent`.
+
+Primary `stale_plan` classification additionally requires `mutation_performed=false` and `recovery_required=false`.
+
+If an action result reports `mutation_performed=true` or `recovery_required=true`, the primary presentation outcome is a failure/recovery-required condition even when the error also reflects changed state. For example, `source_changed_before_delete` occurs after the move target has already been created and therefore must not be presented as a routine stale-plan refusal. Staleness/state change may be retained only as secondary reason context.
 
 Do not classify an unknown error as stale merely because it occurs after preview.
 
@@ -398,7 +401,7 @@ Therefore:
 | `succeeded` | vault apply structured tool result from authoritative turn transcript / persisted tool message | protected action result `success=true`, `mutation_performed=true`, required postcondition result fields; no contradictory stronger action evidence | direct | completed record | yes from persisted session result while retained | `unknown` if action result absent |
 | `failed` | action-specific structured failure result; Hermes run failure only for run-level failure | plugin result proves failure, or run failure is presented separately as run failure | direct/derived | completed record | usually yes for persisted tool result | do not convert generic run failure into action failure |
 | `refused` | action-specific plugin result / approval denial | explicit fail-closed/policy/approval/replay refusal with `mutation_performed=false` | derived from allowlisted result code or direct denial | completed record where tool result persisted | yes for refusal outcome; exact human choice may be unavailable | `unknown` |
-| `stale_plan` | action-specific plugin structured result | explicit stale/state-change error allowlist and `mutation_performed=false` unless result explicitly reports otherwise | derived from explicit code | completed record | yes | unknown errors remain `failed`/`unknown`, never guessed stale |
+| `stale_plan` | action-specific plugin structured result | explicit stale/state-change error allowlist **and** `mutation_performed=false` **and** `recovery_required=false` | derived from explicit code | completed record | yes | any mutation-performing/recovery-required result remains primary `failed`/recovery-required; unknown errors remain `failed`/`unknown`, never guessed stale |
 | `recovery_available` | current recovery inspection; live success result proves creation only at completion instant | authoritative evidence that the recovery record currently exists and is valid | direct | completed/recovery record | **not currently provable through public HUD surface after reconnect** | `unavailable` |
 | `retry_available` | no current authoritative retry contract | none | unsupported | none | no | `unobserved` |
 | `degraded` | Hermes/bridge health/readiness | observed bridge/Hermes health failure/degraded readiness | direct | transient | re-query | `unavailable` if health source unavailable |
@@ -637,7 +640,8 @@ Required examples:
 - Hermes `run.completed` but plugin tool result says `success=false`: action is not successful.
 - Generic `tool.completed` but plugin result says `success=false`: plugin result wins.
 - Plugin result says action succeeded but the run later fails while composing/transporting a response: preserve action success and separately show run/turn failure/degraded state.
-- Stale error code from the action result: show `stale_plan`, not provider/network failure.
+- Stale error code from the action result with `mutation_performed=false` and `recovery_required=false`: show `stale_plan`, not provider/network failure.
+- If the result reports `mutation_performed=true` or `recovery_required=true`, primary action outcome remains failure/recovery-required even when the error reason reflects stale or changed state.
 - Recovery ID is present in historical action output but current recovery cannot be inspected: do not show current `recovery_available`.
 - P5-02Y historical audit describes pruned recovery: historical evidence only, not current recovery availability.
 - Browser remembers a prior state but Hermes/session evidence cannot reproduce it: use `unavailable`/`unknown`.
