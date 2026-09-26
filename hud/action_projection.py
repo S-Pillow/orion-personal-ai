@@ -448,17 +448,25 @@ def _preview_evidence_complete(
 def _success_evidence_complete(result: dict[str, Any]) -> bool:
     if result.get("error") not in (None, ""):
         return False
-    action = _safe_code(result.get("action"))
+    action = result.get("action")
+    if not isinstance(action, str) or action not in {
+        "edit_note",
+        "delete_note",
+        "move_draft",
+        "restore_edit",
+        "restore_move_source",
+    }:
+        return False
     recovery_id = result.get("recovery_id")
     if not _valid_hash(recovery_id):
         return False
 
     if action in {"edit_note", "delete_note"}:
-        return _present_text(result.get("target_relative_path"))
+        return _present_text_exact(result.get("target_relative_path"))
     if action == "move_draft":
         return (
-            _present_text(result.get("source_draft"))
-            and _present_text(result.get("target_relative_path"))
+            _present_text_exact(result.get("source_draft"))
+            and _present_text_exact(result.get("target_relative_path"))
         )
     if action in {"restore_edit", "restore_move_source"}:
         return _valid_hash(result.get("origin_recovery_id"))

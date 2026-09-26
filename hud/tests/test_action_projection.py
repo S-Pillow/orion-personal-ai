@@ -471,6 +471,26 @@ class ActionProjectionTests(unittest.TestCase):
         self.assertEqual(conflict["state"], "unknown")
         self.assertEqual(conflict["reason"], "conflicting_action_result")
 
+
+        for field, bad_value in (
+            ("action", " edit_note "),
+            ("target_relative_path", " note.md"),
+            ("target_relative_path", "note.md "),
+            ("target_relative_path", "note\x00.md"),
+            ("target_relative_path", "x" * 1025),
+        ):
+            malformed = dict(base)
+            malformed[field] = bad_value
+            [projected] = project_action_evidence([{
+                "role": "tool",
+                "tool_name": "orion_vault_apply_plan",
+                "content": json.dumps(malformed),
+            }])
+            self.assertEqual(projected["state"], "unknown")
+            self.assertEqual(
+                projected["reason"], "success_evidence_incomplete"
+            )
+
     def test_preview_hydration_never_recreates_actionability(self):
         diff = "--- old\n+++ new"
         payload = {
