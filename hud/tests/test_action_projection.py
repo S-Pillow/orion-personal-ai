@@ -491,6 +491,32 @@ class ActionProjectionTests(unittest.TestCase):
                 projected["reason"], "success_evidence_incomplete"
             )
 
+    def test_recovery_required_refusal_is_failure_not_refused(self):
+        [projected] = project_action_evidence([{
+            "role": "tool",
+            "tool_name": "orion_vault_apply_plan",
+            "content": json.dumps({
+                "success": False,
+                "error": "approval_evidence_required",
+                "mutation_performed": False,
+                "recovery_required": True,
+                "recovery_id": "a" * 64,
+            }),
+        }])
+        self.assertEqual(projected["state"], "failed")
+        self.assertTrue(projected["recovery_required"])
+
+        [missing_recovery] = project_action_evidence([{
+            "role": "tool",
+            "tool_name": "orion_vault_apply_plan",
+            "content": json.dumps({
+                "success": False,
+                "error": "approval_evidence_required",
+                "mutation_performed": False,
+            }),
+        }])
+        self.assertEqual(missing_recovery["state"], "failed")
+
     def test_preview_hydration_never_recreates_actionability(self):
         diff = "--- old\n+++ new"
         payload = {

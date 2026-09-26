@@ -188,8 +188,14 @@ class FrontendHardeningContractTests(unittest.TestCase):
         )
 
     def test_late_approval_receipt_is_discarded_after_terminal_state(self):
-        self.assertIn("state.approvalEvent !== event", APP_JS)
-        self.assertIn("state.activeRunId !== runId", APP_JS)
+        self.assertGreaterEqual(
+            APP_JS.count("state.approvalEvent !== event"),
+            2,
+        )
+        self.assertGreaterEqual(
+            APP_JS.count("state.activeRunId !== runId"),
+            2,
+        )
 
     def test_terminal_run_events_require_active_run_match(self):
         self.assertIn('case "run.completed": {', APP_JS)
