@@ -432,10 +432,17 @@ function presentActionProjection(projection, { hydrated = false } = {}) {
   }
 }
 
+function clearActionProjection(detail = "") {
+  state.actionEvidence = [];
+  state.actionProjection = null;
+  if (detail && !state.streaming && !state.approvalEvent) {
+    setCore("READY", detail);
+  }
+}
+
 async function refreshActionEvidence() {
   if (!state.sessionId) {
-    state.actionEvidence = [];
-    state.actionProjection = null;
+    clearActionProjection("No protected action evidence selected");
     return;
   }
   try {
@@ -447,9 +454,11 @@ async function refreshActionEvidence() {
     const latest = items.length ? items[items.length - 1] : null;
     if (latest && !state.streaming && !state.approvalEvent) {
       presentActionProjection(latest, { hydrated: true });
+    } else if (!latest) {
+      clearActionProjection("No protected action evidence in selected session");
     }
   } catch {
-    state.actionEvidence = [];
+    clearActionProjection("Action evidence unavailable for selected session");
   }
 }
 
@@ -659,7 +668,12 @@ async function refreshStatus(loadCurrentSession = false) {
       ]);
 
       if (!state.streaming && !state.approvalEvent) {
-        if (degraded) {
+        if (state.sessionId && state.actionProjection) {
+          presentActionProjection(
+            state.actionProjection,
+            { hydrated: true },
+          );
+        } else if (degraded) {
           const readiness = detailedStatus || "unavailable";
           setCore("DEGRADED", `Hermes online // detailed readiness ${readiness}`);
         } else {
@@ -921,6 +935,7 @@ ui.composer.addEventListener("submit", sendMessage);
 ui.stopButton.addEventListener("click", stopRun);
 ui.sessionSelect.addEventListener("change", async () => {
   state.sessionId = ui.sessionSelect.value;
+  clearActionProjection();
   state.provenance = createProvenanceState();
   syncProvenancePresentation();
   if (state.sessionId) localStorage.setItem("orion.hermesSession", state.sessionId);

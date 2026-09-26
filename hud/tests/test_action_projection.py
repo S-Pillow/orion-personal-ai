@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 import unittest
@@ -65,6 +66,7 @@ class ActionProjectionTests(unittest.TestCase):
             "run_1",
             "once",
             {
+                "object": "hermes.run.approval_response",
                 "run_id": "run_1",
                 "choice": "once",
                 "resolved": 1,
@@ -77,6 +79,38 @@ class ActionProjectionTests(unittest.TestCase):
         )
         self.assertFalse(projected["execution_proven"])
         self.assertNotIn("secret", json.dumps(projected))
+
+    def test_approval_response_rejects_incomplete_or_mismatched_receipts(self):
+        invalid = (
+            {"resolved": 1},
+            {
+                "object": "hermes.run.approval_response",
+                "choice": "once",
+                "resolved": 1,
+            },
+            {
+                "object": "hermes.run.approval_response",
+                "run_id": "run_1",
+                "resolved": 1,
+            },
+            {
+                "object": "hermes.run.approval_response",
+                "run_id": "run_1",
+                "choice": "deny",
+                "resolved": 1,
+            },
+            {
+                "object": "wrong.object",
+                "run_id": "run_1",
+                "choice": "once",
+                "resolved": 1,
+            },
+        )
+        for payload in invalid:
+            with self.subTest(payload=payload):
+                self.assertIsNone(
+                    project_approval_response("run_1", "once", payload)
+                )
 
     def test_action_result_precedence_success_stale_and_partial_move(self):
         success = {
@@ -142,7 +176,87 @@ class ActionProjectionTests(unittest.TestCase):
         self.assertEqual(item["state"], "refused")
         self.assertFalse(item["mutation_performed"])
 
+    def test_preview_ready_requires_exact_plan_and_diff_evidence(self):
+        diff = "--- old\n+++ new\n-old\n+new\n"
+        plan = {
+            "action": "edit_note",
+            "target_relative_path": "note.md",
+            "target_canonical_path": "C:/vault/note.md",
+            "original_sha256": "1" * 64,
+            "proposed_sha256": "2" * 64,
+            "diff_sha256": hashlib.sha256(diff.encode("utf-8")).hexdigest(),
+        }
+        complete = {
+            "role": "tool",
+            "tool_name": "orion_vault_preview_edit",
+            "content": json.dumps({
+                "success": True,
+                "mode": "preview",
+                "mutation_performed": False,
+                "plan_token": "a" * 64,
+                "plan": plan,
+                "diff": diff,
+            }),
+        }
+        [projected] = project_action_evidence([complete])
+        self.assertEqual(projected["state"], "preview_ready")
+        self.assertEqual(projected["diff"], diff)
+
+        incomplete = {
+            "role": "tool",
+            "tool_name": "orion_vault_preview_edit",
+            "content": json.dumps({
+                "success": True,
+                "mode": "preview",
+                "mutation_performed": False,
+                "plan_token": "a" * 64,
+            }),
+        }
+        [projected] = project_action_evidence([incomplete])
+        self.assertEqual(projected["state"], "unavailable")
+        self.assertEqual(
+            projected["reason"], "preview_evidence_incomplete"
+        )
+
+    def test_success_requires_complete_action_contract_and_no_error(self):
+        base = {
+            "success": True,
+            "mutation_performed": True,
+            "recovery_required": False,
+            "recovery_id": "a" * 64,
+            "action": "edit_note",
+            "target_relative_path": "note.md",
+        }
+        [complete] = project_action_evidence([{
+            "role": "tool",
+            "tool_name": "orion_vault_apply_plan",
+            "content": json.dumps(base),
+        }])
+        self.assertEqual(complete["state"], "succeeded")
+
+        missing_target = dict(base)
+        missing_target.pop("target_relative_path")
+        [incomplete] = project_action_evidence([{
+            "role": "tool",
+            "tool_name": "orion_vault_apply_plan",
+            "content": json.dumps(missing_target),
+        }])
+        self.assertEqual(incomplete["state"], "unknown")
+        self.assertEqual(
+            incomplete["reason"], "success_evidence_incomplete"
+        )
+
+        contradictory = dict(base, error="post_write_hash_mismatch")
+        [conflict] = project_action_evidence([{
+            "role": "tool",
+            "tool_name": "orion_vault_apply_plan",
+            "content": json.dumps(contradictory),
+        }])
+        self.assertEqual(conflict["state"], "unknown")
+        self.assertEqual(conflict["reason"], "conflicting_action_result")
+
     def test_preview_hydration_never_recreates_actionability(self):
+        diff = "--- old\n+++ new"
         payload = {
             "data": [{
                 "role": "tool",
@@ -152,11 +266,16 @@ class ActionProjectionTests(unittest.TestCase):
                     "mode": "preview",
                     "mutation_performed": False,
                     "plan_token": "b" * 64,
-                    "diff": "--- old\n+++ new",
+                    "diff": diff,
                     "plan": {
                         "action": "edit_note",
                         "target_relative_path": "note.md",
                         "target_canonical_path": "C:/vault/note.md",
+                        "original_sha256": "1" * 64,
+                        "proposed_sha256": "2" * 64,
+                        "diff_sha256": hashlib.sha256(
+                            diff.encode("utf-8")
+                        ).hexdigest(),
                         "preview_nonce": "do-not-leak",
                     },
                     "proposed_bytes": "do-not-leak",

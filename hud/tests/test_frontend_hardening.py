@@ -122,6 +122,27 @@ class FrontendHardeningContractTests(unittest.TestCase):
             APP_JS,
         )
 
+    def test_empty_or_failed_hydration_clears_prior_action_projection(self):
+        self.assertIn(
+            'clearActionProjection("No protected action evidence in selected session")',
+            APP_JS,
+        )
+        self.assertIn(
+            'clearActionProjection("Action evidence unavailable for selected session")',
+            APP_JS,
+        )
+        self.assertIn("clearActionProjection();", APP_JS)
+
+    def test_health_refresh_preserves_hydrated_action_projection(self):
+        self.assertIn(
+            "if (state.sessionId && state.actionProjection)",
+            APP_JS,
+        )
+        self.assertIn(
+            "{ hydrated: true },",
+            APP_JS,
+        )
+
     def test_startup_loads_persisted_session_history_once(self):
         self.assertIn(
             "async function refreshStatus(loadCurrentSession = false)",

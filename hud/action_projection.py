@@ -7,6 +7,7 @@ unsupported protected-action lifecycle stages.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from typing import Any, Iterable
@@ -234,11 +235,18 @@ def project_approval_response(
 ) -> dict[str, Any] | None:
     if not isinstance(payload, dict):
         return None
-    observed_run = _safe_id(payload.get("run_id"))
-    if observed_run and observed_run != run_id:
+    if payload.get("object") != "hermes.run.approval_response":
         return None
-    choice = str(payload.get("choice") or requested_choice or "").strip().lower()
-    if choice not in CANONICAL_APPROVAL_CHOICES:
+    observed_run = _safe_id(payload.get("run_id"))
+    if not observed_run or observed_run != run_id:
+        return None
+    choice = str(payload.get("choice") or "").strip().lower()
+    requested = str(requested_choice or "").strip().lower()
+    if (
+        choice not in CANONICAL_APPROVAL_CHOICES
+        or requested not in CANONICAL_APPROVAL_CHOICES
+        or choice != requested
+    ):
         return None
     resolved = payload.get("resolved")
     if not isinstance(resolved, int) or isinstance(resolved, bool) or resolved <= 0:
@@ -340,6 +348,85 @@ def _copy_plan_fields(plan: Any, out: dict[str, Any]) -> None:
             out[key] = safe
 
 
+def _valid_hash(value: Any) -> bool:
+    return isinstance(value, str) and bool(_HASH_RE.fullmatch(value))
+
+
+def _present_text(value: Any, limit: int = 4096) -> bool:
+    return bool(_bounded_text(value, limit))
+
+
+def _preview_evidence_complete(
+    tool_name: str,
+    result: dict[str, Any],
+) -> bool:
+    plan_token = result.get("plan_token")
+    plan = result.get("plan")
+    if not _valid_hash(plan_token) or not isinstance(plan, dict):
+        return False
+    if "diff" not in result or not isinstance(result.get("diff"), str):
+        return False
+    diff = _exact_text(result.get("diff"))
+    if diff != result.get("diff"):
+        return False
+    expected_action = {
+        "orion_vault_preview_edit": "edit_note",
+        "orion_vault_preview_move_draft": "move_draft",
+        "orion_vault_preview_delete": "delete_note",
+    }.get(tool_name)
+    if not expected_action or plan.get("action") != expected_action:
+        return False
+    diff_sha = plan.get("diff_sha256")
+    if (
+        not _valid_hash(diff_sha)
+        or hashlib.sha256(diff.encode("utf-8")).hexdigest() != diff_sha.lower()
+    ):
+        return False
+
+    if expected_action == "edit_note":
+        return (
+            _present_text(plan.get("target_relative_path"))
+            and _present_text(plan.get("target_canonical_path"))
+            and _valid_hash(plan.get("original_sha256"))
+            and _valid_hash(plan.get("proposed_sha256"))
+        )
+    if expected_action == "move_draft":
+        return (
+            _present_text(plan.get("source_draft"))
+            and _present_text(plan.get("source_canonical_path"))
+            and _present_text(plan.get("target_relative_path"))
+            and _present_text(plan.get("target_canonical_path"))
+            and _valid_hash(plan.get("source_sha256"))
+            and plan.get("target_state") == "absent"
+        )
+    return (
+        _present_text(plan.get("target_relative_path"))
+        and _present_text(plan.get("target_canonical_path"))
+        and _valid_hash(plan.get("target_sha256"))
+        and plan.get("target_state") == "present"
+    )
+
+
+def _success_evidence_complete(result: dict[str, Any]) -> bool:
+    if result.get("error") not in (None, ""):
+        return False
+    action = _safe_code(result.get("action"))
+    recovery_id = result.get("recovery_id")
+    if not _valid_hash(recovery_id):
+        return False
+
+    if action in {"edit_note", "delete_note"}:
+        return _present_text(result.get("target_relative_path"))
+    if action == "move_draft":
+        return (
+            _present_text(result.get("source_draft"))
+            and _present_text(result.get("target_relative_path"))
+        )
+    if action in {"restore_edit", "restore_move_source"}:
+        return _valid_hash(result.get("origin_recovery_id"))
+    return False
+
+
 def project_tool_message(
     message: dict[str, Any],
     *,
@@ -366,11 +453,13 @@ def project_tool_message(
 
     common = _common(message)
     if tool_name in PREVIEW_TOOLS:
-        is_preview = (
+        preview_claim = (
             result.get("success") is True
             and result.get("mode") == "preview"
             and result.get("mutation_performed") is False
-            and bool(_bounded_text(result.get("plan_token"), 256))
+        )
+        is_preview = preview_claim and _preview_evidence_complete(
+            tool_name, result
         )
         if is_preview:
             state = "unavailable" if hydrated else "preview_ready"
@@ -384,13 +473,23 @@ def project_tool_message(
                 current_actionability="unavailable" if hydrated else "turn_scoped",
                 hydrated=hydrated,
             )
-        else:
+        elif result.get("success") is False or _safe_code(result.get("error")):
             out = _projection(
                 "failed",
                 "vault_preview_result",
                 durability="completed_record",
                 common=common,
                 tool_name=tool_name,
+                hydrated=hydrated,
+            )
+        else:
+            out = _projection(
+                "unavailable",
+                "vault_preview_result",
+                durability="completed_record" if hydrated else "turn_scoped",
+                common=common,
+                tool_name=tool_name,
+                reason="preview_evidence_incomplete",
                 hydrated=hydrated,
             )
         plan_token = _bounded_text(result.get("plan_token"), 256)
@@ -413,16 +512,28 @@ def project_tool_message(
     recovery_required = result.get("recovery_required") is True
     error = _safe_code(result.get("error"))
 
-    if success and mutation and not recovery_required:
+    success_claim = success and mutation and not recovery_required
+    if success_claim and error:
+        state = "unknown"
+        projection_reason = "conflicting_action_result"
+    elif success_claim and _success_evidence_complete(result):
         state = "succeeded"
+        projection_reason = None
+    elif success_claim:
+        state = "unknown"
+        projection_reason = "success_evidence_incomplete"
     elif error in STALE_ERRORS and not mutation and not recovery_required:
         state = "stale_plan"
+        projection_reason = None
     elif error in REFUSAL_ERRORS and not mutation:
         state = "refused"
+        projection_reason = None
     elif result.get("success") is False or error:
         state = "failed"
+        projection_reason = None
     else:
         state = "unknown"
+        projection_reason = "action_result_insufficient"
 
     out = _projection(
         state,
@@ -434,6 +545,7 @@ def project_tool_message(
         mutation_performed=mutation,
         recovery_required=recovery_required,
         error=error or None,
+        reason=projection_reason,
         hydrated=hydrated,
     )
     _copy_allowed_fields(result, out)

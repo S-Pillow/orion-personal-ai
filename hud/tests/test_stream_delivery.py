@@ -35,6 +35,11 @@ class StreamDeliveryTests(unittest.TestCase):
             'event: assistant.delta\ndata: {"delta":"early caf\u00e9"}\n\n'.encode("utf-8"),
             b'event: run.completed\ndata: {"run_id":"probe_run"}\n\n',
         )
+        expected_frames = (
+            b'event: run.started\ndata: {"run_id":"probe_run","event":"run.started"}\n\n',
+            'event: assistant.delta\ndata: {"event":"assistant.delta","delta":"early café"}\n\n'.encode("utf-8"),
+            b'event: run.completed\ndata: {"run_id":"probe_run","event":"run.completed","action_evidence":[]}\n\n',
+        )
         first_flushed = threading.Event()
         allow_delta = threading.Event()
         delta_flushed = threading.Event()
@@ -149,10 +154,7 @@ class StreamDeliveryTests(unittest.TestCase):
                 first = received.get(timeout=1.5)
             except queue.Empty:
                 self.fail("run.started was buffered while upstream awaited the delta gate")
-            first_name, first_data = parse_projected_frame(first)
-            self.assertEqual(first_name, "run.started")
-            self.assertEqual(first_data["run_id"], "probe_run")
-            self.assertEqual(first_data["event"], "run.started")
+            self.assertEqual(first, expected_frames[0])
             self.assertFalse(finished.is_set())
 
             allow_delta.set()
@@ -161,24 +163,18 @@ class StreamDeliveryTests(unittest.TestCase):
                 delta = received.get(timeout=1.5)
             except queue.Empty:
                 self.fail("assistant.delta was buffered while upstream awaited completion")
-            delta_name, delta_data = parse_projected_frame(delta)
-            self.assertEqual(delta_name, "assistant.delta")
-            self.assertEqual(delta_data["delta"], "early café")
-            self.assertEqual(delta_data["event"], "assistant.delta")
+            self.assertEqual(delta, expected_frames[1])
             self.assertFalse(finished.is_set())
 
             allow_finish.set()
             completed = received.get(timeout=2)
-            completed_name, completed_data = parse_projected_frame(completed)
-            self.assertEqual(completed_name, "run.completed")
-            self.assertEqual(completed_data["run_id"], "probe_run")
-            self.assertEqual(completed_data["event"], "run.completed")
-            self.assertEqual(completed_data["action_evidence"], [])
+            self.assertEqual(completed, expected_frames[2])
             reader.join(timeout=3)
             self.assertFalse(reader.is_alive(), "Client did not observe stream EOF")
-            self.assertIn(b"event: run.started", bytes(received_bytes))
-            self.assertIn(b"event: assistant.delta", bytes(received_bytes))
-            self.assertIn(b"event: run.completed", bytes(received_bytes))
+            self.assertEqual(
+                bytes(received_bytes),
+                b"".join(expected_frames),
+            )
             self.assertTrue(received.empty(), "Duplicate or unexpected SSE frames")
             self.assertEqual(failures, [])
         finally:
