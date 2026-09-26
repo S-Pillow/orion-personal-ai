@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+
+export HOME=/opt/data/profiles/companion
+export HERMES_HOME=/opt/data/profiles/companion
+export IAI_MCP_STORE=/opt/data/profiles/companion/.iai-mcp
+export IAI_MCP_HERMES_HOME=/opt/data/profiles/companion
+export IAI_DAEMON_SOCKET_PATH=/opt/data/profiles/companion/.iai-mcp/.daemon.sock
+export IAI_MCP_SESSION_RECALL_CLI=/opt/iai/venv/bin/iai-mcp
+export HF_HOME=/opt/iai/hf
+export IAI_MCP_EMBED_OFFLINE=1
+export PYTHONDONTWRITEBYTECODE=1
+export IAI_MCP_EXTERNAL_IDLE_PATH=/orion-host-idle/host-idle.json
+
+exec /command/s6-setuidgid hermes /opt/iai/venv/bin/python -m iai_mcp.daemon
