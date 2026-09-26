@@ -6,10 +6,17 @@ $ErrorActionPreference = "Stop"
 
 $ExpectedRepo = "D:\Orion\orion-personal-ai"
 $ExpectedBranch = "feature/orion-phase5-p5-03a2-session-chat-approval-compat"
-$ExpectedHead = "ca70d18f3f259fab4eb00519c3a06836a6244cf1"
+$ExpectedCandidateCommit = "74dfd2039d7bbff1e982f087a78827a48331097e"
 $ExpectedHermesHead = "5fc308a70719a83cccdbba4c0e39c23f5a8239d5"
 $ExpectedHermesSha = "ecfd6dd53610c24a81f078650a0b2b3e129478a50fdb5f353313fff6e12e3888"
 $ExpectedPostSha = "d8765b1842f54c340b1d5686355e2919d81313e20fdcbe7f6338321bf515e0aa"
+
+$ExpectedCandidateBlobs = [ordered]@{
+    "docs/phase5/p5-03a2-session-chat-approval-compat.md" = "81bd519612cae2e6f6496b84775f4c4fada3d874"
+    "scripts/phase5/p5-03a2-readonly-review.py" = "07cc2d1edad4a43f3baa12731f92568160329b13"
+    "scripts/phase5/p5-03a2-session-chat-approval-compat.ps1" = "e6609c4771a2849443f2364cc3175af2b93e13a2"
+    "scripts/phase5/p5-03a2-session-chat-approval-compat.py" = "0f559519858751f24e83bb9cbceef463fb61576c"
+}
 
 $Repo = (Resolve-Path -LiteralPath $ExpectedRepo).Path
 if ((Resolve-Path -LiteralPath (Get-Location).Path).Path -ne $Repo) {
@@ -18,21 +25,27 @@ if ((Resolve-Path -LiteralPath (Get-Location).Path).Path -ne $Repo) {
 
 $Branch = (git branch --show-current).Trim()
 $Head = (git rev-parse HEAD).Trim()
-if ($Branch -ne $ExpectedBranch) { throw "STOP: wrong branch: $Branch" }
-if ($Head -ne $ExpectedHead) { throw "STOP: wrong branch base: $Head" }
+if ($Branch -notin @($ExpectedBranch, "main")) {
+    throw "STOP: review gate must run from the P5-03A2 feature branch or main; observed: $Branch"
+}
 
-$ExpectedUntracked = @(
-    "?? docs/phase5/p5-03a2-session-chat-approval-compat.md",
-    "?? scripts/phase5/p5-03a2-readonly-review.ps1",
-    "?? scripts/phase5/p5-03a2-readonly-review.py",
-    "?? scripts/phase5/p5-03a2-session-chat-approval-compat.ps1",
-    "?? scripts/phase5/p5-03a2-session-chat-approval-compat.py"
-) | Sort-Object
-$Actual = @(git status --porcelain=v1) | Sort-Object
-if ($Actual.Count -ne $ExpectedUntracked.Count -or (Compare-Object $ExpectedUntracked $Actual)) {
+git merge-base --is-ancestor $ExpectedCandidateCommit HEAD 2>$null
+if ($LASTEXITCODE -ne 0) {
+    throw "STOP: accepted P5-03A2 candidate commit is not an ancestor of HEAD."
+}
+
+$Actual = @(git status --porcelain=v1)
+if ($Actual.Count -ne 0) {
     Write-Output "Observed Orion status:"
     $Actual
-    throw "STOP: Orion worktree differs from the exact candidate-review file set."
+    throw "STOP: Orion worktree must be clean for committed-candidate review."
+}
+
+foreach ($Entry in $ExpectedCandidateBlobs.GetEnumerator()) {
+    $ObservedBlob = (git rev-parse "HEAD:$($Entry.Key)" 2>$null).Trim()
+    if ($LASTEXITCODE -ne 0 -or $ObservedBlob -ne $Entry.Value) {
+        throw "STOP: candidate file identity drift: $($Entry.Key) expected $($Entry.Value), observed $ObservedBlob"
+    }
 }
 
 $HermesRoot = Join-Path $env:LOCALAPPDATA "hermes\hermes-agent"
@@ -76,6 +89,8 @@ if (-not [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable("ORI
 
 Write-Output "P5_03A2_REVIEW_BRANCH=$Branch"
 Write-Output "P5_03A2_REVIEW_HEAD=$Head"
+Write-Output "P5_03A2_REVIEW_CANDIDATE_COMMIT=$ExpectedCandidateCommit"
+Write-Output "P5_03A2_REVIEW_CANDIDATE_FILES=PINNED"
 Write-Output "P5_03A2_REVIEW_HERMES_HEAD=$HermesHead"
 Write-Output "P5_03A2_REVIEW_HERMES_PRE_SHA256=$BeforeSha"
 
