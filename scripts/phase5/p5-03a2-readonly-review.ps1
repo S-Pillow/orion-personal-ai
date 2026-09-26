@@ -64,7 +64,7 @@ $ExpectedDirty = @(
     "?? gateway/platforms/api_server.py.orion-p4-04a.bak",
     "?? gateway/platforms/api_server.py.orion-p4-04a.json"
 ) | Sort-Object
-$BeforeDirty = @(git -C $HermesRoot status --porcelain=v1) | Sort-Object
+$BeforeDirty = @((git -C $HermesRoot status --porcelain=v1) | Sort-Object)
 if ($BeforeDirty.Count -ne $ExpectedDirty.Count -or (Compare-Object $ExpectedDirty $BeforeDirty)) {
     throw "STOP: Hermes worktree is not the exact accepted P4-04A state."
 }
@@ -102,8 +102,8 @@ if ($ReviewExit -ne 0) {
 }
 
 $AfterSha = (Get-FileHash -LiteralPath $Target -Algorithm SHA256).Hash.ToLowerInvariant()
-$AfterDirty = @(git -C $HermesRoot status --porcelain=v1) | Sort-Object
-$AfterOrion = @(git status --porcelain=v1) | Sort-Object
+$AfterDirty = @((git -C $HermesRoot status --porcelain=v1) | Sort-Object)
+$AfterOrion = @((git status --porcelain=v1) | Sort-Object)
 
 if ($AfterSha -ne $BeforeSha) {
     throw "STOP: installed Hermes source changed during read-only review."
