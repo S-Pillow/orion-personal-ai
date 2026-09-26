@@ -2,6 +2,7 @@
 
 import { installCorePresence } from "./core-state.js";
 import { installWorkspaceController } from "./workspace-state.js";
+import { installSummonController } from "./summon-state.js";
 import {
   ACCEPTED_BASELINE,
   classifyAuthority,
@@ -53,6 +54,13 @@ const ui = {
   workspaceCapStream: $("workspaceCapStream"),
   workspaceSkills: $("workspaceSkills"),
   workspaceJobs: $("workspaceJobs"),
+  summonPanel: $("summonPanel"),
+  summonTitle: $("summonTitle"),
+  summonKind: $("summonKind"),
+  summonSource: $("summonSource"),
+  summonBody: $("summonBody"),
+  summonLink: $("summonLink"),
+  summonDismiss: $("summonDismiss"),
   transcript: $("transcript"),
   composer: $("composer"),
   messageInput: $("messageInput"),
@@ -96,6 +104,22 @@ const workspaceController = installWorkspaceController(
     contextNode: ui.workspaceContext,
   },
 );
+
+const summonController = installSummonController({
+  panel: ui.summonPanel,
+  titleNode: ui.summonTitle,
+  kindNode: ui.summonKind,
+  sourceNode: ui.summonSource,
+  bodyNode: ui.summonBody,
+  linkNode: ui.summonLink,
+  dismissButton: ui.summonDismiss,
+  workspaceController,
+  coreStage: ui.coreStage,
+});
+
+// P3-05B installs presentation state only. No agent/browser transport is
+// granted here; a later bounded display-tool slice will call show().
+void summonController;
 
 function syncProvenancePresentation() {
   const provenance = state.provenance || createProvenanceState();

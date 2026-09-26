@@ -312,6 +312,7 @@ textarea:focus { border-color: var(--line-strong); box-shadow: 0 0 0 1px rgba(87
 }
 
 .workspace-shell {
+  position: relative;
   min-width: 0;
   min-height: 0;
   display: grid;
@@ -335,6 +336,103 @@ textarea:focus { border-color: var(--line-strong); box-shadow: 0 0 0 1px rgba(87
   outline-offset: -1px;
   box-shadow:
     inset 0 0 32px rgba(255, 211, 122, 0.035);
+}
+
+.workspace-shell[data-workspace-focus="summon"] {
+  outline: 1px solid rgba(141, 136, 255, 0.38);
+  outline-offset: -1px;
+  box-shadow:
+    inset 0 0 36px rgba(141, 136, 255, 0.045);
+}
+
+.summon-panel {
+  position: absolute;
+  z-index: 6;
+  top: 31%;
+  right: 16px;
+  bottom: 16px;
+  left: 16px;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  border: 1px solid rgba(141, 136, 255, 0.46);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(8, 28, 51, 0.97),
+      rgba(2, 13, 25, 0.98)
+    );
+  box-shadow:
+    0 20px 70px rgba(0, 0, 0, 0.42),
+    inset 0 0 42px rgba(141, 136, 255, 0.035);
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+.workspace-shell[data-workspace="system"] .summon-panel,
+.workspace-shell[data-workspace="memory"] .summon-panel {
+  top: 21%;
+}
+
+.summon-panel[hidden] {
+  display: none !important;
+}
+
+.summon-panel:focus {
+  outline: 1px solid var(--violet);
+  outline-offset: 2px;
+}
+
+.summon-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(141, 136, 255, 0.2);
+}
+
+.summon-kind {
+  color: var(--violet);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+
+.summon-header h1 {
+  margin: 5px 0 4px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.summon-source-line {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.summon-dismiss {
+  flex: 0 0 auto;
+}
+
+.summon-body {
+  margin-top: 14px;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.summon-link {
+  display: block;
+  margin-top: 16px;
+  overflow-wrap: anywhere;
+  text-align: left;
 }
 
 .workspace-pane {
@@ -553,6 +651,13 @@ textarea:focus { border-color: var(--line-strong); box-shadow: 0 0 0 1px rgba(87
 .core-stage.saccade-right { --saccade-x: 4px; }
 .core-stage.saccade-up { --saccade-y: -2px; }
 .core-stage.saccade-down { --saccade-y: 2px; }
+
+.core-stage[data-presentation-focus="summon"] {
+  --head-shift: 7px;
+  --head-yaw: 5deg;
+  --gaze-x: 10px;
+  --gaze-y: -1px;
+}
 
 .core-halo {
   position: absolute;
