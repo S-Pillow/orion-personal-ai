@@ -226,6 +226,25 @@ class FrontendHardeningContractTests(unittest.TestCase):
             APP_JS,
         )
 
+
+    def test_approval_event_must_match_active_streamed_run(self):
+        self.assertIn("runId !== state.activeRunId", APP_JS)
+        self.assertIn(
+            "Approval run mismatch // decision controls withheld",
+            APP_JS,
+        )
+        self.assertNotIn(
+            "if (runId && !state.activeRunId)",
+            APP_JS,
+        )
+
+    def test_health_poll_replays_only_completed_record_evidence(self):
+        self.assertIn(
+            'state.actionProjection?.durability === "completed_record"',
+            APP_JS,
+        )
+        self.assertIn("state.actionProjection = null;", APP_JS)
+
     def test_startup_loads_persisted_session_history_once(self):
         self.assertIn(
             "async function refreshStatus(loadCurrentSession = false)",
