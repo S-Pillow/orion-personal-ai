@@ -204,11 +204,22 @@ def _approval_choices(value: Any) -> list[str]:
 
 def project_approval_request(data: dict[str, Any]) -> dict[str, Any]:
     common = _common(data)
-    command = _bounded_text(data.get("command") or data.get("tool_name"), 240)
+    raw_command = data.get("command")
+    if not isinstance(raw_command, str):
+        raw_command = data.get("tool_name")
+    command = _exact_text(raw_command, 240)
+    command_exact = bool(
+        isinstance(raw_command, str)
+        and command
+        and command == raw_command
+        and raw_command == raw_command.strip()
+    )
     description = _exact_text(data.get("description"))
     choices = _approval_choices(data.get("choices"))
     run_id = common.get("run_id")
-    exact_ready = bool(run_id and command and description and choices)
+    exact_ready = bool(
+        run_id and command_exact and description and choices
+    )
     unavailable_reason = (
         "approval_run_id_unavailable"
         if not run_id
@@ -459,12 +470,13 @@ def project_tool_message(
 
     common = _common(message)
     if tool_name in PREVIEW_TOOLS:
+        preview_error_present = "error" in result
         preview_error = _safe_code(result.get("error"))
         preview_claim = (
             result.get("success") is True
             and result.get("mode") == "preview"
             and result.get("mutation_performed") is False
-            and not preview_error
+            and not preview_error_present
         )
         is_preview = preview_claim and _preview_evidence_complete(
             tool_name, result
@@ -481,7 +493,7 @@ def project_tool_message(
                 current_actionability="unavailable" if hydrated else "turn_scoped",
                 hydrated=hydrated,
             )
-        elif result.get("success") is False or preview_error:
+        elif result.get("success") is False or preview_error_present:
             out = _projection(
                 "failed",
                 "vault_preview_result",

@@ -52,6 +52,29 @@ class ActionProjectionTests(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, rendered)
 
+    def test_approval_command_must_survive_exact_validation(self):
+        base = {
+            "run_id": "run_1",
+            "description": "exact approval content",
+            "choices": ["once", "deny"],
+        }
+        for command in (
+            " leading",
+            "trailing ",
+            "nul\x00command",
+            "x" * 241,
+        ):
+            with self.subTest(command=repr(command)):
+                projected = project_approval_request({
+                    **base,
+                    "command": command,
+                })
+                self.assertEqual(
+                    projected["projection"]["state"],
+                    "unavailable",
+                )
+                self.assertEqual(projected["choices"], [])
+
     def test_incomplete_approval_content_withholds_choices(self):
         projected = project_approval_request({
             "run_id": "run_1",
@@ -232,22 +255,28 @@ class ActionProjectionTests(unittest.TestCase):
             projected["reason"], "preview_evidence_incomplete"
         )
 
-        contradictory = {
-            "role": "tool",
-            "tool_name": "orion_vault_preview_edit",
-            "content": json.dumps({
-                "success": True,
-                "mode": "preview",
-                "mutation_performed": False,
-                "plan_token": "a" * 64,
-                "plan": plan,
-                "diff": diff,
-                "error": "preview_contract_error",
-            }),
-        }
-        [projected] = project_action_evidence([contradictory])
-        self.assertEqual(projected["state"], "failed")
-        self.assertEqual(projected["error"], "preview_contract_error")
+        for raw_error in (
+            "preview_contract_error",
+            "preview contract error",
+            {"code": "preview_contract_error"},
+            7,
+        ):
+            contradictory = {
+                "role": "tool",
+                "tool_name": "orion_vault_preview_edit",
+                "content": json.dumps({
+                    "success": True,
+                    "mode": "preview",
+                    "mutation_performed": False,
+                    "plan_token": "a" * 64,
+                    "plan": plan,
+                    "diff": diff,
+                    "error": raw_error,
+                }),
+            }
+            [projected] = project_action_evidence([contradictory])
+            self.assertEqual(projected["state"], "failed")
+            self.assertNotEqual(projected["state"], "preview_ready")
 
     def test_success_requires_complete_action_contract_and_no_error(self):
         base = {

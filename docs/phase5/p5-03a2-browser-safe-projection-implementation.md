@@ -48,7 +48,9 @@ The bridge now:
 - parses session SSE server-side;
 - allowlists approval content and removes rule/pattern keys and raw tool args;
 - exposes decision controls only when the approval event carries its own valid
-  authoritative run ID; the browser never falls back to another active run;
+  authoritative run ID and its command survives exact byte-preserving
+  validation without truncation, NUL removal, or whitespace normalization;
+  the browser never falls back to another active run;
 - strips raw `run.completed.messages` from the browser stream and replaces
   them with bounded action evidence;
 - sanitizes the ordinary transcript endpoint to user/assistant display rows;
@@ -74,8 +76,9 @@ shape, explicit `mutation_performed=true`, explicit
 `recovery_required=false`, a valid recovery identifier, no contradictory
 error, and the applicable target/source/origin identifiers. Incomplete or
 contradictory success-shaped evidence is projected as `unknown`, never as
-success. Error-bearing preview evidence is never projected as
-`preview_ready`.
+success. Any preview payload containing an `error` member is never projected
+as `preview_ready`, even when that member cannot be normalized into a safe
+error code.
 
 ## Browser truth behavior
 
