@@ -43,13 +43,24 @@ class ApprovalFixtureHandler(FakeHermesHandler):
         if self.path == "/health/detailed":
             self._send(200, {"status": "ok"})
         elif self.path == "/api/sessions/session_1/messages":
-            self._send(200, {"messages": [{
-                "role": "assistant",
-                "content": "ISOLATED DISPLAY FIXTURE. Select the orion-hud-main session, then send 'probe' to show a simulated approval. "
-                           "Check the target, line 100, END-OF-DIFF-100 and literal <b> tags. "
-                           "Choose DENY first, then send 'probe' again and choose ALLOW ONCE. "
-                           "All choices are simulated; no files change.",
-            }]})
+            self._send(200, {"messages": [
+                {
+                    "role": "user",
+                    "content": "Review the latest progress on the Orion interface and tell me what is working, what still needs attention, and what you would prioritize next.",
+                },
+                {
+                    "role": "assistant",
+                    "content": "The strongest progress is in the authority model and the new companion-first layout. Approval, evidence, memory authority, and session state remain explicit while the interface is moving toward the cinematic Orion workspace.\n\nWhat still needs attention is visual balance: the hero scene, conversation depth, and operational rails need to feel like one coherent place rather than separate dashboard regions.\n\nI would prioritize composition and readability first, then finish state motion and reconnect qualification.",
+                },
+                {
+                    "role": "user",
+                    "content": "Keep the interface calm and readable. I want it to feel like a thinking partner, not a telemetry console.",
+                },
+                {
+                    "role": "assistant",
+                    "content": "Agreed. The visual direction should use atmosphere for identity, while conversation and approvals stay readable and operationally truthful. Decorative depth should never compete with the work surface.",
+                },
+            ]})
         else:
             super().do_GET()
 
