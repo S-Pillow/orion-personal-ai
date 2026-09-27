@@ -5,7 +5,8 @@ Owner: Steven
 Repository: `S-Pillow/orion-personal-ai`
 Active PR: #51 — `UI visual convergence: companion presence and calm workspace`
 Active branch: `feature/orion-ui-visual-convergence-pass`
-Current exact head: `b05adb4d88e07af7b1972c4d98df36514220d3b1`
+Implementation head at start of handoff: `b05adb4d88e07af7b1972c4d98df36514220d3b1`
+Live PR head: **query PR #51 before any work; handoff/document commits advance the branch**
 PR base: `ee03c567280026069c403bcfbdce2da5da2e3c28`
 PR state: **OPEN / DRAFT / NOT ACCEPTED / NOT MERGE-READY**
 Observed GitHub mergeability at handoff: **false**
@@ -356,9 +357,11 @@ PR:
 
 #51
 
-Exact head:
+Implementation head before handoff documentation commits:
 
 `b05adb4d88e07af7b1972c4d98df36514220d3b1`
+
+The branch advances when this handoff file/PR metadata are updated. Always query PR #51 for the live head before making writes.
 
 Base:
 
