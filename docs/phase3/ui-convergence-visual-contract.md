@@ -1,9 +1,9 @@
 # Orion UI Convergence Visual Contract
 
-Status: **IMPLEMENTATION BASELINE**
+Status: **FOUNDATION ACCEPTED / FINAL VISUAL PASS PENDING**
 
 Date: 2026-09-27  
-Branch: `feature/orion-ui-convergence-current-main`
+Foundation merge: `d32137066a6ef20b57e1045fb8a827779cc47440`
 
 ## 1. Product intent
 
@@ -160,3 +160,20 @@ Acceptance requires a material hierarchy shift:
 - diagnostics are secondary;
 - approvals remain primary when active;
 - the experience feels like one coherent personal system rather than a collection of diagnostic panels.
+
+
+## 9. Foundation status
+
+The structural foundation implementing this contract merged through PR #49.
+
+That foundation is not the final visual destination. The remaining visual pass must materially improve:
+
+- Orion Core presence and identity;
+- center-workspace composition;
+- typography and reading comfort;
+- spacing and rhythm;
+- relationship between conversation and contextual surfaces;
+- reduction of residual diagnostic-dashboard feel;
+- final companion-first polish across desktop and narrow layouts.
+
+Final visual acceptance should occur after that broader design pass rather than treating the structural foundation as the finished UI.

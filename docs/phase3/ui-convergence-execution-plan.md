@@ -1,9 +1,9 @@
 # UI Convergence Execution Plan
 
-Status: **PLANNING / READY FOR IMPLEMENTATION AFTER HARDWARE STABILIZATION**
+Status: **STRUCTURAL FOUNDATION MERGED / FINAL VISUAL DESIGN PASS NEXT**
 
 Date: 2026-09-27  
-Base main: `e55517bfc33b93a0983026a3a494d6df86c9532f`
+Foundation merge: `d32137066a6ef20b57e1045fb8a827779cc47440`
 
 ## 1. Objective
 
@@ -33,7 +33,7 @@ The current accepted HUD on main contains:
 
 It does **not** yet implement the broader visual convergence expected for the final companion-facing HUD.
 
-Open draft PR #26 (`P3-05B: bounded summonable presentation shell`) must **not** be merged as-is.
+Former draft PR #26 (`P3-05B: bounded summonable presentation shell`) is **closed as superseded** and must not be merged.
 
 Observed branch relationship:
 
@@ -42,7 +42,7 @@ Observed branch relationship:
 - current main is 361 commits ahead;
 - old P3-05B branch remains 10 commits ahead of that old base.
 
-PR #26 is therefore donor/reference material only. Reuse must be selective and reimplemented/reconciled on current main.
+PR #26 was donor/reference material only. Its useful bounded summon behavior was selectively reconciled on current main through PR #49.
 
 ## 3. Controlling requirements
 
@@ -139,7 +139,7 @@ Produce a short source-controlled visual contract before code changes:
 Acceptance:
 - owner confirms the direction before broad CSS restructuring.
 
-### UI-02 — Structural shell convergence
+### UI-02 — Structural shell convergence — COMPLETE
 
 Refactor layout only:
 
@@ -155,7 +155,7 @@ Acceptance:
 - System/Memory remain reachable;
 - no approval/action semantics regress.
 
-### UI-03 — Approval/action integration
+### UI-03 — Approval/action integration — COMPLETE FOR FOUNDATION
 
 Recompose P5-03B surfaces inside the converged shell.
 
@@ -166,7 +166,7 @@ Acceptance:
 - terminal success/failure/stale/refused semantics unchanged;
 - responsive checks pass.
 
-### UI-04 — Summon/display shell reconciliation
+### UI-04 — Summon/display shell reconciliation — COMPLETE FOR FOUNDATION
 
 Reimplement the useful P3-05B behavior on current main.
 
@@ -178,7 +178,7 @@ Acceptance:
 - unsafe schemes rejected;
 - no hidden transport or persistence authority.
 
-### UI-05 — Core presence and motion polish
+### UI-05 — Core presence and motion polish — NEXT
 
 Add restrained visual-state transitions and gaze/focus behavior.
 
@@ -188,7 +188,7 @@ Acceptance:
 - no fabricated perception/activity;
 - no dependency on camera/vision.
 
-### UI-06 — Visual convergence acceptance
+### UI-06 — Final visual convergence acceptance — AFTER UI-05
 
 Run:
 
@@ -258,12 +258,39 @@ Create a fresh implementation branch from the then-current accepted main.
 
 Recommended branch:
 
-`feature/orion-ui-convergence-current-main`
+`feature/orion-ui-visual-convergence-pass`
 
-PR #26 should be closed or explicitly superseded after useful donor behavior is reimplemented and verified.
+PR #26 is closed as superseded. PR #49 is merged as the structural convergence foundation.
 
 ## 10. Completion definition
 
 UI convergence is complete when the HUD visually matches the owner-approved Orion companion direction **and** all previously accepted functional/truth boundaries remain green.
 
 Visual quality is not accepted merely because the existing panels were restyled; the hierarchy must materially shift from diagnostic observatory toward companion-first interaction.
+
+
+## 11. Foundation acceptance record
+
+Structural foundation merged by PR #49 at:
+
+`d32137066a6ef20b57e1045fb8a827779cc47440`
+
+Accepted candidate:
+
+`b1926d6ae996add2243b603b3e8fc7f21950755a`
+
+Foundation acceptance included:
+
+- source acceptance;
+- recovery qualification for the Windows rejected-POST socket flake;
+- bounded visual acceptance;
+- companion-first hierarchy;
+- summon composition and literal rendering;
+- approval-over-summon priority;
+- narrow responsive approval behavior;
+- Hermes and rollback evidence unchanged;
+- clean Orion worktree.
+
+This merge is **not** the final Orion visual design. It establishes the safe structural shell and interaction contracts required for the subsequent visual-design convergence pass.
+
+The next implementation unit is the actual visual-design pass: Core presence/polish, typography, spacing, composition, workspace treatment, and final companion identity. P5-03C reconnect/hydration follows after that visual pass is accepted.
