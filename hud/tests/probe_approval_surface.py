@@ -110,7 +110,13 @@ class ApprovalFixtureHandler(FakeHermesHandler):
                     self._send(400, {"error": "invalid_choice"})
                     return
                 pending["choice"] = choice
-                self._send(200, {"status": "simulated", "mutation_performed": False})
+                self._send(200, {
+                    "object": "hermes.run.approval_response",
+                    "run_id": pending["run_id"],
+                    "choice": choice,
+                    "resolved": 1,
+                    "mutation_performed": False,
+                })
                 pending["done"].set()
             return
         super().do_POST()

@@ -66,7 +66,12 @@ class ApprovalSurfaceTests(unittest.TestCase):
                                      json.dumps({"choice": choice}), headers)
                     response = decision.getresponse()
                     self.assertEqual(response.status, 200)
-                    self.assertFalse(json.loads(response.read())["mutation_performed"])
+                    projected = json.loads(response.read())
+                    self.assertEqual(
+                        projected["projection"]["state"],
+                        "approval_denied" if choice == "deny" else "approval_accepted",
+                    )
+                    self.assertFalse(projected["execution_proven"])
                 finally:
                     decision.close()
                 self.assertIn(b"event: run.completed", stream.read())
