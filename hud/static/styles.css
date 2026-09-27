@@ -1473,27 +1473,12 @@ body::before {
 
 .peripheral-panel,
 .secondary-panel {
-  opacity: 0.66;
   border-color: rgba(103, 220, 219, 0.075);
   background: rgba(7, 17, 20, 0.32);
-  transition:
-    opacity 140ms ease,
-    border-color 140ms ease,
-    background 140ms ease;
-}
-
-.peripheral-panel:hover,
-.peripheral-panel:focus-within,
-.secondary-panel:hover,
-.secondary-panel:focus-within {
-  opacity: 0.94;
-  border-color: rgba(103, 220, 219, 0.16);
-  background: rgba(8, 21, 25, 0.52);
 }
 
 .session-panel,
 .activity-panel {
-  opacity: 0.82;
   border-color: rgba(103, 220, 219, 0.14);
   background: rgba(8, 21, 25, 0.46);
 }
@@ -1745,9 +1730,6 @@ textarea {
     grid-column: 1 / -1;
   }
 
-  .secondary-panel {
-    opacity: 0.56;
-  }
 }
 
 @media (max-width: 760px) {
@@ -1843,12 +1825,6 @@ textarea {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .peripheral-panel,
-  .secondary-panel {
-    transition: none;
-  }
-}
 
 
 /* UI convergence — bounded summon focus */
