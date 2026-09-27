@@ -273,12 +273,32 @@ class FrontendHardeningContractTests(unittest.TestCase):
         self.assertIn("clearActionProjection();", block)
         self.assertIn("hideApproval();", block)
 
+    def test_mismatched_approval_preserves_current_valid_controls(self):
+        start = APP_JS.index('case "approval.request":')
+        end = APP_JS.index('case "assistant.completed":', start)
+        self.assertGreaterEqual(start, 0)
+        self.assertGreater(end, start)
+        block = APP_JS[start:end]
+        projection_check = block.index(
+            'if (data?.projection?.state !== "approval_requested")'
+        )
+        mismatch_block = block[:projection_check]
+        self.assertNotIn("hideApproval();", mismatch_block)
+        self.assertIn(
+            "Approval run mismatch // current decision controls preserved",
+            mismatch_block,
+        )
+
     def test_pending_approval_precedes_evidence_and_scrolls_controls_into_view(self):
         approval_at = INDEX_HTML.index('id="approvalPanel"')
         evidence_at = INDEX_HTML.index('id="actionEvidencePanel"')
         self.assertGreaterEqual(approval_at, 0)
         self.assertGreaterEqual(evidence_at, 0)
         self.assertLess(approval_at, evidence_at)
+        self.assertIn(
+            'typeof ui.approvalPanel.scrollIntoView === "function"',
+            APP_JS,
+        )
         self.assertIn("ui.approvalPanel.scrollIntoView({", APP_JS)
 
     def test_startup_loads_persisted_session_history_once(self):

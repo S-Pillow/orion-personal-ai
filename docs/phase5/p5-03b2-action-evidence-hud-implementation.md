@@ -9,7 +9,7 @@ Base dependency: merged P5-03A2 browser-safe projection
 
 ## Implemented
 
-- pending approval controls prioritized before contextual evidence;
+- pending approval controls prioritized before contextual evidence, with mismatched approval events preserving any current valid decision controls;
 - contextual **Action Evidence** panel in the right rail;
 - state-specific semantic badge and summary;
 - operation, target, execution, and recovery facts;
@@ -17,6 +17,7 @@ Base dependency: merged P5-03A2 browser-safe projection
 - five-record recent evidence strip for the selected session;
 - collapsed allowlisted technical evidence;
 - explicit approval truth strip: approval is not execution evidence;
+- approval focus scroll is best-effort and does not require `scrollIntoView` support from the rendering environment;
 - Phase 5 HUD labeling and responsive right-rail layout;
 - browser rendering driven only by the accepted P5-03A projection;
 - selected-session disappearance clears projected evidence and pending approval

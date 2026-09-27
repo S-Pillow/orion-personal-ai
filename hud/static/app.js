@@ -796,10 +796,12 @@ function showApproval(data) {
   syncProvenancePresentation();
   workspaceController.setApprovalFocus(true);
   ui.approvalPanel.classList.remove("hidden");
-  ui.approvalPanel.scrollIntoView({
-    block: "start",
-    behavior: "smooth",
-  });
+  if (typeof ui.approvalPanel.scrollIntoView === "function") {
+    ui.approvalPanel.scrollIntoView({
+      block: "start",
+      behavior: "smooth",
+    });
+  }
   // Hermes sends the tool/command and the exact approval description separately.
   // Keep both complete and render them as text, including diff lines and markup.
   const details = [];
@@ -1047,10 +1049,9 @@ function handleStreamEvent(eventName, data, assistant) {
         !state.activeRunId ||
         runId !== state.activeRunId
       ) {
-        hideApproval();
         setCore(
           "ERROR",
-          "Approval run mismatch // decision controls withheld",
+          "Approval run mismatch // current decision controls preserved",
         );
         break;
       }

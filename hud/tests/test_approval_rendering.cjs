@@ -14,6 +14,7 @@ const source = app.slice(start, end);
 
 function renderer() {
   const clicked = [];
+  let scrolled = 0;
   const detail = { textContent: "", scrollTop: 99 };
   Object.defineProperty(detail, "innerHTML", { set() { throw Error("Unsafe HTML rendering"); } });
   const actions = {
@@ -26,7 +27,14 @@ function renderer() {
     rememberActionProjection() { return null; },
     syncProvenancePresentation() {},
     workspaceController: { setApprovalFocus() {} },
-    ui: { approvalPanel: { classList: { remove() {} } }, approvalDetail: detail, approvalActions: actions },
+    ui: {
+      approvalPanel: {
+        classList: { remove() {} },
+        scrollIntoView() { scrolled += 1; },
+      },
+      approvalDetail: detail,
+      approvalActions: actions,
+    },
     document: { createElement() { return {
       classList: { add() {} },
       addEventListener(_event, callback) { this.click = callback; },
@@ -34,7 +42,13 @@ function renderer() {
     decideApproval(choice) { clicked.push(choice); },
   });
   vm.runInContext(source, context);
-  return { show: (data) => context.showApproval(data), detail, actions, clicked };
+  return {
+    show: (data) => context.showApproval(data),
+    detail,
+    actions,
+    clicked,
+    scrolled: () => scrolled,
+  };
 }
 
 test("command does not hide a long exact description, CRLF, Unicode or literal markup", () => {
@@ -46,6 +60,7 @@ test("command does not hide a long exact description, CRLF, Unicode or literal m
   r.show({ command: "orion_vault_apply_plan", description, choices: ["once", "deny"] });
   assert.equal(r.detail.textContent, "Command / tool:\norion_vault_apply_plan\n\nDescription:\n" + description);
   assert.equal(r.detail.scrollTop, 0);
+  assert.equal(r.scrolled(), 1);
   assert.deepEqual(r.actions.children.map(b => b.textContent), ["ALLOW ONCE", "DENY"]);
   r.actions.children.forEach(b => b.click());
   assert.deepEqual(r.clicked, ["once", "deny"]);
