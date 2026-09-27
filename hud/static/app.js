@@ -240,8 +240,12 @@ function setHermesOnline(online, degraded = false) {
 }
 
 function updateRunControls() {
-  ui.stopButton.disabled = !state.activeRunId;
+  const running = Boolean(state.activeRunId);
+  ui.composer.dataset.runState = running ? "running" : "idle";
+  ui.stopButton.disabled = !running;
+  ui.stopButton.hidden = !running;
   ui.sendButton.disabled = state.streaming;
+  ui.sendButton.hidden = running;
   ui.newSession.disabled = state.streaming;
   ui.sessionSelect.disabled = state.streaming;
   syncProvenancePresentation();
@@ -252,7 +256,6 @@ function formatClock() {
     hour12: false,
     hour: "2-digit",
     minute: "2-digit",
-    second: "2-digit",
   });
 }
 

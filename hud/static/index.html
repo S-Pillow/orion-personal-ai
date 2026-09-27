@@ -207,17 +207,20 @@
               placeholder="Message Orion..."
               maxlength="65536"
             ></textarea>
-            <button
-              id="sendButton"
-              class="primary-button"
-              type="submit"
-            >SEND</button>
-            <button
-              id="stopButton"
-              class="stop-button"
-              type="button"
-              disabled
-            >STOP</button>
+            <div class="composer-actions" aria-label="Message actions">
+              <button
+                id="sendButton"
+                class="primary-button"
+                type="submit"
+              >SEND</button>
+              <button
+                id="stopButton"
+                class="stop-button"
+                type="button"
+                disabled
+                hidden
+              >STOP</button>
+            </div>
           </form>
         </section>
 

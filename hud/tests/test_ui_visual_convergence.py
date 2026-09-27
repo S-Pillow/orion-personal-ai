@@ -47,8 +47,10 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
     def test_conversation_is_foreground_surface(self):
         self.assertIn(".conversation-workspace", TARGET)
         self.assertIn("backdrop-filter: blur(18px);", TARGET)
-        self.assertIn("margin: -38px 32px 14px;", TARGET)
-        self.assertIn(".composer", TARGET)
+        self.assertIn("--workspace-overlap: 42px;", TARGET)
+        self.assertIn("calc(-1 * var(--workspace-overlap))", TARGET)
+        self.assertIn(".composer-actions", INDEX)
+        self.assertIn("grid-template-columns: minmax(0, 1fr) auto;", TARGET)
 
     def test_context_and_activity_rails_are_editorial(self):
         self.assertIn(".context-sidebar", TARGET)
@@ -92,8 +94,29 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
             "approvalCommand",
         ):
             self.assertIn(token, INDEX + APP)
-        self.assertIn("width: min(calc(100% - 48px), 980px);", TARGET)
-        self.assertIn("grid-template-columns: 270px minmax(720px, 1040px) 370px;", TARGET)
+        self.assertIn("--conversation-max-width: 980px;", TARGET)
+        self.assertIn("--rail-left-width: 250px;", TARGET)
+        self.assertIn("--rail-right-width: 330px;", TARGET)
+
+    def test_structural_layout_has_one_authoritative_definition(self):
+        for selector in (
+            ".hud-grid {",
+            ".workspace-shell {",
+            ".conversation-workspace {",
+            ".composer {",
+        ):
+            with self.subTest(selector=selector):
+                self.assertNotIn(selector, STYLES)
+        self.assertNotIn("grid-template-columns: 1fr 86px 86px;", STYLES + TARGET)
+
+    def test_composer_run_controls_are_state_explicit(self):
+        self.assertIn('class="composer-actions"', INDEX)
+        self.assertIn('id="stopButton"', INDEX)
+        self.assertIn("hidden", INDEX[INDEX.index('id="stopButton"'):INDEX.index('id="stopButton"') + 220])
+        self.assertIn('ui.composer.dataset.runState = running ? "running" : "idle";', APP)
+        self.assertIn("ui.stopButton.hidden = !running;", APP)
+        self.assertIn("ui.sendButton.hidden = running;", APP)
+        self.assertIn(":focus-visible", TARGET)
 
     def test_visual_pass_does_not_add_runtime_transport(self):
         for token in (
