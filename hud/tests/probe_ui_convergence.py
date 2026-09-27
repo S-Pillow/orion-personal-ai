@@ -55,6 +55,24 @@ if (
   void __fixtureSelectSession();
 }
 
+if (__fixtureMode === "review") {
+  addActivity(
+    "Reading project files",
+    "Reviewing current Orion UI and memory-system notes.",
+    "running",
+  );
+  addActivity(
+    "Synthesizing insights",
+    "Comparing owner visual target against the active HUD branch.",
+    "running",
+  );
+  addActivity(
+    "Preparing response",
+    "Prioritizing composition, readability, and state presentation.",
+    "running",
+  );
+}
+
 if (__fixtureMode === "summon" || __fixtureMode === "summon-approval") {
   summonController.show({
     kind: "evidence",
