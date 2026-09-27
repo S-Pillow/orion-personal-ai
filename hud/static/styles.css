@@ -1849,3 +1849,146 @@ textarea {
     transition: none;
   }
 }
+
+
+/* UI convergence — bounded summon focus */
+.workspace-shell {
+  position: relative;
+}
+
+.workspace-shell[data-workspace-focus="summon"] {
+  outline: 1px solid rgba(105, 217, 214, 0.2);
+  outline-offset: -1px;
+  box-shadow:
+    inset 0 0 46px rgba(105, 217, 214, 0.025);
+}
+
+.summon-panel {
+  position: absolute;
+  z-index: 6;
+  top: clamp(210px, 39%, 330px);
+  right: clamp(14px, 3vw, 34px);
+  bottom: 18px;
+  left: clamp(14px, 3vw, 34px);
+  min-height: 0;
+  overflow: auto;
+  padding: clamp(16px, 2.2vw, 24px);
+  border: 1px solid rgba(105, 217, 214, 0.26);
+  background:
+    radial-gradient(circle at 16% 0%, rgba(105, 217, 214, 0.055), transparent 31%),
+    linear-gradient(180deg, rgba(8, 22, 26, 0.97), rgba(4, 12, 15, 0.985));
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, 0.34),
+    inset 0 0 56px rgba(105, 217, 214, 0.018);
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+.workspace-shell[data-workspace="system"] .summon-panel,
+.workspace-shell[data-workspace="memory"] .summon-panel {
+  top: clamp(170px, 29%, 240px);
+}
+
+.summon-panel[hidden] {
+  display: none !important;
+}
+
+.summon-panel:focus {
+  outline: 1px solid rgba(105, 217, 214, 0.58);
+  outline-offset: 2px;
+}
+
+.summon-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(105, 217, 214, 0.12);
+}
+
+.summon-kind {
+  color: var(--cyan);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+}
+
+.summon-header h1 {
+  margin: 5px 0 5px;
+  color: var(--text);
+  font-size: clamp(19px, 2.2vw, 28px);
+  font-weight: 500;
+  letter-spacing: -0.015em;
+}
+
+.summon-source-line {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.summon-dismiss {
+  width: auto;
+  min-width: 88px;
+  flex: 0 0 auto;
+}
+
+.summon-body {
+  max-width: 920px;
+  margin-top: 18px;
+  color: #d2e8e7;
+  font-size: 13px;
+  line-height: 1.72;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.summon-link {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 18px;
+  padding-inline: 12px;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.core-stage[data-presentation-focus="summon"] {
+  --head-shift: 6px;
+  --head-yaw: 4deg;
+  --gaze-x: 8px;
+  --gaze-y: -1px;
+}
+
+@media (max-width: 760px) {
+  .summon-panel,
+  .workspace-shell[data-workspace="system"] .summon-panel,
+  .workspace-shell[data-workspace="memory"] .summon-panel {
+    top: 198px;
+    right: 10px;
+    bottom: 10px;
+    left: 10px;
+    padding: 14px;
+  }
+
+  .summon-header {
+    gap: 10px;
+  }
+
+  .summon-header h1 {
+    font-size: 18px;
+  }
+
+  .summon-dismiss {
+    min-width: 72px;
+  }
+
+  .summon-body {
+    font-size: 12px;
+  }
+}
