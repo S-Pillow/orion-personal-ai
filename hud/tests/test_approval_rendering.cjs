@@ -15,7 +15,9 @@ const source = app.slice(start, end);
 function renderer() {
   const clicked = [];
   let scrolled = 0;
+  const command = { textContent: "" };
   const detail = { textContent: "", scrollTop: 99 };
+  Object.defineProperty(command, "innerHTML", { set() { throw Error("Unsafe HTML rendering"); } });
   Object.defineProperty(detail, "innerHTML", { set() { throw Error("Unsafe HTML rendering"); } });
   const actions = {
     children: [],
@@ -32,6 +34,7 @@ function renderer() {
         classList: { remove() {} },
         scrollIntoView() { scrolled += 1; },
       },
+      approvalCommand: command,
       approvalDetail: detail,
       approvalActions: actions,
     },
@@ -44,6 +47,7 @@ function renderer() {
   vm.runInContext(source, context);
   return {
     show: (data) => context.showApproval(data),
+    command,
     detail,
     actions,
     clicked,
@@ -58,7 +62,8 @@ test("command does not hide a long exact description, CRLF, Unicode or literal m
     "+END-OF-DIFF\r\n\\ No newline at end of file\n";
   assert.ok(description.length > 1000);
   r.show({ command: "orion_vault_apply_plan", description, choices: ["once", "deny"] });
-  assert.equal(r.detail.textContent, "Command / tool:\norion_vault_apply_plan\n\nDescription:\n" + description);
+  assert.equal(r.command.textContent, "orion_vault_apply_plan");
+  assert.equal(r.detail.textContent, description);
   assert.equal(r.detail.scrollTop, 0);
   assert.equal(r.scrolled(), 1);
   assert.deepEqual(r.actions.children.map(b => b.textContent), ["ALLOW ONCE", "DENY"]);
@@ -68,10 +73,20 @@ test("command does not hide a long exact description, CRLF, Unicode or literal m
 
 test("legacy command-only and description-only requests remain complete", () => {
   const r = renderer();
-  for (const key of ["command", "description"]) {
+  {
     const value = "a".repeat(18000) + "TAIL";
-    r.show({ [key]: value });
-    assert.ok(r.detail.textContent.endsWith(value));
+    r.show({ command: value });
+    assert.equal(r.command.textContent, value);
+    assert.equal(
+      r.detail.textContent,
+      "Hermes requires an operator decision.",
+    );
+  }
+  {
+    const value = "a".repeat(18000) + "TAIL";
+    r.show({ description: value });
+    assert.equal(r.command.textContent, "Hermes protected action");
+    assert.equal(r.detail.textContent, value);
   }
   assert.deepEqual(r.actions.children.map(b => b.textContent), ["ALLOW ONCE", "ALLOW SESSION", "ALWAYS ALLOW", "DENY"]);
 });
@@ -80,7 +95,8 @@ test("unknown choices are not granted and new requests replace old details/actio
   const r = renderer();
   r.show({ description: "previous", choices: ["once", "deny"] });
   r.show({ description: "current", choices: ["approve_all", "deny"] });
-  assert.equal(r.detail.textContent, "Description:\ncurrent");
+  assert.equal(r.command.textContent, "Hermes protected action");
+  assert.equal(r.detail.textContent, "current");
   assert.deepEqual(r.actions.children.map(b => b.textContent), ["DENY"]);
   r.show({ reason: "fallback reason", choices: [] });
   assert.equal(r.detail.textContent, "fallback reason");
