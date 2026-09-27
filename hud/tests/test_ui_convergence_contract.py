@@ -46,10 +46,13 @@ class UIConvergenceContractTests(unittest.TestCase):
         self.assertIn("width: 194px;", self.css)
         self.assertIn("width: 360px;", self.css)
 
-    def test_secondary_diagnostics_are_demoted(self):
+    def test_secondary_diagnostics_are_demoted_without_opacity(self):
         self.assertIn(".peripheral-panel,", self.css)
         self.assertIn(".secondary-panel {", self.css)
-        self.assertIn("opacity: 0.66;", self.css)
+        self.assertIn("border-color: rgba(103, 220, 219, 0.075);", self.css)
+        self.assertIn("background: rgba(7, 17, 20, 0.32);", self.css)
+        self.assertNotIn(".peripheral-panel:hover", self.css)
+        self.assertNotIn(".secondary-panel:hover", self.css)
 
     def test_narrow_approval_precedes_contextual_evidence(self):
         self.assertIn(".right-rail .approval-panel {\n    order: 0;", self.css)
