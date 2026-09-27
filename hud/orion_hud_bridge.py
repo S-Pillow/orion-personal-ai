@@ -696,7 +696,8 @@ class OrionHandler(BaseHTTPRequestHandler):
                 if not line:
                     if frame_parts:
                         projected = self._project_sse_frame(
-                            b"".join(frame_parts)
+                            b"".join(frame_parts),
+                            expected_session_id=session_id,
                         )
                         if projected:
                             self.wfile.write(projected)
@@ -710,7 +711,8 @@ class OrionHandler(BaseHTTPRequestHandler):
                     raise RuntimeError("upstream_sse_frame_too_large")
                 if line in (b"\n", b"\r\n"):
                     projected = self._project_sse_frame(
-                        b"".join(frame_parts)
+                        b"".join(frame_parts),
+                        expected_session_id=session_id,
                     )
                     frame_parts = []
                     frame_size = 0
@@ -751,7 +753,12 @@ class OrionHandler(BaseHTTPRequestHandler):
         )
         return f"event: {event_name}\ndata: {payload}\n\n".encode("utf-8")
 
-    def _project_sse_frame(self, frame: bytes) -> bytes:
+    def _project_sse_frame(
+        self,
+        frame: bytes,
+        *,
+        expected_session_id: str | None = None,
+    ) -> bytes:
         text = frame.decode("utf-8", errors="strict")
         lines = text.splitlines()
         if lines and all(
@@ -769,7 +776,11 @@ class OrionHandler(BaseHTTPRequestHandler):
         if not data_lines:
             return b""
         payload = json.loads("\n".join(data_lines))
-        projected = project_stream_event(event_name, payload)
+        projected = project_stream_event(
+            event_name,
+            payload,
+            expected_session_id=expected_session_id,
+        )
         if projected is None:
             raise ValueError("unsupported_sse_payload")
         projected_name, projected_payload = projected

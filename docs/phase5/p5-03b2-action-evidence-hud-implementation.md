@@ -1,11 +1,11 @@
 # P5-03B2 — Rich Action / Diff / Evidence HUD Implementation
 
-Status: **IMPLEMENTED ON FEATURE BRANCH / ACCEPTANCE PENDING**
+Status: **RECONCILED ON MERGED P5-03A2 BASE / ACCEPTANCE PENDING**
 
 Branch: `feature/orion-phase5-p5-03b-action-evidence-hud`
 
-Base dependency: P5-03A2 browser-safe projection candidate
-`5007f330c4d4f669015ce04e810d84ca124db51b`.
+Base dependency: merged P5-03A2 browser-safe projection
+`753b4ca60a05fc5768e21944298aab84be10b6b6`.
 
 ## Implemented
 

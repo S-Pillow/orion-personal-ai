@@ -4755,6 +4755,7 @@ def _execute_production_plan_candidate(
                 origin_recovery_id=origin_recovery_id,
                 recovery_dir=str(recovery_dir),
                 action=action,
+                target_relative_path=target_rel,
             )
 
         source, source_rel = _resolve_under_root(
@@ -4851,6 +4852,7 @@ def _execute_production_plan_candidate(
             origin_recovery_id=origin_recovery_id,
             recovery_dir=str(recovery_dir),
             action=action,
+            source_draft=source_rel,
         )
 
     except FileExistsError:

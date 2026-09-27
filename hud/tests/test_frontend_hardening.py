@@ -167,66 +167,6 @@ class FrontendHardeningContractTests(unittest.TestCase):
         )
 
 
-    def test_action_evidence_workspace_is_contextual_and_structured(self):
-        for marker in (
-            'id="actionEvidencePanel"',
-            'class="panel action-evidence-panel hidden"',
-            'id="actionStateBadge"',
-            'id="actionDiff"',
-            'id="actionEvidenceList"',
-            'id="actionTechnicalList"',
-        ):
-            with self.subTest(marker=marker):
-                self.assertIn(marker, INDEX_HTML)
-        self.assertIn("function renderActionWorkspace(projection)", APP_JS)
-        self.assertIn("renderActionWorkspace(null);", APP_JS)
-        self.assertIn("ui.actionEvidencePanel.classList.add(\"hidden\")", APP_JS)
-
-    def test_action_workspace_keeps_approval_distinct_from_execution(self):
-        self.assertIn(
-            "Hermes approval is not execution evidence.",
-            INDEX_HTML,
-        )
-        self.assertIn(
-            'execution: "UNPROVEN"',
-            APP_JS,
-        )
-        self.assertIn(
-            "Protected execution remains unproven.",
-            APP_JS,
-        )
-
-    def test_action_workspace_renders_exact_diff_and_allowlisted_technical_fields(self):
-        self.assertIn(
-            'ui.actionDiff.textContent = diff;',
-            APP_JS,
-        )
-        self.assertIn(
-            "const ACTION_TECHNICAL_FIELDS = [",
-            APP_JS,
-        )
-        self.assertIn(
-            "technicalEvidenceRows(projection)",
-            APP_JS,
-        )
-        self.assertIn("white-space: pre;", STYLES)
-        self.assertNotIn("JSON.stringify(projection", APP_JS)
-
-    def test_action_workspace_recent_evidence_is_presentation_only(self):
-        self.assertIn(
-            "state.actionEvidence.slice(-5).reverse()",
-            APP_JS,
-        )
-        self.assertIn(
-            'item.className = "action-evidence-item";',
-            APP_JS,
-        )
-        self.assertNotIn(
-            "actionEvidenceList.addEventListener",
-            APP_JS,
-        )
-
-
     def test_run_started_cannot_replace_a_different_active_run(self):
         self.assertIn(
             "Run identity mismatch // stream state not adopted",
@@ -248,6 +188,82 @@ class FrontendHardeningContractTests(unittest.TestCase):
             APP_JS,
         )
 
+    def test_late_approval_receipt_is_discarded_after_terminal_state(self):
+        self.assertGreaterEqual(
+            APP_JS.count("state.approvalEvent !== event"),
+            3,
+        )
+        self.assertGreaterEqual(
+            APP_JS.count("state.activeRunId !== runId"),
+            3,
+        )
+        self.assertIn(
+            "Approval no longer active // decision controls withheld",
+            APP_JS,
+        )
+
+    def test_stream_eof_clears_orphaned_approval_state(self):
+        self.assertIn(
+            "const unterminatedRunId = state.activeRunId;",
+            APP_JS,
+        )
+        self.assertIn(
+            "if (unterminatedRunId || state.approvalEvent)",
+            APP_JS,
+        )
+        self.assertIn(
+            "Hermes stream ended before terminal run state // approval controls withheld",
+            APP_JS,
+        )
+
+    def test_terminal_run_events_require_active_run_match(self):
+        self.assertIn('case "run.completed": {', APP_JS)
+        self.assertIn('case "run.cancelled":', APP_JS)
+        self.assertIn('case "run.failed":', APP_JS)
+        self.assertGreaterEqual(
+            APP_JS.count("runId !== state.activeRunId"),
+            4,
+        )
+
+
+    def test_action_evidence_workspace_is_contextual_and_structured(self):
+        for marker in (
+            'id="actionEvidencePanel"',
+            'class="panel action-evidence-panel hidden"',
+            'id="actionStateBadge"',
+            'id="actionDiff"',
+            'id="actionEvidenceList"',
+            'id="actionTechnicalList"',
+        ):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, INDEX_HTML)
+        self.assertIn("function renderActionWorkspace(projection)", APP_JS)
+        self.assertIn("renderActionWorkspace(null);", APP_JS)
+        self.assertIn('ui.actionEvidencePanel.classList.add("hidden")', APP_JS)
+
+    def test_action_workspace_keeps_approval_distinct_from_execution(self):
+        self.assertIn(
+            "Hermes approval is not execution evidence.",
+            INDEX_HTML,
+        )
+        self.assertIn('execution: "UNPROVEN"', APP_JS)
+        self.assertIn(
+            "Protected execution remains unproven.",
+            APP_JS,
+        )
+
+    def test_action_workspace_renders_exact_diff_and_allowlisted_technical_fields(self):
+        self.assertIn('ui.actionDiff.textContent = diff;', APP_JS)
+        self.assertIn("const ACTION_TECHNICAL_FIELDS = [", APP_JS)
+        self.assertIn("technicalEvidenceRows(projection)", APP_JS)
+        self.assertIn("white-space: pre;", STYLES)
+        self.assertNotIn("JSON.stringify(projection", APP_JS)
+
+    def test_action_workspace_recent_evidence_is_presentation_only(self):
+        self.assertIn("state.actionEvidence.slice(-5).reverse()", APP_JS)
+        self.assertIn('item.className = "action-evidence-item";', APP_JS)
+        self.assertNotIn("actionEvidenceList.addEventListener", APP_JS)
+
     def test_disappearing_selected_session_clears_action_evidence(self):
         anchor = 'else if (previous) {'
         start = APP_JS.index(anchor)
@@ -263,29 +279,7 @@ class FrontendHardeningContractTests(unittest.TestCase):
         self.assertGreaterEqual(approval_at, 0)
         self.assertGreaterEqual(evidence_at, 0)
         self.assertLess(approval_at, evidence_at)
-        self.assertIn(
-            'ui.approvalPanel.scrollIntoView({',
-            APP_JS,
-        )
-
-    def test_late_approval_receipt_is_discarded_after_terminal_state(self):
-        self.assertGreaterEqual(
-            APP_JS.count("state.approvalEvent !== event"),
-            2,
-        )
-        self.assertGreaterEqual(
-            APP_JS.count("state.activeRunId !== runId"),
-            2,
-        )
-
-    def test_terminal_run_events_require_active_run_match(self):
-        self.assertIn('case "run.completed": {', APP_JS)
-        self.assertIn('case "run.cancelled":', APP_JS)
-        self.assertIn('case "run.failed":', APP_JS)
-        self.assertGreaterEqual(
-            APP_JS.count("runId !== state.activeRunId"),
-            4,
-        )
+        self.assertIn("ui.approvalPanel.scrollIntoView({", APP_JS)
 
     def test_startup_loads_persisted_session_history_once(self):
         self.assertIn(

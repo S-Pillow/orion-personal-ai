@@ -224,10 +224,16 @@ def project_approval_request(data: dict[str, Any]) -> dict[str, Any]:
         and raw_command == raw_command.strip()
     )
     description = _exact_text(data.get("description"))
+    description_meaningful = bool(
+        isinstance(description, str) and description.strip()
+    )
     choices = _approval_choices(data.get("choices"))
     run_id = raw_run_id if run_id_exact else None
     exact_ready = bool(
-        run_id and command_exact and description and choices
+        run_id
+        and command_exact
+        and description_meaningful
+        and choices
     )
     unavailable_reason = (
         "approval_run_id_unavailable"
@@ -313,10 +319,52 @@ def _json_object(content: Any) -> dict[str, Any] | None:
     return parsed if isinstance(parsed, dict) else None
 
 
-def _tool_call_name_map(messages: Iterable[Any]) -> dict[str, str]:
+def _exact_id(value: Any) -> str:
+    if not isinstance(value, str) or not value:
+        return ""
+    return value if _safe_id(value) == value else ""
+
+
+def _exact_code(value: Any) -> str:
+    if not isinstance(value, str) or not value:
+        return ""
+    return value if _safe_code(value) == value else ""
+
+
+def _message_matches_run(
+    message: dict[str, Any],
+    expected_run_id: str | None,
+) -> bool:
+    if not expected_run_id or "run_id" not in message:
+        return True
+    return _exact_id(message.get("run_id")) == expected_run_id
+
+
+def _message_matches_session(
+    message: dict[str, Any],
+    expected_session_id: str | None,
+) -> bool:
+    if not expected_session_id or "session_id" not in message:
+        return True
+    return _exact_id(message.get("session_id")) == expected_session_id
+
+
+def _tool_call_name_map(
+    messages: Iterable[Any],
+    *,
+    expected_run_id: str | None = None,
+    expected_session_id: str | None = None,
+) -> dict[str, str]:
     names: dict[str, str] = {}
+    conflicts: set[str] = set()
     for message in messages:
-        if not isinstance(message, dict):
+        if (
+            not isinstance(message, dict)
+            or not _message_matches_run(message, expected_run_id)
+            or not _message_matches_session(
+                message, expected_session_id
+            )
+        ):
             continue
         calls = message.get("tool_calls")
         if not isinstance(calls, list):
@@ -324,21 +372,52 @@ def _tool_call_name_map(messages: Iterable[Any]) -> dict[str, str]:
         for call in calls:
             if not isinstance(call, dict):
                 continue
-            call_id = _safe_id(call.get("id"))
+            call_id = _exact_id(call.get("id"))
             function = call.get("function")
             name = ""
             if isinstance(function, dict):
-                name = _safe_code(function.get("name"))
-            if call_id and name:
+                name = _exact_code(function.get("name"))
+            if not call_id or not name or call_id in conflicts:
+                continue
+            prior = names.get(call_id)
+            if prior is None:
                 names[call_id] = name
+            elif prior != name:
+                names.pop(call_id, None)
+                conflicts.add(call_id)
     return names
 
 
 def _tool_name(message: dict[str, Any], names: dict[str, str]) -> str:
-    direct = _safe_code(message.get("tool_name") or message.get("name"))
-    if direct:
-        return direct
-    call_id = _safe_id(message.get("tool_call_id"))
+    has_tool_name = "tool_name" in message
+    has_name = "name" in message
+    direct_tool_name = (
+        _exact_code(message.get("tool_name"))
+        if has_tool_name
+        else ""
+    )
+    direct_name = (
+        _exact_code(message.get("name"))
+        if has_name
+        else ""
+    )
+
+    if has_tool_name and not direct_tool_name:
+        return ""
+    if has_name and not direct_name:
+        return ""
+    if has_tool_name and has_name:
+        return (
+            direct_tool_name
+            if direct_tool_name == direct_name
+            else ""
+        )
+    if has_tool_name:
+        return direct_tool_name
+    if has_name:
+        return direct_name
+
+    call_id = _exact_id(message.get("tool_call_id"))
     return names.get(call_id, "")
 
 
@@ -468,8 +547,16 @@ def _success_evidence_complete(result: dict[str, Any]) -> bool:
             _present_text_exact(result.get("source_draft"))
             and _present_text_exact(result.get("target_relative_path"))
         )
-    if action in {"restore_edit", "restore_move_source"}:
-        return _valid_hash(result.get("origin_recovery_id"))
+    if action == "restore_edit":
+        return (
+            _valid_hash(result.get("origin_recovery_id"))
+            and _present_text_exact(result.get("target_relative_path"))
+        )
+    if action == "restore_move_source":
+        return (
+            _valid_hash(result.get("origin_recovery_id"))
+            and _present_text_exact(result.get("source_draft"))
+        )
     return False
 
 
@@ -580,13 +667,12 @@ def project_tool_message(
     recovery_false = raw_recovery is False
     error = _safe_code(result.get("error"))
 
-    if success and mutation and raw_recovery is not False:
+    if recovery_required:
+        state = "failed"
+        projection_reason = "recovery_required"
+    elif success and mutation and raw_recovery is not False:
         state = "unknown"
-        projection_reason = (
-            "conflicting_action_result"
-            if recovery_required
-            else "success_evidence_incomplete"
-        )
+        projection_reason = "success_evidence_incomplete"
     elif success and mutation and error:
         state = "unknown"
         projection_reason = "conflicting_action_result"
@@ -645,13 +731,26 @@ def project_action_evidence(
     *,
     hydrated: bool = False,
     limit: int = 20,
+    expected_run_id: str | None = None,
+    expected_session_id: str | None = None,
 ) -> list[dict[str, Any]]:
     if not isinstance(messages, list):
         return []
-    names = _tool_call_name_map(messages)
+    names = _tool_call_name_map(
+        messages,
+        expected_run_id=expected_run_id,
+        expected_session_id=expected_session_id,
+    )
     items: list[dict[str, Any]] = []
     for message in messages:
-        if not isinstance(message, dict) or message.get("role") != "tool":
+        if (
+            not isinstance(message, dict)
+            or message.get("role") != "tool"
+            or not _message_matches_run(message, expected_run_id)
+            or not _message_matches_session(
+                message, expected_session_id
+            )
+        ):
             continue
         projected = project_tool_message(message, name_map=names, hydrated=hydrated)
         if projected is not None:
@@ -734,7 +833,11 @@ def project_action_evidence_payload(
         "session_id": session_id,
         "source": "hermes_session_messages",
         "current_recovery_visibility": "unavailable",
-        "items": project_action_evidence(rows, hydrated=True),
+        "items": project_action_evidence(
+            rows,
+            hydrated=True,
+            expected_session_id=session_id,
+        ),
     }
 
 
@@ -770,9 +873,19 @@ def project_run_status(payload: Any) -> dict[str, Any] | None:
 def project_stream_event(
     event_name: str,
     data: Any,
+    *,
+    expected_session_id: str | None = None,
 ) -> tuple[str, dict[str, Any]] | None:
     if not isinstance(data, dict):
         return None
+    if expected_session_id and "session_id" in data:
+        raw_session_id = data.get("session_id")
+        if (
+            not isinstance(raw_session_id, str)
+            or raw_session_id != expected_session_id
+            or _safe_id(raw_session_id) != raw_session_id
+        ):
+            return None
     name = str(event_name or data.get("event") or "").strip()
     common = _common(data)
 
@@ -861,7 +974,9 @@ def project_stream_event(
         if runtime:
             out["runtime"] = runtime
         out["action_evidence"] = project_action_evidence(
-            data.get("messages"), hydrated=False
+            data.get("messages"),
+            hydrated=False,
+            expected_run_id=raw_run_id,
         )
         return name, out
 
