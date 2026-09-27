@@ -1,6 +1,12 @@
 # P5-03B1 — Action / Diff / Evidence UX Specification
 
-Status: **IMPLEMENTED WITH P5-03B2 CANDIDATE**
+Status: **ACCEPTED / MERGED WITH P5-03B2**
+
+Accepted candidate head:
+`557ff4e382176bd7060bf0f378d34b38c4b23bd5`
+
+Merged by PR #46 with merge commit:
+`f771c99b44148c28a02910a05de2aa722415861c`
 
 ## Intent
 
@@ -74,15 +80,26 @@ evidence. Empty, failed, stale-session, unavailable hydration, or disappearance
 of the selected session clears the presentation rather than retaining another
 session's evidence.
 
+The broader reconnect/hydration qualification required by the PRD remains a
+separate follow-on acceptance unit after P5-03B.
+
 ## Acceptance
 
-- approval accepted is visually distinct from execution succeeded;
-- exact diff remains byte-preserving text;
-- technical evidence is collapsed by default and allowlisted;
-- cross-session evidence cannot remain visible after clearing/hydration or
-  selected-session disappearance;
-- pending approval controls precede contextual evidence and are scrolled into
-  view when the decision surface opens;
-- recent evidence has no action controls;
+Accepted on exact candidate
+`557ff4e382176bd7060bf0f378d34b38c4b23bd5`:
+
+- approval accepted remained visually distinct from execution succeeded;
+- exact diff remained byte-preserving text;
+- technical evidence remained collapsed by default and allowlisted;
+- cross-session evidence clearing and selected-session disappearance behavior
+  remained source-gated;
+- pending approval controls preceded contextual evidence and remained reachable
+  in narrow responsive layout;
+- recent evidence remained informational only;
+- DENY and ALLOW ONCE isolated fixture round trips preserved truthful
+  non-mutation semantics;
 - no new browser persistence, runtime authority, approval engine, event store,
-  recovery executor, or vault access is introduced.
+  recovery executor, or vault access was introduced.
+
+Source acceptance and bounded visual/truth acceptance both passed with exit code
+0 before PR #46 merge.
