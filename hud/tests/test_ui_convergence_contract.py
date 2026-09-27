@@ -15,7 +15,7 @@ class UIConvergenceContractTests(unittest.TestCase):
 
     def test_shell_identity_is_companion_first(self):
         self.assertIn("Orion // Personal AI Companion", self.html)
-        self.assertIn("PRIVATE AI COMPANION", self.html)
+        self.assertIn("YOUR THINKING PARTNER", self.html)
         self.assertNotIn("PRIVATE COMPANION // OBSERVATORY", self.html)
 
     def test_existing_authority_and_action_surfaces_are_preserved(self):
