@@ -65,11 +65,6 @@
   <ellipse cx="800" cy="292" rx="250" ry="104" fill="none" stroke="#63e5ef" stroke-opacity=".13" stroke-width="1"/>
   <ellipse cx="800" cy="292" rx="230" ry="132" fill="none" stroke="#63e5ef" stroke-opacity=".08" stroke-width="1" transform="rotate(-18 800 292)"/>
 
-  <path d="M693 298 C726 271 757 272 788 292 C765 294 741 307 722 329 C712 316 703 306 693 298 Z"
-        fill="#82f3fb" fill-opacity=".76" filter="url(#glow)"/>
-  <path d="M907 298 C874 271 843 272 812 292 C835 294 859 307 878 329 C888 316 897 306 907 298 Z"
-        fill="#82f3fb" fill-opacity=".76" filter="url(#glow)"/>
-
   <rect x="796" y="58" width="8" height="198" fill="#63e5ef" opacity=".14" filter="url(#soft)"/>
   <rect x="798" y="60" width="4" height="196" fill="#b8fbff" opacity=".55"/>
   <rect x="796" y="333" width="8" height="142" fill="#63e5ef" opacity=".12" filter="url(#soft)"/>
