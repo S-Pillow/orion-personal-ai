@@ -1,8 +1,14 @@
 # P5-03B2 — Rich Action / Diff / Evidence HUD Implementation
 
-Status: **RECONCILED ON MERGED P5-03A2 BASE / ACCEPTANCE PENDING**
+Status: **ACCEPTED / MERGED**
 
-Branch: `feature/orion-phase5-p5-03b-action-evidence-hud`
+Implementation branch: `feature/orion-phase5-p5-03b-action-evidence-hud`
+
+Accepted candidate head:
+`557ff4e382176bd7060bf0f378d34b38c4b23bd5`
+
+Merged by PR #46 with merge commit:
+`f771c99b44148c28a02910a05de2aa722415861c`
 
 Base dependency: merged P5-03A2 browser-safe projection
 `753b4ca60a05fc5768e21944298aab84be10b6b6`.
@@ -27,15 +33,38 @@ No new bridge endpoint, persistent browser store, action ledger, approval
 authority, vault mutation path, recovery executor, Hermes patch, or external
 service is introduced.
 
-## Source acceptance required
+## Acceptance record
 
-1. P5-03A2 dependency must be merged/accepted first.
-2. HTML/JS syntax checks pass.
-3. Full HUD Python suite passes.
-4. Existing approval-rendering Node suite passes.
-5. P5-03B action-workspace semantic Node suite passes.
-6. Visual smoke confirms the panel is contextual, exact diff remains readable,
-   approval is visually distinct from execution, and responsive behavior does
-   not hide decision controls.
-7. Installed Hermes and rollback evidence remain unchanged.
-8. Orion source worktree remains clean.
+Exact-head source acceptance passed on
+`557ff4e382176bd7060bf0f378d34b38c4b23bd5`:
+
+1. P5-03A2 dependency was already merged/accepted.
+2. HTML/JS and Python parse gates passed.
+3. Full HUD Python suite passed: **123/123**.
+4. Existing approval-rendering Node suite passed: **3/3**.
+5. P5-03B action-workspace semantic Node suite passed: **4/4**.
+6. Installed Hermes and rollback evidence remained unchanged.
+7. Orion source worktree remained clean.
+8. Source gate exit code was **0**.
+
+Bounded visual/truth acceptance also passed on that same exact head using the
+repository's isolated in-memory fake-Hermes approval fixture:
+
+- approval controls remained ahead of Action Evidence;
+- exact canonical target and long exact diff remained complete and readable;
+- literal markup remained literal text rather than interpreted HTML;
+- approval remained explicitly distinct from execution evidence;
+- DENY produced no protected-action success claim;
+- ALLOW ONCE remained execution-unproven / outcome-unavailable;
+- narrow responsive layout preserved approval ordering, reachable decision
+  controls, and readable/scrollable exact diff;
+- both simulated decision round trips reported
+  `mutation_performed=false`;
+- installed Hermes, rollback evidence, and Orion worktree remained unchanged;
+- fixture cleanup passed;
+- visual gate exit code was **0**.
+
+All PR #46 review threads were resolved before merge.
+
+Reconnect/hydration qualification remains a separate follow-on under the
+approved PRD sequencing and is not part of this P5-03B merge acceptance.
