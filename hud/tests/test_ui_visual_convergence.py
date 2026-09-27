@@ -54,6 +54,13 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
         ):
             self.assertIn(f'id="{element_id}"', INDEX)
 
+    def test_core_presence_motion_tracks_existing_state_only(self):
+        for state in ("READY", "THINKING", "FINALIZING", "ACTING", "WAITING", "DEGRADED", "ERROR", "OFFLINE"):
+            with self.subTest(state=state):
+                self.assertIn(f'data-core-state="{state}"', STYLES)
+        self.assertIn("@media (prefers-reduced-motion: reduce)", STYLES)
+        self.assertIn("animation: none !important;", STYLES)
+
     def test_visual_pass_does_not_add_runtime_transport(self):
         for token in (
             "/api/orion/summon",
