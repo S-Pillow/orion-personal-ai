@@ -2,6 +2,7 @@
 
 import { installCorePresence } from "./core-state.js";
 import { installWorkspaceController } from "./workspace-state.js";
+import { installSummonController } from "./summon-state.js";
 import {
   ACCEPTED_BASELINE,
   classifyAuthority,
@@ -53,6 +54,13 @@ const ui = {
   workspaceCapStream: $("workspaceCapStream"),
   workspaceSkills: $("workspaceSkills"),
   workspaceJobs: $("workspaceJobs"),
+  summonPanel: $("summonPanel"),
+  summonTitle: $("summonTitle"),
+  summonKind: $("summonKind"),
+  summonSource: $("summonSource"),
+  summonBody: $("summonBody"),
+  summonLink: $("summonLink"),
+  summonDismiss: $("summonDismiss"),
   transcript: $("transcript"),
   composer: $("composer"),
   messageInput: $("messageInput"),
@@ -110,6 +118,22 @@ const workspaceController = installWorkspaceController(
     contextNode: ui.workspaceContext,
   },
 );
+
+const summonController = installSummonController({
+  panel: ui.summonPanel,
+  titleNode: ui.summonTitle,
+  kindNode: ui.summonKind,
+  sourceNode: ui.summonSource,
+  bodyNode: ui.summonBody,
+  linkNode: ui.summonLink,
+  dismissButton: ui.summonDismiss,
+  workspaceController,
+  coreStage: ui.coreStage,
+});
+
+// Presentation shell only. No agent/browser transport or new runtime authority
+// is granted here; a bounded display-tool seam must call show() explicitly.
+void summonController;
 
 function syncProvenancePresentation() {
   const provenance = state.provenance || createProvenanceState();
