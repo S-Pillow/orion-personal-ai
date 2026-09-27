@@ -19,7 +19,9 @@ from test_bridge import HUD_ROOT, bridge
 
 FIXTURE_SNIPPET = r'''
 const __fixtureParams = new URLSearchParams(window.location.search);
-if (__fixtureParams.get("fixture") === "summon") {
+const __fixtureMode = __fixtureParams.get("fixture");
+
+if (__fixtureMode === "summon" || __fixtureMode === "summon-approval") {
   summonController.show({
     kind: "evidence",
     title: "Summoned evidence fixture",
@@ -30,6 +32,37 @@ if (__fixtureParams.get("fixture") === "summon") {
       + "Approval focus must still outrank summon focus.\n"
       + "<b>literal markup</b> must remain literal text.",
   });
+}
+
+if (__fixtureMode === "summon-approval") {
+  (async () => {
+    const deadline = Date.now() + 5000;
+
+    while (
+      Date.now() < deadline
+      && ![...ui.sessionSelect.options].some(
+        (option) => option.value === "session_1",
+      )
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+
+    if (
+      ![...ui.sessionSelect.options].some(
+        (option) => option.value === "session_1",
+      )
+    ) {
+      throw new Error("fixture_session_not_loaded");
+    }
+
+    ui.sessionSelect.value = "session_1";
+    state.sessionId = "session_1";
+    syncSessionLabels();
+    await loadMessages();
+
+    ui.messageInput.value = "probe";
+    ui.composer.requestSubmit();
+  })();
 }
 '''
 
@@ -86,6 +119,10 @@ class UIConvergenceFixture:
     def summon_url(self):
         return self.origin + "/?fixture=summon"
 
+    @property
+    def summon_approval_url(self):
+        return self.origin + "/?fixture=summon-approval"
+
     def close(self):
         with self.lock:
             if self.pending:
@@ -108,6 +145,7 @@ if __name__ == "__main__":
     try:
         print(f"BASE HUD: {fixture.origin}", flush=True)
         print(f"SUMMON HUD: {fixture.summon_url}", flush=True)
+        print(f"SUMMON + APPROVAL HUD: {fixture.summon_approval_url}", flush=True)
         print(
             "Base: select orion-hud-main and send 'probe' for simulated approval.",
             flush=True,
