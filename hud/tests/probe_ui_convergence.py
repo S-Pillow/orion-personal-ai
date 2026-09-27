@@ -47,11 +47,7 @@ async function __fixtureSelectSession() {
   await loadMessages();
 }
 
-if (
-  __fixtureMode === "review"
-  || __fixtureMode === "summon"
-  || __fixtureMode === "summon-approval"
-) {
+if (__fixtureMode === "review" || __fixtureMode === "summon") {
   void __fixtureSelectSession();
 }
 
@@ -89,6 +85,7 @@ if (__fixtureMode === "summon" || __fixtureMode === "summon-approval") {
 if (__fixtureMode === "summon-approval") {
   (async () => {
     await __fixtureSelectSession();
+    await new Promise((resolve) => setTimeout(resolve, 75));
     ui.messageInput.value = "probe";
     ui.composer.requestSubmit();
   })();
