@@ -324,16 +324,50 @@ function showTranscriptEmpty(text) {
   ui.transcript.append(wrap);
 }
 
-function appendMessage(role, text = "") {
+function formatMessageTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function appendMessage(role, text = "", meta = {}) {
+  const isUser = role === "user";
   const article = document.createElement("article");
-  article.className = `message ${role === "user" ? "user" : "assistant"}`;
+  article.className = `message ${isUser ? "user" : "assistant"}`;
+
+  const avatar = document.createElement("span");
+  avatar.className = "message-avatar";
+  avatar.setAttribute("aria-hidden", "true");
+  avatar.textContent = isUser ? "Y" : "O";
+
+  const content = document.createElement("div");
+  content.className = "message-content";
+
+  const header = document.createElement("div");
+  header.className = "message-header";
+
   const label = document.createElement("span");
   label.className = "message-role";
-  label.textContent = role === "user" ? "YOU" : "ORION";
+  label.textContent = isUser ? "You" : "Orion";
+
+  const time = document.createElement("time");
+  time.className = "message-time";
+  const displayTime = formatMessageTime(meta.createdAt);
+  time.textContent = displayTime;
+  if (!displayTime) time.hidden = true;
+
+  header.append(label, time);
+
   const body = document.createElement("div");
   body.className = "message-body";
   body.textContent = text;
-  article.append(label, body);
+
+  content.append(header, body);
+  article.append(avatar, content);
   ui.transcript.append(article);
   ui.transcript.scrollTop = ui.transcript.scrollHeight;
   return body;
@@ -343,7 +377,16 @@ function renderMessages(payload) {
   const messages = arrayFrom(payload, ["messages", "items", "data"]);
   const visible = messages
     .filter((m) => m && (m.role === "user" || m.role === "assistant"))
-    .map((m) => ({ role: m.role, text: messageText(m) }))
+    .map((m) => ({
+      role: m.role,
+      text: messageText(m),
+      createdAt:
+        m.created_at ||
+        m.createdAt ||
+        m.timestamp ||
+        m.time ||
+        "",
+    }))
     .filter((m) => m.text.trim().length > 0);
 
   if (!visible.length) {
@@ -352,7 +395,13 @@ function renderMessages(payload) {
   }
 
   clearTranscript();
-  for (const message of visible) appendMessage(message.role, message.text);
+  for (const message of visible) {
+    appendMessage(
+      message.role,
+      message.text,
+      { createdAt: message.createdAt },
+    );
+  }
 }
 
 function sessionTitle(item) {
