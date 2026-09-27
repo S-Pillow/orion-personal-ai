@@ -83,6 +83,18 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
                 self.assertIn(f'data-core-state="{state}"', STYLES)
         self.assertIn("@media (prefers-reduced-motion: reduce)", STYLES)
 
+    def test_conversation_and_rails_have_product_hierarchy(self):
+        for token in (
+            "message-avatar",
+            "message-time",
+            "message-header",
+            "companion-context",
+            "approvalCommand",
+        ):
+            self.assertIn(token, INDEX + APP)
+        self.assertIn("width: min(calc(100% - 48px), 980px);", TARGET)
+        self.assertIn("grid-template-columns: 270px minmax(720px, 1040px) 370px;", TARGET)
+
     def test_visual_pass_does_not_add_runtime_transport(self):
         for token in (
             "/api/orion/summon",
