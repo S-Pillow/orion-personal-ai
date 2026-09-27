@@ -1842,7 +1842,7 @@ textarea {
 .summon-panel {
   position: absolute;
   z-index: 6;
-  top: clamp(210px, 39%, 330px);
+  top: max(270px, 42vh);
   right: clamp(14px, 3vw, 34px);
   bottom: 18px;
   left: clamp(14px, 3vw, 34px);
@@ -1852,7 +1852,7 @@ textarea {
   border: 1px solid rgba(105, 217, 214, 0.26);
   background:
     radial-gradient(circle at 16% 0%, rgba(105, 217, 214, 0.055), transparent 31%),
-    linear-gradient(180deg, rgba(8, 22, 26, 0.97), rgba(4, 12, 15, 0.985));
+    linear-gradient(180deg, #08161a 0%, #040c0f 100%);
   box-shadow:
     0 24px 70px rgba(0, 0, 0, 0.34),
     inset 0 0 56px rgba(105, 217, 214, 0.018);
@@ -1862,7 +1862,7 @@ textarea {
 
 .workspace-shell[data-workspace="system"] .summon-panel,
 .workspace-shell[data-workspace="memory"] .summon-panel {
-  top: clamp(170px, 29%, 240px);
+  top: max(190px, 27vh);
 }
 
 .summon-panel[hidden] {
@@ -1934,6 +1934,10 @@ textarea {
   text-align: left;
 }
 
+.summon-link[hidden] {
+  display: none !important;
+}
+
 .core-stage[data-presentation-focus="summon"] {
   --head-shift: 6px;
   --head-yaw: 4deg;
@@ -1945,7 +1949,7 @@ textarea {
   .summon-panel,
   .workspace-shell[data-workspace="system"] .summon-panel,
   .workspace-shell[data-workspace="memory"] .summon-panel {
-    top: 198px;
+    top: max(205px, 31vh);
     right: 10px;
     bottom: 10px;
     left: 10px;
