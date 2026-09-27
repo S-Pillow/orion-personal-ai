@@ -80,6 +80,7 @@ const ui = {
   actionTechnical: $("actionTechnical"),
   actionTechnicalList: $("actionTechnicalList"),
   approvalPanel: $("approvalPanel"),
+  approvalCommand: $("approvalCommand"),
   approvalDetail: $("approvalDetail"),
   approvalActions: $("approvalActions"),
   capSessions: $("capSessions"),
@@ -859,6 +860,7 @@ function hideApproval() {
   syncProvenancePresentation();
   workspaceController.setApprovalFocus(false);
   ui.approvalPanel.classList.add("hidden");
+  ui.approvalCommand.textContent = "";
   ui.approvalDetail.textContent = "";
   ui.approvalActions.replaceChildren();
 }
@@ -875,13 +877,23 @@ function showApproval(data) {
       behavior: "smooth",
     });
   }
-  // Hermes sends the tool/command and the exact approval description separately.
-  // Keep both complete and render them as text, including diff lines and markup.
-  const details = [];
-  if (data.command) details.push(`Command / tool:\n${data.command}`);
-  if (data.description) details.push(`Description:\n${data.description}`);
-  if (!details.length) details.push(String(data.reason || data.tool_name || "Hermes requires an operator decision."));
-  ui.approvalDetail.textContent = details.join("\n\n");
+  // Hermes sends the command and exact approval description separately.
+  // Keep both complete and literal. The command is visually promoted, while
+  // the exact description remains intact in its own scrollable region.
+  const command = String(
+    data.command ||
+    data.tool_name ||
+    data.reason ||
+    "Hermes protected action"
+  );
+  ui.approvalCommand.textContent = command;
+
+  const description = String(
+    data.description ||
+    data.reason ||
+    "Hermes requires an operator decision."
+  );
+  ui.approvalDetail.textContent = description;
   ui.approvalDetail.scrollTop = 0;
   ui.approvalActions.replaceChildren();
 
