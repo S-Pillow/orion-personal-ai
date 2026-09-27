@@ -59,7 +59,9 @@ export function applyWorkspaceFocus(root, focus) {
   const normalized =
     focus === "approval"
       ? "approval"
-      : "normal";
+      : focus === "summon"
+        ? "summon"
+        : "normal";
 
   if (root) {
     root.dataset.workspaceFocus = normalized;
@@ -77,6 +79,19 @@ export function installWorkspaceController(
   } = {},
 ) {
   const listeners = [];
+  let approvalFocus = false;
+  let summonFocus = false;
+
+  function syncFocus() {
+    return applyWorkspaceFocus(
+      root,
+      approvalFocus
+        ? "approval"
+        : summonFocus
+          ? "summon"
+          : "normal",
+    );
+  }
 
   function select(value) {
     return applyWorkspaceState(
@@ -91,10 +106,13 @@ export function installWorkspaceController(
   }
 
   function setApprovalFocus(active) {
-    return applyWorkspaceFocus(
-      root,
-      active ? "approval" : "normal",
-    );
+    approvalFocus = Boolean(active);
+    return syncFocus();
+  }
+
+  function setSummonFocus(active) {
+    summonFocus = Boolean(active);
+    return syncFocus();
   }
 
   for (const button of buttons) {
@@ -117,6 +135,7 @@ export function installWorkspaceController(
   return {
     select,
     setApprovalFocus,
+    setSummonFocus,
 
     current() {
       return normalizeWorkspace(
