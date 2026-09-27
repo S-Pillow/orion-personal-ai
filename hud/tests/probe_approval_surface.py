@@ -46,18 +46,22 @@ class ApprovalFixtureHandler(FakeHermesHandler):
             self._send(200, {"messages": [
                 {
                     "role": "user",
+                    "created_at": "2026-09-27T05:38:00-04:00",
                     "content": "Review the latest progress on the Orion interface and tell me what is working, what still needs attention, and what you would prioritize next.",
                 },
                 {
                     "role": "assistant",
+                    "created_at": "2026-09-27T05:39:00-04:00",
                     "content": "The strongest progress is in the authority model and the new companion-first layout. Approval, evidence, memory authority, and session state remain explicit while the interface is moving toward the cinematic Orion workspace.\n\nWhat still needs attention is visual balance: the hero scene, conversation depth, and operational rails need to feel like one coherent place rather than separate dashboard regions.\n\nI would prioritize composition and readability first, then finish state motion and reconnect qualification.",
                 },
                 {
                     "role": "user",
+                    "created_at": "2026-09-27T05:40:00-04:00",
                     "content": "Keep the interface calm and readable. I want it to feel like a thinking partner, not a telemetry console.",
                 },
                 {
                     "role": "assistant",
+                    "created_at": "2026-09-27T05:41:00-04:00",
                     "content": "Agreed. The visual direction should use atmosphere for identity, while conversation and approvals stay readable and operationally truthful. Decorative depth should never compete with the work surface.",
                 },
             ]})
