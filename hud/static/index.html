@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Orion // Phase 5 Action Evidence</title>
+  <title>Orion // Personal AI Companion</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
       <span class="brand-mark">ORION</span>
-      <span class="brand-sub">PRIVATE COMPANION // OBSERVATORY</span>
+      <span class="brand-sub">PRIVATE AI COMPANION</span>
     </div>
     <div class="top-status">
       <div class="top-status-group infrastructure-status" aria-label="Runtime link status">
@@ -121,6 +121,39 @@
           </div>
           <p id="coreDetail">Observed Hermes state // Orion presentation only</p>
         </div>
+
+        <section
+          id="summonPanel"
+          class="summon-panel"
+          role="region"
+          aria-labelledby="summonTitle"
+          tabindex="-1"
+          hidden
+        >
+          <div class="summon-header">
+            <div>
+              <span id="summonKind" class="summon-kind">EVIDENCE</span>
+              <h1 id="summonTitle">Summoned content</h1>
+              <p class="summon-source-line">
+                SOURCE // <span id="summonSource">UNSPECIFIED</span>
+              </p>
+            </div>
+            <button
+              id="summonDismiss"
+              class="outline-button summon-dismiss"
+              type="button"
+              aria-label="Dismiss summoned content"
+            >DISMISS</button>
+          </div>
+          <div id="summonBody" class="summon-body"></div>
+          <a
+            id="summonLink"
+            class="outline-button summon-link"
+            target="_blank"
+            rel="noopener noreferrer"
+            hidden
+          ></a>
+        </section>
 
         <section
           class="workspace-pane conversation-workspace"
@@ -457,7 +490,7 @@
   </main>
 
   <footer class="footer-line">
-    <span>ORION PHASE 5 // ACTION EVIDENCE // LOOPBACK TRANSPORT</span>
+    <span>ORION // PERSONAL COMPANION // LOOPBACK TRANSPORT</span>
     <span id="footerSession">NO SESSION</span>
   </footer>
 
