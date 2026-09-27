@@ -123,6 +123,39 @@
         </div>
 
         <section
+          id="summonPanel"
+          class="summon-panel"
+          role="region"
+          aria-labelledby="summonTitle"
+          tabindex="-1"
+          hidden
+        >
+          <div class="summon-header">
+            <div>
+              <span id="summonKind" class="summon-kind">EVIDENCE</span>
+              <h1 id="summonTitle">Summoned content</h1>
+              <p class="summon-source-line">
+                SOURCE // <span id="summonSource">UNSPECIFIED</span>
+              </p>
+            </div>
+            <button
+              id="summonDismiss"
+              class="outline-button summon-dismiss"
+              type="button"
+              aria-label="Dismiss summoned content"
+            >DISMISS</button>
+          </div>
+          <div id="summonBody" class="summon-body"></div>
+          <a
+            id="summonLink"
+            class="outline-button summon-link"
+            target="_blank"
+            rel="noopener noreferrer"
+            hidden
+          ></a>
+        </section>
+
+        <section
           class="workspace-pane conversation-workspace"
           data-workspace-pane="conversation"
           aria-labelledby="workspaceConversationButton"
