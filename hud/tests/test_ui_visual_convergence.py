@@ -61,6 +61,13 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
         self.assertIn("@media (prefers-reduced-motion: reduce)", STYLES)
         self.assertIn("animation: none !important;", STYLES)
 
+    def test_review_refinement_reduces_console_density(self):
+        self.assertIn("Visual convergence refinement — companion, not console", STYLES)
+        self.assertIn("font-size: 15px;", STYLES)
+        self.assertIn("height: min(44vh, 500px);", STYLES)
+        self.assertIn("background: transparent;", STYLES)
+        self.assertIn("width: 214px;", STYLES)
+
     def test_visual_pass_does_not_add_runtime_transport(self):
         for token in (
             "/api/orion/summon",
