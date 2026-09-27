@@ -859,3 +859,147 @@ body::before {
     left: 8px;
   }
 }
+
+
+/* Review correction — balance hero, conversation, and operational rails */
+.hud-grid {
+  grid-template-columns: 250px minmax(760px, 1fr) 360px;
+}
+
+.workspace-shell {
+  grid-template-rows: minmax(320px, 43vh) minmax(0, 1fr);
+}
+
+.hero-scene-art {
+  object-position: 50% 48%;
+  opacity: 0.90;
+}
+
+.live-core {
+  width: 250px;
+  height: 250px;
+}
+
+.core-mask {
+  top: 82px;
+  width: 120px;
+}
+
+.core-eye {
+  width: 38px;
+  height: 7px;
+}
+
+#coreState {
+  margin-top: 79px;
+}
+
+.core-presence-label {
+  bottom: 27px;
+}
+
+.conversation-workspace {
+  height: auto;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  margin-top: -46px;
+}
+
+.transcript {
+  min-height: 0;
+  overflow: auto;
+}
+
+.empty-state {
+  align-self: center;
+  margin-top: 0;
+}
+
+.context-atmosphere {
+  min-height: 235px;
+  padding: 142px 26px 24px;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, transparent 0%, rgba(4, 10, 13, 0.22) 24%, rgba(4, 10, 13, 0.96) 74%);
+}
+
+.context-atmosphere::before {
+  content: "";
+  position: absolute;
+  right: -8%;
+  bottom: 34px;
+  left: -12%;
+  height: 120px;
+  background:
+    linear-gradient(180deg, rgba(22, 43, 49, 0.96), rgba(7, 16, 20, 0.98));
+  clip-path: polygon(
+    0 100%, 0 72%, 10% 62%, 20% 68%, 31% 34%, 39% 52%, 47% 40%,
+    57% 66%, 68% 42%, 79% 58%, 89% 48%, 100% 68%, 100% 100%
+  );
+  opacity: 0.86;
+}
+
+.context-atmosphere::after {
+  content: "";
+  position: absolute;
+  left: 42%;
+  bottom: 54px;
+  width: 90px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #d6a35a, transparent);
+  box-shadow: 0 0 18px rgba(214, 163, 90, 0.45);
+  opacity: 0.72;
+}
+
+.context-atmosphere blockquote {
+  position: relative;
+  z-index: 2;
+}
+
+.activity-sidebar {
+  padding: 22px 18px;
+}
+
+.approval-detail {
+  max-height: 34vh;
+  color: #e8edf0;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.62;
+  white-space: pre-wrap;
+}
+
+.approval-truth strong,
+.approval-subhead {
+  font-size: 9px;
+}
+
+.approval-actions button {
+  font-size: 10px;
+}
+
+.action-summary,
+.memory-lens p {
+  font-size: 12px;
+}
+
+.action-facts dt,
+.action-facts dd,
+.action-technical-list dt,
+.action-technical-list dd {
+  font-size: 9px;
+}
+
+.summon-panel {
+  top: max(300px, 40vh);
+  right: 34px;
+  left: 34px;
+  bottom: 24px;
+}
+
+@media (max-width: 1300px) {
+  .hud-grid {
+    grid-template-columns: 220px minmax(640px, 1fr) 330px;
+  }
+}
