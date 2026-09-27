@@ -1310,3 +1310,122 @@ body::before {
     width: calc(100% - 28px);
   }
 }
+
+
+/* Operational hierarchy and selective accent refinement */
+.context-sidebar,
+.activity-sidebar {
+  box-shadow:
+    inset 0 1px rgba(255,255,255,.01),
+    0 0 50px rgba(0,0,0,.10);
+}
+
+.context-section {
+  border-bottom-color: rgba(150,205,220,.085);
+}
+
+.context-label span,
+.operational-title span {
+  color: rgba(177, 205, 211, 0.86);
+}
+
+.context-feature strong,
+.activity-name,
+.approval-command {
+  color: #edf3f5;
+}
+
+.companion-context {
+  padding-top: 2px;
+}
+
+.companion-context dd {
+  color: #b7ced3;
+}
+
+.approval-command {
+  margin: 0 0 10px;
+  padding: 11px 12px;
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(220,163,63,.08), rgba(220,163,63,.035));
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.approval-detail-label {
+  margin-top: 10px;
+}
+
+.approval-detail {
+  padding: 10px 11px;
+  border-radius: 8px;
+  background: rgba(2, 7, 10, 0.52);
+  box-shadow: inset 0 0 0 1px rgba(220,163,63,.08);
+}
+
+.approval-actions button:not(.deny) {
+  border-color: rgba(220,163,63,.24);
+  background: rgba(220,163,63,.07);
+  color: #f0d59b;
+}
+
+.approval-actions button.deny {
+  border-color: rgba(221,104,93,.34);
+  background: rgba(221,104,93,.08);
+  color: #ef958c;
+}
+
+.action-state-badge[data-action-state="approval_requested"],
+.action-state-badge[data-action-state="approval_accepted"] {
+  border-color: rgba(220,163,63,.30);
+  background: rgba(220,163,63,.07);
+  color: #e4b862;
+}
+
+.action-state-badge[data-action-state="succeeded"] {
+  border-color: rgba(111,220,184,.30);
+  background: rgba(111,220,184,.06);
+  color: #9ce5cb;
+}
+
+.action-state-badge[data-action-state="failed"] {
+  border-color: rgba(221,104,93,.34);
+  background: rgba(221,104,93,.07);
+  color: #ef958c;
+}
+
+.memory-lens {
+  background:
+    radial-gradient(circle at 0 0, rgba(99,229,239,.045), transparent 34%),
+    linear-gradient(180deg, rgba(11,23,29,.94), rgba(7,14,19,.94));
+}
+
+.memory-lens-link {
+  background: rgba(99,229,239,.035);
+}
+
+.hero-thoughts-left span:first-child,
+.hero-thoughts-right span:first-child {
+  color: rgba(235,244,246,.82);
+}
+
+.topbar {
+  box-shadow: 0 12px 34px rgba(0,0,0,.16);
+}
+
+.footer-line {
+  background: #020609;
+}
+
+@media (max-width: 1500px) {
+  .brand-mark {
+    font-size: 20px;
+  }
+
+  .topbar .workspace-switcher {
+    gap: 18px;
+  }
+}
