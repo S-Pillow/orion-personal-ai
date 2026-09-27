@@ -98,6 +98,20 @@ class UIConvergenceSummonContractTests(unittest.TestCase):
         self.assertNotIn("data-core-state", SUMMON)
         self.assertNotIn("setCore(", SUMMON)
 
+
+    def test_hidden_link_control_stays_hidden(self):
+        self.assertIn(".summon-link[hidden]", STYLES)
+        self.assertIn("display: none !important;", STYLES)
+
+    def test_summon_begins_below_core_row_and_masks_workspace(self):
+        self.assertIn("top: max(270px, 42vh);", STYLES)
+        self.assertIn("top: max(190px, 27vh);", STYLES)
+        self.assertIn("top: max(205px, 31vh);", STYLES)
+        self.assertIn(
+            "linear-gradient(180deg, #08161a 0%, #040c0f 100%);",
+            STYLES,
+        )
+
     def test_no_agent_transport_is_added_by_visual_convergence(self):
         self.assertIn(
             "No agent/browser transport or new runtime authority",
