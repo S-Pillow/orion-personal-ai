@@ -17,9 +17,16 @@ class UIConvergenceFixtureContractTests(unittest.TestCase):
 
     def test_fixture_does_not_add_production_transport(self):
         self.assertNotIn("/api/orion/summon", PROBE)
+        self.assertIn("?fixture=review", PROBE)
         self.assertIn("?fixture=summon", PROBE)
         self.assertIn("?fixture=summon-approval", PROBE)
         self.assertIn("void summonController;", PROBE)
+
+    def test_fixture_can_auto_load_seeded_review_session(self):
+        self.assertIn('__fixtureMode === "review"', PROBE)
+        self.assertIn("async function __fixtureSelectSession()", PROBE)
+        self.assertIn('state.sessionId = "session_1";', PROBE)
+        self.assertIn("await loadMessages();", PROBE)
 
     def test_fixture_can_auto_drive_real_submit_path_for_approval_overlap(self):
         self.assertIn('__fixtureMode === "summon-approval"', PROBE)
