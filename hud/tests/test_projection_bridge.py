@@ -17,6 +17,7 @@ import orion_hud_bridge as bridge
 class ProjectionHermesHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     requested_paths = []
+    stream_session_id = "session_1"
 
     def log_message(self, fmt, *args):
         return
@@ -112,7 +113,7 @@ class ProjectionHermesHandler(BaseHTTPRequestHandler):
                     "approval.request",
                     {
                         "event": "approval.request",
-                        "session_id": "session_1",
+                        "session_id": type(self).stream_session_id,
                         "run_id": "run_1",
                         "command": "orion_vault_apply_plan",
                         "description": (
@@ -127,7 +128,7 @@ class ProjectionHermesHandler(BaseHTTPRequestHandler):
                     "run.completed",
                     {
                         "event": "run.completed",
-                        "session_id": "session_1",
+                        "session_id": type(self).stream_session_id,
                         "run_id": "run_1",
                         "messages": [{
                             "role": "tool",
@@ -167,6 +168,7 @@ class ProjectionHermesHandler(BaseHTTPRequestHandler):
 class ProjectionBridgeTests(unittest.TestCase):
     def setUp(self):
         ProjectionHermesHandler.requested_paths = []
+        ProjectionHermesHandler.stream_session_id = "session_1"
         self.hermes = ThreadingHTTPServer(
             ("127.0.0.1", 0), ProjectionHermesHandler
         )
@@ -261,6 +263,25 @@ class ProjectionBridgeTests(unittest.TestCase):
         )
         self.assertNotIn("recovery_dir", raw.decode())
         self.assertNotIn("DO-NOT-LEAK", raw.decode())
+
+    def test_stream_rejects_frames_for_another_session(self):
+        ProjectionHermesHandler.stream_session_id = "session_other"
+        status, headers, raw = self.request(
+            "POST",
+            "/api/orion/sessions/session_1/chat/stream",
+            {"input": "probe"},
+        )
+        self.assertEqual(status, 200)
+        header_map = {k.lower(): v for k, v in headers}
+        self.assertIn(
+            "text/event-stream", header_map["content-type"]
+        )
+        text = raw.decode("utf-8")
+        self.assertIn("event: error", text)
+        self.assertIn("projection rejected unsafe", text)
+        self.assertNotIn("event: approval.request", text)
+        self.assertNotIn('"state":"approval_requested"', text)
+        self.assertNotIn('"state":"succeeded"', text)
 
     def test_approval_response_proves_decision_only(self):
         status, _, raw = self.request(

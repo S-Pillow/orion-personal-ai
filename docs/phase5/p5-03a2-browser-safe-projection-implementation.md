@@ -45,7 +45,9 @@ a routine stale refusal.
 
 The bridge now:
 
-- parses session SSE server-side;
+- parses session SSE server-side and rejects any explicitly session-bound
+  frame whose raw session ID does not exactly match the requested Hermes
+  session;
 - allowlists approval content and removes rule/pattern keys and raw tool args;
 - exposes decision controls only when both `run.started` and the approval
   event carry raw byte-exact valid authoritative run IDs, those IDs match, and
@@ -127,8 +129,9 @@ In particular:
   as failure so the strongest safety state cannot be suppressed;
 - protected tool identities are accepted only when raw byte-exact and
   allowlisted; all explicit direct identity members must be canonical and agree
-  exactly, and a malformed or conflicting direct identity cannot fall through
-  to a valid tool-call map, so normalization cannot manufacture tool authority;
+  exactly, malformed/conflicting direct identities cannot fall through to a
+  valid tool-call map, and duplicate tool-call IDs with conflicting function
+  names are invalidated rather than resolved by ordering;
 - terminal `run.completed` action evidence ignores explicitly run-bound nested
   tool messages whose raw run ID does not match the terminal run.
 

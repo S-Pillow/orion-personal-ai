@@ -21,6 +21,42 @@ from action_projection import (
 
 
 class ActionProjectionTests(unittest.TestCase):
+    def test_stream_event_rejects_explicit_wrong_session(self):
+        for session_id in ("session_B", " session_A ", 7):
+            with self.subTest(session_id=session_id):
+                self.assertIsNone(
+                    project_stream_event(
+                        "run.started",
+                        {
+                            "event": "run.started",
+                            "run_id": "run_1",
+                            "session_id": session_id,
+                        },
+                        expected_session_id="session_A",
+                    )
+                )
+
+        projected = project_stream_event(
+            "run.started",
+            {
+                "event": "run.started",
+                "run_id": "run_1",
+                "session_id": "session_A",
+            },
+            expected_session_id="session_A",
+        )
+        self.assertIsNotNone(projected)
+
+        omitted = project_stream_event(
+            "assistant.delta",
+            {
+                "event": "assistant.delta",
+                "delta": "ok",
+            },
+            expected_session_id="session_A",
+        )
+        self.assertIsNotNone(omitted)
+
     def test_run_started_requires_raw_exact_run_id(self):
         for bad_run_id in (" run_1 ", 7, {"id": "run_1"}, ""):
             with self.subTest(run_id=bad_run_id):
@@ -435,6 +471,52 @@ class ActionProjectionTests(unittest.TestCase):
             "content": json.dumps(success),
         }])
         self.assertEqual(matching[0]["state"], "succeeded")
+
+        conflicting_map = project_action_evidence([
+            {
+                "role": "assistant",
+                "tool_calls": [{
+                    "id": "call_1",
+                    "function": {"name": "other_tool"},
+                }],
+            },
+            {
+                "role": "assistant",
+                "tool_calls": [{
+                    "id": "call_1",
+                    "function": {"name": "orion_vault_apply_plan"},
+                }],
+            },
+            {
+                "role": "tool",
+                "tool_call_id": "call_1",
+                "content": json.dumps(success),
+            },
+        ])
+        self.assertEqual(conflicting_map, [])
+
+        duplicate_same = project_action_evidence([
+            {
+                "role": "assistant",
+                "tool_calls": [{
+                    "id": "call_1",
+                    "function": {"name": "orion_vault_apply_plan"},
+                }],
+            },
+            {
+                "role": "assistant",
+                "tool_calls": [{
+                    "id": "call_1",
+                    "function": {"name": "orion_vault_apply_plan"},
+                }],
+            },
+            {
+                "role": "tool",
+                "tool_call_id": "call_1",
+                "content": json.dumps(success),
+            },
+        ])
+        self.assertEqual(duplicate_same[0]["state"], "succeeded")
 
     def test_preview_ready_requires_exact_plan_and_diff_evidence(self):
         diff = "--- old\n+++ new\n-old\n+new\n"

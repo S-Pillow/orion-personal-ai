@@ -356,6 +356,7 @@ def _tool_call_name_map(
     expected_session_id: str | None = None,
 ) -> dict[str, str]:
     names: dict[str, str] = {}
+    conflicts: set[str] = set()
     for message in messages:
         if (
             not isinstance(message, dict)
@@ -376,8 +377,14 @@ def _tool_call_name_map(
             name = ""
             if isinstance(function, dict):
                 name = _exact_code(function.get("name"))
-            if call_id and name:
+            if not call_id or not name or call_id in conflicts:
+                continue
+            prior = names.get(call_id)
+            if prior is None:
                 names[call_id] = name
+            elif prior != name:
+                names.pop(call_id, None)
+                conflicts.add(call_id)
     return names
 
 
@@ -866,9 +873,19 @@ def project_run_status(payload: Any) -> dict[str, Any] | None:
 def project_stream_event(
     event_name: str,
     data: Any,
+    *,
+    expected_session_id: str | None = None,
 ) -> tuple[str, dict[str, Any]] | None:
     if not isinstance(data, dict):
         return None
+    if expected_session_id and "session_id" in data:
+        raw_session_id = data.get("session_id")
+        if (
+            not isinstance(raw_session_id, str)
+            or raw_session_id != expected_session_id
+            or _safe_id(raw_session_id) != raw_session_id
+        ):
+            return None
     name = str(event_name or data.get("event") or "").strip()
     common = _common(data)
 
