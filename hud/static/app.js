@@ -589,8 +589,16 @@ function showApproval(data) {
 async function decideApproval(choice) {
   const event = state.approvalEvent;
   const runId = event?.run_id;
-  if (!runId) {
-    setCore("ERROR", "Approval has no active Hermes run");
+  if (
+    !runId ||
+    state.approvalEvent !== event ||
+    state.activeRunId !== runId
+  ) {
+    hideApproval();
+    setCore(
+      "ERROR",
+      "Approval no longer active // decision controls withheld",
+    );
     return;
   }
   for (const button of ui.approvalActions.querySelectorAll("button")) button.disabled = true;
@@ -989,8 +997,19 @@ async function sendMessage(event) {
   } catch (error) {
     setCore("ERROR", `Turn failed: ${error.message}`);
   } finally {
+    const unterminatedRunId = state.activeRunId;
     state.streaming = false;
     state.activeRunId = "";
+    if (unterminatedRunId || state.approvalEvent) {
+      hideApproval();
+      if (state.actionProjection?.durability !== "completed_record") {
+        state.actionProjection = null;
+      }
+      setCore(
+        "ERROR",
+        "Hermes stream ended before terminal run state // approval controls withheld",
+      );
+    }
     updateRunControls();
     await loadMessages();
   }

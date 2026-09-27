@@ -364,11 +364,9 @@ def _tool_call_name_map(
 
 def _tool_name(message: dict[str, Any], names: dict[str, str]) -> str:
     if "tool_name" in message:
-        direct = _exact_code(message.get("tool_name"))
-    else:
-        direct = _exact_code(message.get("name"))
-    if direct:
-        return direct
+        return _exact_code(message.get("tool_name"))
+    if "name" in message:
+        return _exact_code(message.get("name"))
     call_id = _exact_id(message.get("tool_call_id"))
     return names.get(call_id, "")
 

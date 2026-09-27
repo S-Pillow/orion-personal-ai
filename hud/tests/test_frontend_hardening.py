@@ -190,11 +190,29 @@ class FrontendHardeningContractTests(unittest.TestCase):
     def test_late_approval_receipt_is_discarded_after_terminal_state(self):
         self.assertGreaterEqual(
             APP_JS.count("state.approvalEvent !== event"),
-            2,
+            3,
         )
         self.assertGreaterEqual(
             APP_JS.count("state.activeRunId !== runId"),
-            2,
+            3,
+        )
+        self.assertIn(
+            "Approval no longer active // decision controls withheld",
+            APP_JS,
+        )
+
+    def test_stream_eof_clears_orphaned_approval_state(self):
+        self.assertIn(
+            "const unterminatedRunId = state.activeRunId;",
+            APP_JS,
+        )
+        self.assertIn(
+            "if (unterminatedRunId || state.approvalEvent)",
+            APP_JS,
+        )
+        self.assertIn(
+            "Hermes stream ended before terminal run state // approval controls withheld",
+            APP_JS,
         )
 
     def test_terminal_run_events_require_active_run_match(self):

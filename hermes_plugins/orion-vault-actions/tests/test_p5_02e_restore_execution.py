@@ -217,6 +217,7 @@ class DisposableRestoreExecutionTests(unittest.TestCase):
         self.assertEqual(note.read_bytes(), b"before\n")
         self.assertEqual(result["recovery_id"], restore["plan_token"])
         self.assertNotEqual(result["recovery_id"], origin["plan_token"])
+        self.assertEqual(result["target_relative_path"], "note.md")
 
         recovery = Path(result["recovery_dir"])
         self.assertEqual((recovery / "before_restore.bin").read_bytes(), b"after\n")
@@ -503,6 +504,7 @@ class DisposableRestoreExecutionTests(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertEqual(draft.read_bytes(), source_bytes)
         self.assertEqual(target.read_bytes(), target_before)
+        self.assertEqual(result["source_draft"], "draft.md")
         recovery = Path(result["recovery_dir"])
         self.assertEqual(
             (recovery / "created_source.bin").read_bytes(), source_bytes

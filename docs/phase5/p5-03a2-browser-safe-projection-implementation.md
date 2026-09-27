@@ -80,10 +80,10 @@ Protected `succeeded` requires the accepted action-specific structured result
 shape, explicit `mutation_performed=true`, explicit
 `recovery_required=false`, a valid recovery identifier, no contradictory
 error, an exact canonical protected tool identity and action identifier, and
-byte-preserving applicable target/source/origin identifiers. Restore success
-additionally requires its action-specific restored-object path
+byte-preserving applicable target/source/origin identifiers. Restore success additionally requires its action-specific restored-object path
 (`target_relative_path` for edit restore and `source_draft` for move-source
-restore). Incomplete, normalized-away, or contradictory
+restore), and the production restore executor emits those same resolved relative
+paths in successful structured results. Incomplete, normalized-away, or contradictory
 success-shaped evidence is projected as `unknown`, never as success. Any preview payload containing an `error` member is never projected
 as `preview_ready`, even when that member cannot be normalized into a safe
 error code. Preview evidence with a present non-false `recovery_required`
@@ -113,6 +113,9 @@ In particular:
   action evidence rather than transient approval state;
 - terminal completion without action evidence, failure, or cancellation cannot
   leave an accepted approval looking like execution is still pending;
+- approval decisions are refused before network submission unless the pending
+  approval still belongs to the active streamed run; if the SSE stream ends
+  without a matching terminal event, pending approval controls are cleared;
 - late approval POST success or rejection is discarded once the pending
   approval or active run has cleared or changed, and terminal events for a
   non-active run are ignored before they can alter approval, evidence, or core
@@ -121,7 +124,8 @@ In particular:
   every explicit `recovery_required=true` protected-action result is projected
   as failure so the strongest safety state cannot be suppressed;
 - protected tool identities are accepted only when raw byte-exact and
-  allowlisted; normalization cannot manufacture tool authority;
+  allowlisted; an explicit malformed direct identity cannot fall through to a
+  valid tool-call map, so normalization cannot manufacture tool authority;
 - terminal `run.completed` action evidence ignores explicitly run-bound nested
   tool messages whose raw run ID does not match the terminal run.
 
