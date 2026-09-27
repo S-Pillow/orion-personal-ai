@@ -7,6 +7,7 @@ from pathlib import Path
 HUD_ROOT = Path(__file__).resolve().parents[1]
 APP_JS = (HUD_ROOT / "static" / "app.js").read_text(encoding="utf-8")
 STYLES = (HUD_ROOT / "static" / "styles.css").read_text(encoding="utf-8")
+INDEX_HTML = (HUD_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 
 
 class FrontendHardeningContractTests(unittest.TestCase):
@@ -179,7 +180,7 @@ class FrontendHardeningContractTests(unittest.TestCase):
     def test_approval_event_must_match_active_streamed_run(self):
         self.assertIn("runId !== state.activeRunId", APP_JS)
         self.assertIn(
-            "Approval run mismatch // decision controls withheld",
+            "Approval run mismatch // current decision controls preserved",
             APP_JS,
         )
         self.assertNotIn(
@@ -223,6 +224,82 @@ class FrontendHardeningContractTests(unittest.TestCase):
             APP_JS.count("runId !== state.activeRunId"),
             4,
         )
+
+
+    def test_action_evidence_workspace_is_contextual_and_structured(self):
+        for marker in (
+            'id="actionEvidencePanel"',
+            'class="panel action-evidence-panel hidden"',
+            'id="actionStateBadge"',
+            'id="actionDiff"',
+            'id="actionEvidenceList"',
+            'id="actionTechnicalList"',
+        ):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, INDEX_HTML)
+        self.assertIn("function renderActionWorkspace(projection)", APP_JS)
+        self.assertIn("renderActionWorkspace(null);", APP_JS)
+        self.assertIn('ui.actionEvidencePanel.classList.add("hidden")', APP_JS)
+
+    def test_action_workspace_keeps_approval_distinct_from_execution(self):
+        self.assertIn(
+            "Hermes approval is not execution evidence.",
+            INDEX_HTML,
+        )
+        self.assertIn('execution: "UNPROVEN"', APP_JS)
+        self.assertIn(
+            "Protected execution remains unproven.",
+            APP_JS,
+        )
+
+    def test_action_workspace_renders_exact_diff_and_allowlisted_technical_fields(self):
+        self.assertIn('ui.actionDiff.textContent = diff;', APP_JS)
+        self.assertIn("const ACTION_TECHNICAL_FIELDS = [", APP_JS)
+        self.assertIn("technicalEvidenceRows(projection)", APP_JS)
+        self.assertIn("white-space: pre;", STYLES)
+        self.assertNotIn("JSON.stringify(projection", APP_JS)
+
+    def test_action_workspace_recent_evidence_is_presentation_only(self):
+        self.assertIn("state.actionEvidence.slice(-5).reverse()", APP_JS)
+        self.assertIn('item.className = "action-evidence-item";', APP_JS)
+        self.assertNotIn("actionEvidenceList.addEventListener", APP_JS)
+
+    def test_disappearing_selected_session_clears_action_evidence(self):
+        anchor = 'else if (previous) {'
+        start = APP_JS.index(anchor)
+        self.assertGreaterEqual(start, 0)
+        block = APP_JS[start:start + 420]
+        self.assertIn('state.sessionId = "";', block)
+        self.assertIn("clearActionProjection();", block)
+        self.assertIn("hideApproval();", block)
+
+    def test_mismatched_approval_preserves_current_valid_controls(self):
+        start = APP_JS.index('case "approval.request":')
+        end = APP_JS.index('case "assistant.completed":', start)
+        self.assertGreaterEqual(start, 0)
+        self.assertGreater(end, start)
+        block = APP_JS[start:end]
+        projection_check = block.index(
+            'if (data?.projection?.state !== "approval_requested")'
+        )
+        mismatch_block = block[:projection_check]
+        self.assertNotIn("hideApproval();", mismatch_block)
+        self.assertIn(
+            "Approval run mismatch // current decision controls preserved",
+            mismatch_block,
+        )
+
+    def test_pending_approval_precedes_evidence_and_scrolls_controls_into_view(self):
+        approval_at = INDEX_HTML.index('id="approvalPanel"')
+        evidence_at = INDEX_HTML.index('id="actionEvidencePanel"')
+        self.assertGreaterEqual(approval_at, 0)
+        self.assertGreaterEqual(evidence_at, 0)
+        self.assertLess(approval_at, evidence_at)
+        self.assertIn(
+            'typeof ui.approvalPanel.scrollIntoView === "function"',
+            APP_JS,
+        )
+        self.assertIn("ui.approvalPanel.scrollIntoView({", APP_JS)
 
     def test_startup_loads_persisted_session_history_once(self):
         self.assertIn(
