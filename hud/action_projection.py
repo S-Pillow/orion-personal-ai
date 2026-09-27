@@ -224,10 +224,16 @@ def project_approval_request(data: dict[str, Any]) -> dict[str, Any]:
         and raw_command == raw_command.strip()
     )
     description = _exact_text(data.get("description"))
+    description_meaningful = bool(
+        isinstance(description, str) and description.strip()
+    )
     choices = _approval_choices(data.get("choices"))
     run_id = raw_run_id if run_id_exact else None
     exact_ready = bool(
-        run_id and command_exact and description and choices
+        run_id
+        and command_exact
+        and description_meaningful
+        and choices
     )
     unavailable_reason = (
         "approval_run_id_unavailable"
@@ -334,16 +340,29 @@ def _message_matches_run(
     return _exact_id(message.get("run_id")) == expected_run_id
 
 
+def _message_matches_session(
+    message: dict[str, Any],
+    expected_session_id: str | None,
+) -> bool:
+    if not expected_session_id or "session_id" not in message:
+        return True
+    return _exact_id(message.get("session_id")) == expected_session_id
+
+
 def _tool_call_name_map(
     messages: Iterable[Any],
     *,
     expected_run_id: str | None = None,
+    expected_session_id: str | None = None,
 ) -> dict[str, str]:
     names: dict[str, str] = {}
     for message in messages:
         if (
             not isinstance(message, dict)
             or not _message_matches_run(message, expected_run_id)
+            or not _message_matches_session(
+                message, expected_session_id
+            )
         ):
             continue
         calls = message.get("tool_calls")
@@ -363,10 +382,34 @@ def _tool_call_name_map(
 
 
 def _tool_name(message: dict[str, Any], names: dict[str, str]) -> str:
-    if "tool_name" in message:
-        return _exact_code(message.get("tool_name"))
-    if "name" in message:
-        return _exact_code(message.get("name"))
+    has_tool_name = "tool_name" in message
+    has_name = "name" in message
+    direct_tool_name = (
+        _exact_code(message.get("tool_name"))
+        if has_tool_name
+        else ""
+    )
+    direct_name = (
+        _exact_code(message.get("name"))
+        if has_name
+        else ""
+    )
+
+    if has_tool_name and not direct_tool_name:
+        return ""
+    if has_name and not direct_name:
+        return ""
+    if has_tool_name and has_name:
+        return (
+            direct_tool_name
+            if direct_tool_name == direct_name
+            else ""
+        )
+    if has_tool_name:
+        return direct_tool_name
+    if has_name:
+        return direct_name
+
     call_id = _exact_id(message.get("tool_call_id"))
     return names.get(call_id, "")
 
@@ -682,12 +725,14 @@ def project_action_evidence(
     hydrated: bool = False,
     limit: int = 20,
     expected_run_id: str | None = None,
+    expected_session_id: str | None = None,
 ) -> list[dict[str, Any]]:
     if not isinstance(messages, list):
         return []
     names = _tool_call_name_map(
         messages,
         expected_run_id=expected_run_id,
+        expected_session_id=expected_session_id,
     )
     items: list[dict[str, Any]] = []
     for message in messages:
@@ -695,6 +740,9 @@ def project_action_evidence(
             not isinstance(message, dict)
             or message.get("role") != "tool"
             or not _message_matches_run(message, expected_run_id)
+            or not _message_matches_session(
+                message, expected_session_id
+            )
         ):
             continue
         projected = project_tool_message(message, name_map=names, hydrated=hydrated)
@@ -778,7 +826,11 @@ def project_action_evidence_payload(
         "session_id": session_id,
         "source": "hermes_session_messages",
         "current_recovery_visibility": "unavailable",
-        "items": project_action_evidence(rows, hydrated=True),
+        "items": project_action_evidence(
+            rows,
+            hydrated=True,
+            expected_session_id=session_id,
+        ),
     }
 
 

@@ -48,6 +48,21 @@ class ProjectionHermesHandler(BaseHTTPRequestHandler):
                         "content": "reply",
                     },
                     {
+                        "id": "3-other",
+                        "session_id": "session_other",
+                        "role": "tool",
+                        "tool_name": "orion_vault_apply_plan",
+                        "tool_call_id": "call_other",
+                        "content": json.dumps({
+                            "success": True,
+                            "mutation_performed": True,
+                            "recovery_required": False,
+                            "recovery_id": "e" * 64,
+                            "action": "edit_note",
+                            "target_relative_path": "other.md",
+                        }),
+                    },
+                    {
                         "id": "3",
                         "session_id": "session_1",
                         "role": "tool",
@@ -235,7 +250,12 @@ class ProjectionBridgeTests(unittest.TestCase):
             "/api/sessions/session_1/messages?order=latest&limit=500",
             ProjectionHermesHandler.requested_paths,
         )
+        self.assertEqual(len(evidence["items"]), 1)
         self.assertEqual(evidence["items"][0]["state"], "succeeded")
+        self.assertEqual(
+            evidence["items"][0].get("session_id"),
+            "session_1",
+        )
         self.assertEqual(
             evidence["current_recovery_visibility"], "unavailable"
         )

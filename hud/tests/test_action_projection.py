@@ -174,6 +174,21 @@ class ActionProjectionTests(unittest.TestCase):
             "approval_requested",
         )
 
+    def test_blank_approval_description_withholds_choices(self):
+        for description in ("", " ", "\t\r\n"):
+            with self.subTest(description=repr(description)):
+                projected = project_approval_request({
+                    "run_id": "run_1",
+                    "command": "orion_vault_apply_plan",
+                    "description": description,
+                    "choices": ["once", "deny"],
+                })
+                self.assertEqual(
+                    projected["projection"]["state"],
+                    "unavailable",
+                )
+                self.assertEqual(projected["choices"], [])
+
     def test_incomplete_approval_content_withholds_choices(self):
         projected = project_approval_request({
             "run_id": "run_1",
@@ -398,6 +413,28 @@ class ActionProjectionTests(unittest.TestCase):
             },
         ])
         self.assertEqual(mapped, [])
+
+        for tool_name, name in (
+            ("orion_vault_apply_plan", "other_tool"),
+            ("orion_vault_apply_plan", " orion_vault_apply_plan "),
+            (" orion_vault_apply_plan ", "orion_vault_apply_plan"),
+        ):
+            with self.subTest(tool_name=tool_name, name=name):
+                items = project_action_evidence([{
+                    "role": "tool",
+                    "tool_name": tool_name,
+                    "name": name,
+                    "content": json.dumps(success),
+                }])
+                self.assertEqual(items, [])
+
+        matching = project_action_evidence([{
+            "role": "tool",
+            "tool_name": "orion_vault_apply_plan",
+            "name": "orion_vault_apply_plan",
+            "content": json.dumps(success),
+        }])
+        self.assertEqual(matching[0]["state"], "succeeded")
 
     def test_preview_ready_requires_exact_plan_and_diff_evidence(self):
         diff = "--- old\n+++ new\n-old\n+new\n"
@@ -679,6 +716,52 @@ class ActionProjectionTests(unittest.TestCase):
             }),
         }])
         self.assertEqual(missing_recovery["state"], "failed")
+
+    def test_hydrated_evidence_is_bound_to_requested_session(self):
+        result = {
+            "success": True,
+            "mutation_performed": True,
+            "recovery_required": False,
+            "recovery_id": "a" * 64,
+            "action": "edit_note",
+            "target_relative_path": "note.md",
+        }
+        projected = project_action_evidence_payload(
+            {
+                "data": [
+                    {
+                        "role": "tool",
+                        "session_id": "session_B",
+                        "tool_name": "orion_vault_apply_plan",
+                        "content": json.dumps(result),
+                    },
+                    {
+                        "role": "tool",
+                        "session_id": "session_A",
+                        "tool_name": "orion_vault_apply_plan",
+                        "content": json.dumps(result),
+                    },
+                ]
+            },
+            session_id="session_A",
+        )
+        self.assertEqual(len(projected["items"]), 1)
+        self.assertEqual(
+            projected["items"][0]["session_id"], "session_A"
+        )
+
+        malformed = project_action_evidence_payload(
+            {
+                "data": [{
+                    "role": "tool",
+                    "session_id": " session_A ",
+                    "tool_name": "orion_vault_apply_plan",
+                    "content": json.dumps(result),
+                }]
+            },
+            session_id="session_A",
+        )
+        self.assertEqual(malformed["items"], [])
 
     def test_preview_hydration_never_recreates_actionability(self):
         diff = "--- old\n+++ new"

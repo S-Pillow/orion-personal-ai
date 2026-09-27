@@ -50,9 +50,9 @@ The bridge now:
 - exposes decision controls only when both `run.started` and the approval
   event carry raw byte-exact valid authoritative run IDs, those IDs match, and
   the command survives exact byte-preserving validation without truncation,
-  NUL removal, or whitespace
-  normalization; only an absent legacy `command` may fall back to
-  `tool_name`, while an explicit malformed command makes the request
+  NUL removal, or whitespace normalization, and the exact description contains
+  non-whitespace operator-visible content; only an absent legacy `command`
+  may fall back to `tool_name`, while an explicit malformed command makes the request
   unavailable; the browser never falls back to another active run;
 - strips raw `run.completed.messages` from the browser stream and replaces
   them with bounded action evidence;
@@ -108,7 +108,9 @@ In particular:
 - asynchronous hydration is bound to the session ID that initiated the request,
   so a late response from another session is discarded;
 - persisted action hydration explicitly requests Hermes' latest bounded
-  500-message page rather than an oldest-history prefix;
+  500-message page rather than an oldest-history prefix, and any explicitly
+  session-bound row must carry a raw exact session ID matching the requested
+  Hermes session;
 - periodic health refresh re-presents only durable `completed_record`
   action evidence rather than transient approval state;
 - terminal completion without action evidence, failure, or cancellation cannot
@@ -124,8 +126,9 @@ In particular:
   every explicit `recovery_required=true` protected-action result is projected
   as failure so the strongest safety state cannot be suppressed;
 - protected tool identities are accepted only when raw byte-exact and
-  allowlisted; an explicit malformed direct identity cannot fall through to a
-  valid tool-call map, so normalization cannot manufacture tool authority;
+  allowlisted; all explicit direct identity members must be canonical and agree
+  exactly, and a malformed or conflicting direct identity cannot fall through
+  to a valid tool-call map, so normalization cannot manufacture tool authority;
 - terminal `run.completed` action evidence ignores explicitly run-bound nested
   tool messages whose raw run ID does not match the terminal run.
 
