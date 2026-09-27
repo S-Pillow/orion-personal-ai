@@ -10,8 +10,34 @@
   <header class="topbar">
     <div class="brand">
       <span class="brand-mark">ORION</span>
-      <span class="brand-sub">PRIVATE AI COMPANION</span>
+      <span class="brand-sub">YOUR THINKING PARTNER</span>
     </div>
+    <nav class="workspace-switcher" aria-label="Workspace views">
+      <button
+        id="workspaceConversationButton"
+        class="workspace-tab"
+        type="button"
+        data-workspace-target="conversation"
+        aria-pressed="true"
+      >CONVERSATION</button>
+      <button
+        id="workspaceSystemButton"
+        class="workspace-tab"
+        type="button"
+        data-workspace-target="system"
+        aria-pressed="false"
+      >SYSTEM</button>
+      <button
+        id="workspaceMemoryButton"
+        class="workspace-tab"
+        type="button"
+        data-workspace-target="memory"
+        aria-pressed="false"
+      >MEMORY</button>
+      <span class="workspace-context-label">
+        ACTIVE // <b id="workspaceContext">CONVERSATION</b>
+      </span>
+    </nav>
     <div class="top-status">
       <div class="top-status-group infrastructure-status" aria-label="Runtime link status">
         <span id="bridgeStatus" class="status-chip"><i></i> BRIDGE</span>
@@ -69,32 +95,7 @@
     </aside>
 
     <section class="center-stage" aria-label="Orion adaptive workspace">
-      <nav class="workspace-switcher" aria-label="Workspace views">
-        <button
-          id="workspaceConversationButton"
-          class="workspace-tab"
-          type="button"
-          data-workspace-target="conversation"
-          aria-pressed="true"
-        >CONVERSATION</button>
-        <button
-          id="workspaceSystemButton"
-          class="workspace-tab"
-          type="button"
-          data-workspace-target="system"
-          aria-pressed="false"
-        >SYSTEM</button>
-        <button
-          id="workspaceMemoryButton"
-          class="workspace-tab"
-          type="button"
-          data-workspace-target="memory"
-          aria-pressed="false"
-        >MEMORY</button>
-        <span class="workspace-context-label">
-          ACTIVE // <b id="workspaceContext">CONVERSATION</b>
-        </span>
-      </nav>
+
 
       <div
         id="workspaceShell"
@@ -110,6 +111,11 @@
           data-gaze="forward"
           data-motion="full"
         >
+          <div class="scene-depth" aria-hidden="true">
+            <span class="scene-planet"></span>
+            <span class="scene-horizon"></span>
+            <span class="scene-haze"></span>
+          </div>
           <div class="core-presence-label" aria-hidden="true">
             <span>ORION</span>
             <b>COMPANION PRESENCE</b>
