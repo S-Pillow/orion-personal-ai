@@ -6,42 +6,56 @@ from pathlib import Path
 HUD_ROOT = Path(__file__).resolve().parents[1]
 INDEX = (HUD_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 STYLES = (HUD_ROOT / "static" / "styles.css").read_text(encoding="utf-8")
+TARGET = (HUD_ROOT / "static" / "target-layout.css").read_text(encoding="utf-8")
+HERO = (HUD_ROOT / "static" / "orion-hero.svg").read_text(encoding="utf-8")
 APP = (HUD_ROOT / "static" / "app.js").read_text(encoding="utf-8")
 
 
 class FinalVisualConvergenceContractTests(unittest.TestCase):
-    def test_companion_presence_elements_exist(self):
+    def test_owner_target_assets_are_loaded(self):
+        self.assertIn('href="/target-layout.css"', INDEX)
+        self.assertIn('src="/orion-hero.svg"', INDEX)
+        self.assertIn("Orion owner-target layout", TARGET)
+        self.assertIn("<svg", HERO)
+
+    def test_layout_matches_target_zones(self):
         for token in (
-            "core-presence-label",
-            "core-field",
-            "orbit-outer",
-            "orbit-mid",
-            "orbit-inner",
-            "star-a",
-            "star-b",
-            "star-c",
+            "context-sidebar",
+            "hero-scene",
+            "conversation-workspace",
+            "activity-sidebar",
+            "memory-lens",
         ):
             self.assertIn(token, INDEX)
 
-    def test_visual_pass_is_explicitly_presentation_only(self):
-        self.assertIn(
-            "Final visual convergence pass — companion presence and calm workspace",
-            STYLES,
-        )
-        self.assertIn("grid-template-columns:", STYLES)
-        self.assertIn("minmax(720px, 1fr)", STYLES)
+    def test_top_navigation_is_integrated_into_chrome(self):
+        topbar_start = INDEX.index('<header class="topbar">')
+        main_start = INDEX.index('<main class="hud-grid">')
+        topbar = INDEX[topbar_start:main_start]
+        self.assertIn("workspace-switcher", topbar)
+        self.assertIn(">CONVERSATION</button>", topbar)
+        self.assertIn(">SYSTEM</button>", topbar)
+        self.assertIn(">MEMORY</button>", topbar)
 
-    def test_conversation_is_treated_as_primary_surface(self):
-        self.assertIn(".conversation-workspace {", STYLES)
-        self.assertIn(".message-body {", STYLES)
-        self.assertIn("font-size: 14px;", STYLES)
-        self.assertIn(".composer {", STYLES)
+    def test_core_is_scene_not_css_ring_field(self):
+        self.assertIn("hero-scene-art", INDEX)
+        self.assertIn("hero-thoughts-left", INDEX)
+        self.assertIn("hero-thoughts-right", INDEX)
+        self.assertIn("LISTENING. THINKING. WITH YOU.", INDEX)
+        self.assertNotIn("core-field", INDEX)
 
-    def test_diagnostics_are_visually_recessed_without_becoming_hidden(self):
-        self.assertIn(".panel {", STYLES)
-        self.assertIn("background: rgba(7, 16, 19, 0.22);", STYLES)
-        self.assertNotIn(".left-rail { display: none", STYLES)
-        self.assertNotIn(".right-rail { display: none", STYLES)
+    def test_conversation_is_foreground_surface(self):
+        self.assertIn(".conversation-workspace", TARGET)
+        self.assertIn("backdrop-filter: blur(18px);", TARGET)
+        self.assertIn("margin: -38px 32px 14px;", TARGET)
+        self.assertIn(".composer", TARGET)
+
+    def test_context_and_activity_rails_are_editorial(self):
+        self.assertIn(".context-sidebar", TARGET)
+        self.assertIn(".activity-sidebar", TARGET)
+        self.assertIn(".context-section", TARGET)
+        self.assertIn(".operational-section", TARGET)
+        self.assertIn(".operational-card", TARGET)
 
     def test_existing_consequential_surfaces_remain_present(self):
         for element_id in (
@@ -54,19 +68,20 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
         ):
             self.assertIn(f'id="{element_id}"', INDEX)
 
-    def test_core_presence_motion_tracks_existing_state_only(self):
-        for state in ("READY", "THINKING", "FINALIZING", "ACTING", "WAITING", "DEGRADED", "ERROR", "OFFLINE"):
+    def test_live_core_state_and_reduced_motion_remain_supported(self):
+        for state in (
+            "READY",
+            "THINKING",
+            "FINALIZING",
+            "ACTING",
+            "WAITING",
+            "DEGRADED",
+            "ERROR",
+            "OFFLINE",
+        ):
             with self.subTest(state=state):
                 self.assertIn(f'data-core-state="{state}"', STYLES)
         self.assertIn("@media (prefers-reduced-motion: reduce)", STYLES)
-        self.assertIn("animation: none !important;", STYLES)
-
-    def test_review_refinement_reduces_console_density(self):
-        self.assertIn("Visual convergence refinement — companion, not console", STYLES)
-        self.assertIn("font-size: 15px;", STYLES)
-        self.assertIn("height: min(44vh, 500px);", STYLES)
-        self.assertIn("background: transparent;", STYLES)
-        self.assertIn("width: 214px;", STYLES)
 
     def test_visual_pass_does_not_add_runtime_transport(self):
         for token in (
