@@ -99,15 +99,15 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
         self.assertIn("--rail-right-width: 330px;", TARGET)
 
     def test_structural_layout_has_one_authoritative_definition(self):
-        for selector in (
-            ".hud-grid {",
-            ".workspace-shell {",
-            ".conversation-workspace {",
-            ".composer {",
-        ):
-            with self.subTest(selector=selector):
-                self.assertNotIn(selector, STYLES)
+        self.assertNotIn(
+            "grid-template-columns: minmax(230px, 285px) minmax(480px, 1fr) minmax(250px, 320px);",
+            STYLES,
+        )
         self.assertNotIn("grid-template-columns: 1fr 86px 86px;", STYLES + TARGET)
+        self.assertIn("--rail-left-width: 250px;", TARGET)
+        self.assertIn("--workspace-overlap: 42px;", TARGET)
+        self.assertIn("grid-template-columns:\n    var(--rail-left-width)", TARGET)
+        self.assertIn("grid-template-rows: var(--hero-height) minmax(0, 1fr);", TARGET)
 
     def test_composer_run_controls_are_state_explicit(self):
         self.assertIn('class="composer-actions"', INDEX)
