@@ -9,7 +9,7 @@ Implementation head at start of handoff: `b05adb4d88e07af7b1972c4d98df36514220d3
 Live PR head: **query PR #51 before any work; handoff/document commits advance the branch**
 PR base: `ee03c567280026069c403bcfbdce2da5da2e3c28`
 PR state: **OPEN / DRAFT / NOT ACCEPTED / NOT MERGE-READY**
-Observed GitHub mergeability at handoff: **false**
+Observed GitHub mergeability at latest review: **true**
 Do not merge PR #51 until the visual architecture is materially closer to the owner target and all relevant source/visual checks are rerun on the final exact head.
 
 ---
@@ -832,7 +832,7 @@ Review activity now includes simulated presentation-only work items.
 
 ## 11. Known technical debt in active PR
 
-### 11.1 CSS layering is too large
+### 11.1 CSS layering is too large — partial cleanup must happen early
 
 Current PR has both:
 
@@ -840,17 +840,28 @@ Current PR has both:
 - new `target-layout.css`
 - many accumulated convergence overrides still appended to `styles.css`
 
-This is acceptable as an intermediate branch state but should **not** be the final architecture.
+This is acceptable only as an intermediate branch state and should **not** be the final architecture.
 
-Before final acceptance, rationalize styling.
+Important sequencing adjustment: do **not** postpone all CSS cleanup until the end. During the next token/layout refactor, immediately consolidate the structural selectors being actively changed so new work is not layered on top of contradictory legacy rules.
 
-Recommended direction:
+Early consolidation targets:
 
-- keep generic/base tokens/reset/layout primitives in `styles.css`
-- keep final product composition in `target-layout.css`
-- delete superseded visual-convergence override blocks from `styles.css`
+- `.hud-grid`
+- `.workspace-shell`
+- `.conversation-workspace`
+- `.composer`
+- primary desktop breakpoints for those selectors
+
+Then, after the design stabilizes, perform the broader cleanup of obsolete convergence blocks and duplicate media-query rules.
+
+Final direction:
+
+- keep generic/base tokens/reset/shared behavioral styling in `styles.css`
+- keep final Orion composition in `target-layout.css`
+- delete superseded visual-convergence overrides from `styles.css`
 - reduce contradictory cascade layers
 - introduce shared design tokens at root
+- maintain one authoritative desktop definition for each core structural selector
 
 Do not keep stacking new override blocks indefinitely.
 
@@ -860,15 +871,15 @@ Fixture-only data and presentation seeds must remain clearly test-only.
 
 Never move fake activity/project/context facts into production markup merely because the reference looks populated.
 
-### 11.3 Mergeability false
+### 11.3 Mergeability / branch relation
 
-At handoff, GitHub reports PR #51 mergeable=false.
+At the latest review, GitHub reports PR #51 as mergeable.
 
-Re-query after branch settles.
+The branch is **38 commits ahead of `main` and 0 commits behind**.
 
-If actual conflicts exist, reconcile against current main before visual acceptance.
+Always re-query before any merge or rebase because this state can change as the branch advances.
 
-Do not resolve conflicts by discarding accepted Phase 5 truth logic.
+If actual conflicts appear later, reconcile against current main before visual acceptance and do not resolve conflicts by discarding accepted Phase 5 truth logic.
 
 ### 11.4 No final source gate yet
 
@@ -901,19 +912,19 @@ Do not recreate the earlier pattern of forcing long pass/fail questionnaires whi
 
 The next agent should proceed in this order.
 
-### Step 1 — Verify current branch
+### Step 1 — Verify current branch, then revalidate protected approval fixture
 
-Check:
+Before writes, query PR #51 for the live head, draft state, mergeability, and relation to `main`.
 
-- PR #51 head = `b05adb4d88e07af7b1972c4d98df36514220d3b1`
-- branch = `feature/orion-ui-visual-convergence-pass`
-- base = `ee03c567280026069c403bcfbdce2da5da2e3c28`
-- re-query mergeability
-- working tree/user local state before giving commands
+Current known branch relation at this review:
 
-### Step 2 — Revalidate summon-approval fixture after race fix
+- 38 commits ahead of `main`
+- 0 commits behind
+- GitHub reports mergeable=true
 
-Use isolated UI review fixture.
+Do not hard-code an old branch head from this document; the handoff/document commits themselves advance the branch.
+
+Then run only the bounded isolated `summon-approval` fixture check.
 
 Verify:
 
@@ -936,44 +947,189 @@ If approval is still absent:
 - inspect submit timing
 - do **not** assume production regression until isolated fixture behavior is understood
 
-### Step 3 — Build design tokens/layout system before more micro-polish
+This is a bounded consequential-state verification, not a broad visual acceptance gate.
 
-Refactor target layout around shared variables.
+### Step 2 — Introduce shared layout/design tokens and remove structural cascade conflicts at the same time
 
-Do this before another dozen ad hoc offsets.
+Do not merely add variables on top of the existing cascade.
 
-### Step 4 — Fix composer
+Introduce and actually use structural tokens such as:
 
-Highest visible interaction defect.
+- `--header-height`
+- `--rail-left-width`
+- `--rail-right-width`
+- `--workspace-max-width`
+- `--hero-height`
+- `--content-gutter`
+- `--conversation-max-width`
+- `--composer-height`
+- `--workspace-overlap`
+- `--panel-radius`
+- `--space-*`
+- `--surface-*`
+- `--text-*`
+- semantic state colors
 
-Goal:
+Immediately consolidate competing definitions for:
 
+- `.hud-grid`
+- `.workspace-shell`
+- `.conversation-workspace`
+- `.composer`
+- the primary desktop breakpoints governing those selectors
+
+The purpose of this step is to establish one structural source of truth before more visual refinement.
+
+### Step 3 — Rebuild composer and Send/Stop state semantics
+
+This is the highest-priority visible interaction defect.
+
+Replace the current three-column architecture with a two-region composer:
+
+```css
+.composer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+}
+
+.composer-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+```
+
+Preferred runtime semantics:
+
+- idle: Send visible/primary; Stop hidden
+- generating: Stop visible/prominent; Send hidden or disabled according to the chosen model
+- explicit `:focus-visible`
 - one coherent composer shell
-- action inset
-- explicit idle/generating semantics
-- meaningful Send/Stop hierarchy
-- robust focus state
-- no nested border collision
+- inset action region
+- no nested border/radius collision
+- sufficient right-side breathing room
 
-### Step 5 — Finish center vertical architecture
+If existing tests/accessibility requirements make permanent Stop presence necessary, then Stop must be unmistakably disabled while idle.
 
-Make hero + conversation + composer read as one system.
+Current implementation detail that motivates this change:
 
-### Step 6 — Improve hero/readability
+```css
+.composer {
+  display: grid;
+  grid-template-columns: 1fr 86px 86px;
+  gap: 8px;
+}
+```
 
-Lift environmental midtones and refine face/state position.
+and:
 
-### Step 7 — Normalize rails and header
+```js
+function updateRunControls() {
+  ui.stopButton.disabled = !state.activeRunId;
+  ui.sendButton.disabled = state.streaming;
+}
+```
 
-Fix density, label hierarchy, telemetry grouping, and responsive behavior.
+Those two facts directly explain the current ambiguous Send/Stop presentation.
 
-### Step 8 — Clean CSS architecture
+### Step 4 — Rebuild center vertical composition
 
-Remove superseded overrides.
+Only after the composer is structurally coherent, treat hero + foreground workspace + composer as one system.
 
-### Step 9 — Run focused source tests
+Preferred conceptual architecture:
 
-At minimum:
+```text
+workspace
+├─ hero
+└─ foreground-workspace
+   ├─ transcript
+   └─ composer
+```
+
+Use one controlled overlap token such as:
+
+```css
+--workspace-overlap: 40px;
+```
+
+Avoid continuing the sequence of unrelated negative-margin patches.
+
+The central axis/hero geometry should terminate or visually feed into the foreground workspace deliberately.
+
+### Step 5 — Refine hero depth / face / state treatment
+
+Keep the dedicated SVG approach.
+
+Do not return to CSS-only ring reconstruction.
+
+Focus on:
+
+- lifting platform/horizon midtones
+- making central volume visible at normal monitor brightness
+- slightly increasing/refining eye size and position
+- deciding whether `READY` belongs inside the face
+- strengthening connection from central axis into foreground workspace
+- increasing atmospheric luminance gradient rather than just glow
+- keeping state-driven DOM/CSS semantics separate from decorative artwork
+
+### Step 6 — Normalize rails and header
+
+Do this after the center composition is working.
+
+Left rail:
+
+- strengthen Memory Authority
+- increase readable value sizes
+- make bottom landscape/quote an intentional termination
+- improve native session select styling without replacing accessible native semantics
+- reduce empty vertical distribution without inventing fake projects
+
+Right rail:
+
+- collapse Current Activity intelligently when empty
+- retain approval prominence
+- improve Memory Lens hierarchy
+- make System Details an obvious disclosure control
+- prevent Approval + Action Evidence + Memory Lens from becoming an undifferentiated tall stack
+
+Header:
+
+- increase primary navigation scale
+- group provenance/status data semantically
+- de-emphasize or remove seconds
+- reduce micro-uppercase overload
+- align header to the same shell grid as the body
+
+### Step 7 — Responsive hardening
+
+Responsive checks must happen during each structural step, not only at the end.
+
+At minimum sanity-check after every major structural change:
+
+- 1366×768
+- 1440×900
+- 1920×1080
+- current large viewport
+- 125% browser zoom
+
+Final responsive acceptance can occur later, but do not allow structural changes to accumulate without these checks.
+
+Side rails need independent responsive behavior; do not simply squeeze all three columns proportionally.
+
+### Step 8 — Finish broad CSS consolidation
+
+After the visual structure stabilizes:
+
+- keep reset/base/tokens/shared behavioral styles in `styles.css`
+- keep final Orion composition in `target-layout.css`
+- delete obsolete convergence override blocks
+- collapse duplicate media queries
+- remove superseded structural definitions
+- ensure one authoritative desktop definition for each major structural selector
+
+### Step 9 — Focused tests, then full HUD tests
+
+At minimum run:
 
 - visual convergence contract test
 - fixture tests
@@ -982,13 +1138,29 @@ At minimum:
 - summon rendering
 - frontend hardening / bridge tests relevant to changed files
 
-Then full HUD suite when candidate stabilizes.
+Then run the full relevant HUD suite after the candidate stabilizes.
 
-### Step 10 — One final visual review
+### Step 10 — One owner visual comparison
 
-Compare directly against owner target.
+Compare directly against the owner target.
 
-Only after owner says the visual direction is genuinely close should formal acceptance begin.
+Do not use a long intermediate Y/N acceptance questionnaire.
+
+Only after the owner says the visual direction is genuinely close should formal acceptance begin.
+
+### Step 11 — Exact-head acceptance and PR readiness
+
+On the final exact candidate head:
+
+- source acceptance
+- bounded visual acceptance
+- Hermes installed source / rollback evidence unchanged
+- clean worktree
+- responsive acceptance
+- exact accepted SHA recorded
+- PR no longer draft
+- mergeability clean
+- final merge only after all above are satisfied
 
 ---
 
@@ -1182,4 +1354,4 @@ The next agent should **not** restart from the old Observatory/HUD design and sh
 
 The correct continuation is:
 
-**formalize the layout system → fix composer → unify hero/conversation → normalize rails/header → stabilize fixture → clean CSS → review visually → only then run final acceptance.**
+**revalidate protected fixture → formalize tokens + remove structural cascade conflicts → rebuild composer → unify hero/conversation → refine hero → normalize rails/header → harden responsiveness → finish CSS consolidation → test → owner review → exact-head acceptance.**
