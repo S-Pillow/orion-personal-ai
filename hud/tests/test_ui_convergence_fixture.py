@@ -28,6 +28,16 @@ class UIConvergenceFixtureContractTests(unittest.TestCase):
         self.assertIn('state.sessionId = "session_1";', PROBE)
         self.assertIn("await loadMessages();", PROBE)
 
+    def test_fixture_avoids_duplicate_session_bootstrap_for_summon_approval(self):
+        self.assertIn(
+            'if (__fixtureMode === "review" || __fixtureMode === "summon")',
+            PROBE,
+        )
+        self.assertNotIn(
+            '__fixtureMode === "review"\n  || __fixtureMode === "summon"\n  || __fixtureMode === "summon-approval"',
+            PROBE,
+        )
+
     def test_fixture_can_auto_drive_real_submit_path_for_approval_overlap(self):
         self.assertIn('__fixtureMode === "summon-approval"', PROBE)
         self.assertIn('state.sessionId = "session_1";', PROBE)
