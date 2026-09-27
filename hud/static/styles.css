@@ -2496,3 +2496,114 @@ body {
     animation: none !important;
   }
 }
+
+
+/* Final visual convergence — state-driven companion presence */
+@keyframes orbit-drift-soft {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+@keyframes orbit-drift-reverse {
+  from { transform: translate(-50%, -50%) rotate(360deg); }
+  to { transform: translate(-50%, -50%) rotate(0deg); }
+}
+
+@keyframes star-breathe {
+  0%, 100% { opacity: 0.28; transform: scale(0.88); }
+  50% { opacity: 0.76; transform: scale(1.12); }
+}
+
+@keyframes field-pulse {
+  0%, 100% { opacity: 0.72; }
+  50% { opacity: 1; }
+}
+
+.core-field {
+  opacity: 0.72;
+  transition:
+    opacity 220ms ease,
+    filter 220ms ease,
+    transform 220ms ease;
+}
+
+.orbit-mid {
+  animation: orbit-drift-soft 46s linear infinite;
+}
+
+.orbit-inner {
+  animation: orbit-drift-reverse 33s linear infinite;
+}
+
+.core-star {
+  animation: star-breathe 5.8s ease-in-out infinite;
+}
+
+.star-b { animation-delay: -1.7s; }
+.star-c { animation-delay: -3.2s; }
+
+.core-stage[data-core-state="READY"] .core-field {
+  opacity: 0.72;
+}
+
+.core-stage[data-core-state="THINKING"] .core-field,
+.core-stage[data-core-state="FINALIZING"] .core-field,
+.core-stage[data-core-state="LINKING"] .core-field {
+  opacity: 0.94;
+  filter: saturate(1.08);
+  animation: field-pulse 2.8s ease-in-out infinite;
+}
+
+.core-stage[data-core-state="THINKING"] .orbit-mid,
+.core-stage[data-core-state="FINALIZING"] .orbit-mid {
+  animation-duration: 18s;
+}
+
+.core-stage[data-core-state="THINKING"] .orbit-inner,
+.core-stage[data-core-state="FINALIZING"] .orbit-inner {
+  animation-duration: 13s;
+}
+
+.core-stage[data-core-state="ACTING"] .core-field {
+  opacity: 0.92;
+  transform: translateX(-50%) translateX(7px);
+}
+
+.core-stage[data-core-state="WAITING"] .core-field {
+  opacity: 0.88;
+  transform: translateX(-50%) translateX(7px);
+}
+
+.core-stage[data-core-state="DEGRADED"] .core-field,
+.core-stage[data-core-state="ERROR"] .core-field,
+.core-stage[data-core-state="OFFLINE"] .core-field {
+  opacity: 0.38;
+  filter: saturate(0.62);
+}
+
+.core-stage[data-core-state="OFFLINE"] .core-star,
+.core-stage[data-core-state="ERROR"] .core-star {
+  animation-play-state: paused;
+}
+
+.core-stage[data-workspace-focus="approval"] .core-field,
+.workspace-shell[data-workspace-focus="approval"] .core-field {
+  opacity: 1;
+}
+
+.workspace-shell[data-workspace-focus="approval"] .conversation-workspace {
+  border-color: rgba(220, 199, 142, 0.18);
+}
+
+.workspace-shell[data-workspace-focus="summon"] .conversation-workspace {
+  border-color: rgba(103, 220, 219, 0.13);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .core-field,
+  .core-orbit,
+  .core-star {
+    animation: none !important;
+    transition: none !important;
+  }
+}
