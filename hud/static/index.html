@@ -54,44 +54,44 @@
   </header>
 
   <main class="hud-grid">
-    <aside class="rail left-rail" aria-label="Orion status and session controls">
-      <section class="panel peripheral-panel system-link-panel">
-        <div class="panel-title"><span>SYSTEM LINK</span><b>01</b></div>
-        <dl class="status-list">
+    <aside class="rail left-rail context-sidebar" aria-label="Orion session and context">
+      <section class="context-section session-context">
+        <div class="context-label"><span>SESSION</span><button id="newSession" class="context-add" type="button" aria-label="Create new Orion session">+</button></div>
+        <label class="field-label" for="sessionSelect">Current conversation</label>
+        <select id="sessionSelect" class="select-control" aria-label="Hermes session">
+          <option value="">No session selected</option>
+        </select>
+        <div id="sessionMeta" class="context-note">Hermes SessionDB is authoritative.</div>
+      </section>
+
+      <section class="context-section memory-authority">
+        <div class="context-label"><span>MEMORY AUTHORITY</span></div>
+        <div class="context-feature">
+          <span class="context-icon" aria-hidden="true">◯</span>
+          <div>
+            <strong>IAI (Native Brain)</strong>
+            <p>I explain. I do not own.</p>
+          </div>
+        </div>
+        <dl class="context-facts">
+          <div><dt>Authority</dt><dd>iai</dd></div>
+          <div><dt>Baseline</dt><dd>iai-pme 3.0.8</dd></div>
+        </dl>
+      </section>
+
+      <details class="context-section system-context">
+        <summary class="context-label"><span>SYSTEM STATUS</span></summary>
+        <dl class="context-facts">
           <div><dt>Bridge</dt><dd id="bridgeValue">online</dd></div>
           <div><dt>Hermes</dt><dd id="hermesValue">checking</dd></div>
           <div><dt>API credential</dt><dd id="credentialValue">checking</dd></div>
           <div><dt>Lifecycle authority</dt><dd id="lifecycleValue">none</dd></div>
         </dl>
-      </section>
+      </details>
 
-      <section class="panel session-panel">
-        <div class="panel-title"><span>SESSION</span><b>02</b></div>
-        <label class="field-label" for="sessionSelect">Hermes conversation</label>
-        <select id="sessionSelect" class="select-control" aria-label="Hermes session">
-          <option value="">No session selected</option>
-        </select>
-        <button id="newSession" class="outline-button" type="button">+ NEW ORION SESSION</button>
-        <div id="sessionMeta" class="muted-line">Hermes SessionDB is authoritative.</div>
-      </section>
-
-      <section class="panel peripheral-panel memory-link-panel">
-        <div class="panel-title"><span>MEMORY</span><b>03</b></div>
-        <dl class="status-list">
-          <div><dt>Authority</dt><dd>iai</dd></div>
-          <div><dt>Baseline</dt><dd>iai-pme 3.0.8</dd></div>
-          <div><dt>Detail UI</dt><dd>native Brain</dd></div>
-        </dl>
-        <a
-          id="iaiBrainLink"
-          class="outline-button brain-link"
-          href="http://127.0.0.1:4477/"
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Open the native iai Brain loopback surface if it is already running"
-        >OPEN IAI BRAIN</a>
-        <div class="muted-line">Link only // Orion does not start or supervise iai Brain.</div>
-      </section>
+      <div class="context-atmosphere" aria-hidden="true">
+        <blockquote>“A more human future,<br>clearer thinking.”</blockquote>
+      </div>
     </aside>
 
     <section class="center-stage" aria-label="Orion adaptive workspace">
@@ -105,37 +105,34 @@
       >
         <div
           id="coreStage"
-          class="core-stage"
+          class="core-stage hero-scene"
           aria-label="Orion Core"
           data-core-state="READY"
           data-gaze="forward"
           data-motion="full"
         >
-          <div class="scene-depth" aria-hidden="true">
-            <span class="scene-planet"></span>
-            <span class="scene-horizon"></span>
-            <span class="scene-haze"></span>
+          <img class="hero-scene-art" src="/orion-hero.svg" alt="" aria-hidden="true">
+          <div class="hero-thoughts hero-thoughts-left" aria-hidden="true">
+            <span>CLARITY</span>
+            <span>CONTEXT</span>
+            <span>PERSPECTIVE</span>
+            <span>A MORE HUMAN</span>
+            <span>TOMORROW</span>
           </div>
-          <div class="core-presence-label" aria-hidden="true">
-            <span>ORION</span>
-            <b>COMPANION PRESENCE</b>
+          <div class="hero-thoughts hero-thoughts-right" aria-hidden="true">
+            <span>“SAME SKY.</span>
+            <span>BRIGHTER THINKING.”</span>
           </div>
-          <div class="core-field" aria-hidden="true">
-            <span class="core-orbit orbit-outer"></span>
-            <span class="core-orbit orbit-mid"></span>
-            <span class="core-orbit orbit-inner"></span>
-            <span class="core-star star-a"></span>
-            <span class="core-star star-b"></span>
-            <span class="core-star star-c"></span>
-          </div>
-          <div class="core-halo halo-a" aria-hidden="true"></div>
-          <div class="core-halo halo-b" aria-hidden="true"></div>
-          <div class="core-ring">
+          <div class="core-ring live-core">
             <div class="core-mask" aria-hidden="true">
               <span class="core-eye core-eye-left"></span>
               <span class="core-eye core-eye-right"></span>
             </div>
             <span id="coreState">READY</span>
+          </div>
+          <div class="core-presence-label" aria-hidden="true">
+            <span>ORION</span>
+            <b>LISTENING. THINKING. WITH YOU.</b>
           </div>
           <p id="coreDetail">Observed Hermes state // Orion presentation only</p>
         </div>
@@ -425,39 +422,37 @@
       </div>
     </section>
 
-    <aside class="rail right-rail" aria-label="Hermes activity and capabilities">
-      <section class="panel activity-panel">
-        <div class="panel-title"><span>AGENT ACTIVITY</span><b>04</b></div>
+    <aside class="rail right-rail activity-sidebar" aria-label="Orion activity, approvals, and memory context">
+      <section class="activity-panel operational-section">
+        <div class="operational-title"><span>CURRENT ACTIVITY</span></div>
         <div id="activity" class="activity-list">
           <div class="muted-line">No active tool use.</div>
         </div>
       </section>
 
-      <section id="approvalPanel" class="panel approval-panel hidden">
-        <div class="panel-title"><span>APPROVAL REQUIRED</span><b>!</b></div>
+      <section id="approvalPanel" class="approval-panel operational-card hidden">
+        <div class="approval-heading">
+          <span>PENDING APPROVAL</span>
+          <b>!</b>
+        </div>
         <div class="approval-truth">
           <strong>DECISION PENDING</strong>
           <span>Hermes approval is not execution evidence.</span>
         </div>
+        <div class="approval-subhead">WHAT ORION WANTS TO DO</div>
         <div id="approvalDetail" class="approval-detail" tabindex="0" role="region" aria-label="Complete approval details"></div>
         <div id="approvalActions" class="approval-actions"></div>
       </section>
 
       <section
         id="actionEvidencePanel"
-        class="panel action-evidence-panel hidden"
+        class="action-evidence-panel operational-card hidden"
         aria-label="Protected action evidence"
       >
-        <div class="panel-title"><span>ACTION EVIDENCE</span><b>05</b></div>
+        <div class="operational-title"><span>ACTION EVIDENCE</span></div>
         <div class="action-headline">
-          <span
-            id="actionStateBadge"
-            class="action-state-badge"
-            data-action-state="unknown"
-          >UNKNOWN</span>
-          <p id="actionSummary" class="action-summary">
-            No protected action evidence selected.
-          </p>
+          <span id="actionStateBadge" class="action-state-badge" data-action-state="unknown">UNKNOWN</span>
+          <p id="actionSummary" class="action-summary">No protected action evidence selected.</p>
         </div>
         <dl class="action-facts">
           <div><dt>Operation</dt><dd id="actionOperation">—</dd></div>
@@ -479,31 +474,37 @@
         </details>
       </section>
 
-      <section class="panel secondary-panel">
-        <div class="panel-title"><span>CAPABILITIES</span><b>06</b></div>
+      <section class="memory-lens operational-card">
+        <div class="operational-title"><span>MEMORY LENS</span></div>
+        <p>Orion is the explanation layer. Detailed memory administration belongs to native IAI Brain.</p>
+        <dl class="memory-lens-facts">
+          <div><dt>Memory</dt><dd>iai</dd></div>
+          <div><dt>Authority</dt><dd>Observe / handoff</dd></div>
+        </dl>
+        <a
+          id="iaiBrainLink"
+          class="memory-lens-link"
+          href="http://127.0.0.1:4477/"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Open the native iai Brain loopback surface if it is already running"
+        >OPEN NATIVE IAI BRAIN →</a>
+      </section>
+
+      <details class="operational-details">
+        <summary>SYSTEM DETAILS</summary>
         <dl class="status-list">
           <div><dt>Sessions</dt><dd id="capSessions">—</dd></div>
           <div><dt>Run stop</dt><dd id="capStop">—</dd></div>
           <div><dt>Approvals</dt><dd id="capApproval">—</dd></div>
           <div><dt>Streaming</dt><dd id="capStream">—</dd></div>
         </dl>
-      </section>
-
-      <section class="panel split-panel secondary-panel">
-        <div>
-          <div class="mini-title">SKILLS</div>
-          <div id="skillCount" class="big-number">—</div>
+        <div class="compact-inventory">
+          <span>SKILLS <b id="skillCount">—</b></span>
+          <span>JOBS <b id="jobCount">—</b></span>
         </div>
-        <div>
-          <div class="mini-title">JOBS</div>
-          <div id="jobCount" class="big-number">—</div>
-        </div>
-      </section>
-
-      <section class="panel boundary-panel secondary-panel">
-        <div class="panel-title"><span>BOUNDARY</span><b>07</b></div>
-        <p>HUD is a client only. It cannot start, stop, supervise, install, or update Hermes, Ollama, or iai.</p>
-      </section>
+        <p class="boundary-copy">HUD is a client only. It cannot start, stop, supervise, install, or update Hermes, Ollama, or iai.</p>
+      </details>
     </aside>
   </main>
 
