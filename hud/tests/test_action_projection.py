@@ -47,6 +47,43 @@ class ActionProjectionTests(unittest.TestCase):
         self.assertEqual(name, "run.started")
         self.assertEqual(payload["run_id"], "run_1")
 
+    def test_terminal_action_evidence_is_bound_to_terminal_run(self):
+        result = {
+            "success": True,
+            "mutation_performed": True,
+            "recovery_required": False,
+            "recovery_id": "a" * 64,
+            "action": "edit_note",
+            "target_relative_path": "note.md",
+        }
+        projected = project_stream_event(
+            "run.completed",
+            {
+                "event": "run.completed",
+                "run_id": "run_A",
+                "messages": [
+                    {
+                        "role": "tool",
+                        "run_id": "run_B",
+                        "tool_name": "orion_vault_apply_plan",
+                        "content": json.dumps(result),
+                    },
+                    {
+                        "role": "tool",
+                        "run_id": "run_A",
+                        "tool_name": "orion_vault_apply_plan",
+                        "content": json.dumps(result),
+                    },
+                ],
+            },
+        )
+        self.assertIsNotNone(projected)
+        _, payload = projected
+        self.assertEqual(len(payload["action_evidence"]), 1)
+        self.assertEqual(
+            payload["action_evidence"][0]["run_id"], "run_A"
+        )
+
     def test_terminal_stream_events_require_raw_exact_run_id(self):
         for event_name in ("run.completed", "run.cancelled", "run.failed"):
             for bad_run_id in (" run_1 ", 7, {"id": "run_1"}, ""):
@@ -308,6 +345,60 @@ class ActionProjectionTests(unittest.TestCase):
         self.assertEqual(item["state"], "refused")
         self.assertFalse(item["mutation_performed"])
 
+    def test_protected_tool_identity_must_be_raw_exact(self):
+        success = {
+            "success": True,
+            "mutation_performed": True,
+            "recovery_required": False,
+            "recovery_id": "a" * 64,
+            "action": "edit_note",
+            "target_relative_path": "note.md",
+        }
+        for bad_name in (
+            " orion_vault_apply_plan ",
+            "orion_vault_apply_plan\x00",
+            7,
+        ):
+            with self.subTest(tool_name=bad_name):
+                items = project_action_evidence([{
+                    "role": "tool",
+                    "tool_name": bad_name,
+                    "content": json.dumps(success),
+                }])
+                self.assertEqual(items, [])
+
+        mapped = project_action_evidence([
+            {
+                "role": "assistant",
+                "tool_calls": [{
+                    "id": " call_1 ",
+                    "function": {"name": "orion_vault_apply_plan"},
+                }],
+            },
+            {
+                "role": "tool",
+                "tool_call_id": "call_1",
+                "content": json.dumps(success),
+            },
+        ])
+        self.assertEqual(mapped, [])
+
+        mapped = project_action_evidence([
+            {
+                "role": "assistant",
+                "tool_calls": [{
+                    "id": "call_1",
+                    "function": {"name": " orion_vault_apply_plan "},
+                }],
+            },
+            {
+                "role": "tool",
+                "tool_call_id": "call_1",
+                "content": json.dumps(success),
+            },
+        ])
+        self.assertEqual(mapped, [])
+
     def test_preview_ready_requires_exact_plan_and_diff_evidence(self):
         diff = "--- old\n+++ new\n-old\n+new\n"
         plan = {
@@ -490,6 +581,78 @@ class ActionProjectionTests(unittest.TestCase):
             self.assertEqual(
                 projected["reason"], "success_evidence_incomplete"
             )
+
+        restore_cases = (
+            (
+                {
+                    "success": True,
+                    "mutation_performed": True,
+                    "recovery_required": False,
+                    "recovery_id": "a" * 64,
+                    "origin_recovery_id": "b" * 64,
+                    "action": "restore_edit",
+                },
+                "target_relative_path",
+                "note.md",
+            ),
+            (
+                {
+                    "success": True,
+                    "mutation_performed": True,
+                    "recovery_required": False,
+                    "recovery_id": "a" * 64,
+                    "origin_recovery_id": "b" * 64,
+                    "action": "restore_move_source",
+                },
+                "source_draft",
+                "drafts/note.md",
+            ),
+        )
+        for payload, required_field, required_value in restore_cases:
+            with self.subTest(action=payload["action"]):
+                [missing] = project_action_evidence([{
+                    "role": "tool",
+                    "tool_name": "orion_vault_apply_plan",
+                    "content": json.dumps(payload),
+                }])
+                self.assertEqual(missing["state"], "unknown")
+                completed = dict(payload, **{required_field: required_value})
+                [complete_restore] = project_action_evidence([{
+                    "role": "tool",
+                    "tool_name": "orion_vault_apply_plan",
+                    "content": json.dumps(completed),
+                }])
+                self.assertEqual(complete_restore["state"], "succeeded")
+
+    def test_recovery_required_has_failure_precedence(self):
+        for payload in (
+            {
+                "success": True,
+                "mutation_performed": True,
+                "recovery_required": True,
+                "recovery_id": "a" * 64,
+                "action": "edit_note",
+                "target_relative_path": "note.md",
+            },
+            {
+                "success": False,
+                "mutation_performed": False,
+                "recovery_required": True,
+                "error": "approval_evidence_required",
+                "recovery_id": "a" * 64,
+            },
+        ):
+            with self.subTest(payload=payload):
+                [projected] = project_action_evidence([{
+                    "role": "tool",
+                    "tool_name": "orion_vault_apply_plan",
+                    "content": json.dumps(payload),
+                }])
+                self.assertEqual(projected["state"], "failed")
+                self.assertTrue(projected["recovery_required"])
+                self.assertEqual(
+                    projected["reason"], "recovery_required"
+                )
 
     def test_recovery_required_refusal_is_failure_not_refused(self):
         [projected] = project_action_evidence([{

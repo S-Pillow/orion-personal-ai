@@ -313,10 +313,38 @@ def _json_object(content: Any) -> dict[str, Any] | None:
     return parsed if isinstance(parsed, dict) else None
 
 
-def _tool_call_name_map(messages: Iterable[Any]) -> dict[str, str]:
+def _exact_id(value: Any) -> str:
+    if not isinstance(value, str) or not value:
+        return ""
+    return value if _safe_id(value) == value else ""
+
+
+def _exact_code(value: Any) -> str:
+    if not isinstance(value, str) or not value:
+        return ""
+    return value if _safe_code(value) == value else ""
+
+
+def _message_matches_run(
+    message: dict[str, Any],
+    expected_run_id: str | None,
+) -> bool:
+    if not expected_run_id or "run_id" not in message:
+        return True
+    return _exact_id(message.get("run_id")) == expected_run_id
+
+
+def _tool_call_name_map(
+    messages: Iterable[Any],
+    *,
+    expected_run_id: str | None = None,
+) -> dict[str, str]:
     names: dict[str, str] = {}
     for message in messages:
-        if not isinstance(message, dict):
+        if (
+            not isinstance(message, dict)
+            or not _message_matches_run(message, expected_run_id)
+        ):
             continue
         calls = message.get("tool_calls")
         if not isinstance(calls, list):
@@ -324,21 +352,24 @@ def _tool_call_name_map(messages: Iterable[Any]) -> dict[str, str]:
         for call in calls:
             if not isinstance(call, dict):
                 continue
-            call_id = _safe_id(call.get("id"))
+            call_id = _exact_id(call.get("id"))
             function = call.get("function")
             name = ""
             if isinstance(function, dict):
-                name = _safe_code(function.get("name"))
+                name = _exact_code(function.get("name"))
             if call_id and name:
                 names[call_id] = name
     return names
 
 
 def _tool_name(message: dict[str, Any], names: dict[str, str]) -> str:
-    direct = _safe_code(message.get("tool_name") or message.get("name"))
+    if "tool_name" in message:
+        direct = _exact_code(message.get("tool_name"))
+    else:
+        direct = _exact_code(message.get("name"))
     if direct:
         return direct
-    call_id = _safe_id(message.get("tool_call_id"))
+    call_id = _exact_id(message.get("tool_call_id"))
     return names.get(call_id, "")
 
 
@@ -468,8 +499,16 @@ def _success_evidence_complete(result: dict[str, Any]) -> bool:
             _present_text_exact(result.get("source_draft"))
             and _present_text_exact(result.get("target_relative_path"))
         )
-    if action in {"restore_edit", "restore_move_source"}:
-        return _valid_hash(result.get("origin_recovery_id"))
+    if action == "restore_edit":
+        return (
+            _valid_hash(result.get("origin_recovery_id"))
+            and _present_text_exact(result.get("target_relative_path"))
+        )
+    if action == "restore_move_source":
+        return (
+            _valid_hash(result.get("origin_recovery_id"))
+            and _present_text_exact(result.get("source_draft"))
+        )
     return False
 
 
@@ -580,13 +619,12 @@ def project_tool_message(
     recovery_false = raw_recovery is False
     error = _safe_code(result.get("error"))
 
-    if success and mutation and raw_recovery is not False:
+    if recovery_required:
+        state = "failed"
+        projection_reason = "recovery_required"
+    elif success and mutation and raw_recovery is not False:
         state = "unknown"
-        projection_reason = (
-            "conflicting_action_result"
-            if recovery_required
-            else "success_evidence_incomplete"
-        )
+        projection_reason = "success_evidence_incomplete"
     elif success and mutation and error:
         state = "unknown"
         projection_reason = "conflicting_action_result"
@@ -645,13 +683,21 @@ def project_action_evidence(
     *,
     hydrated: bool = False,
     limit: int = 20,
+    expected_run_id: str | None = None,
 ) -> list[dict[str, Any]]:
     if not isinstance(messages, list):
         return []
-    names = _tool_call_name_map(messages)
+    names = _tool_call_name_map(
+        messages,
+        expected_run_id=expected_run_id,
+    )
     items: list[dict[str, Any]] = []
     for message in messages:
-        if not isinstance(message, dict) or message.get("role") != "tool":
+        if (
+            not isinstance(message, dict)
+            or message.get("role") != "tool"
+            or not _message_matches_run(message, expected_run_id)
+        ):
             continue
         projected = project_tool_message(message, name_map=names, hydrated=hydrated)
         if projected is not None:
@@ -861,7 +907,9 @@ def project_stream_event(
         if runtime:
             out["runtime"] = runtime
         out["action_evidence"] = project_action_evidence(
-            data.get("messages"), hydrated=False
+            data.get("messages"),
+            hydrated=False,
+            expected_run_id=raw_run_id,
         )
         return name, out
 
