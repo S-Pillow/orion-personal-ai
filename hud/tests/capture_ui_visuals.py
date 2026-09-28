@@ -6,7 +6,7 @@ from io import BytesIO
 from pathlib import Path
 
 from PIL import Image
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import expect, sync_playwright
 
 from probe_ui_convergence import UIConvergenceFixture
 
@@ -361,7 +361,8 @@ def core_renderer_capture(browser, fixture) -> dict:
     assert page.evaluate("() => window.__orionCoreFixture.blink()") is True
     page.clock.run_for(80)
     page.emulate_media(reduced_motion="reduce")
-    page.clock.run_for(32)
+    # Media-query change events are delivered independently of the fake clock.
+    expect(page.locator("#coreStage")).to_have_attribute("data-motion", "reduced")
     reduced = snapshot("reduced-motion")
     assert reduced["motion"] == "reduced"
     assert reduced["blinkPhase"] == "open"
