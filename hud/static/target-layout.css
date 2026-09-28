@@ -25,9 +25,9 @@
   --left-region: clamp(220px, 15vw, 275px);
   --right-region: clamp(285px, 20vw, 360px);
   --center-shift: calc((var(--left-region) - var(--right-region)) / 2);
-  --hero-height: clamp(440px, 52vh, 590px);
-  --workspace-overlap: 72px;
-  --conversation-max: 1000px;
+  --hero-height: clamp(380px, 44vh, 500px);
+  --workspace-overlap: 64px;
+  --conversation-max: 1080px;
   --content-gutter: clamp(18px, 2vw, 32px);
   --radius: 8px;
 }
@@ -206,8 +206,8 @@ body {
   position: relative;
   min-height: 100%;
   height: 100%;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: var(--hero-height) minmax(0, 1fr);
   overflow: hidden;
 }
 
@@ -220,7 +220,7 @@ body {
 
 .hero-scene {
   position: relative;
-  flex: 0 0 var(--hero-height);
+  grid-row: 1;
   min-height: 0;
   overflow: hidden;
   isolation: isolate;
@@ -234,6 +234,8 @@ body {
   height: 100%;
   object-fit: cover;
   object-position: 50% 50%;
+  transform: translateX(var(--center-shift));
+  transform-origin: 50% 50%;
   opacity: 1;
   filter: saturate(1.03) contrast(1.03);
   pointer-events: none;
@@ -396,7 +398,8 @@ body {
 .context-sidebar {
   left: 0;
   width: var(--left-region);
-  padding: 22px 20px 250px;
+  padding: 22px 20px 28px;
+  isolation: isolate;
   border-right: 1px solid rgba(143, 201, 211, .08);
   background:
     linear-gradient(90deg, rgba(3, 10, 13, .98) 0%, rgba(3, 10, 13, .91) 74%, rgba(3, 10, 13, .46) 100%);
@@ -550,17 +553,22 @@ body {
   right: 0;
   bottom: 0;
   left: 0;
-  min-height: 330px;
-  padding: 228px 22px 20px;
+  height: 42%;
+  min-height: 320px;
+  display: flex;
+  align-items: flex-end;
+  padding: 0 20px 30px;
   background:
-    linear-gradient(180deg, transparent 0%, rgba(3, 9, 12, .08) 18%, rgba(3, 9, 12, .42) 52%, rgba(3, 9, 12, .94) 100%),
-    url("/orion-hero.svg") 15% 77% / 880px auto no-repeat;
-  -webkit-mask-image: linear-gradient(180deg, transparent 0%, rgba(0,0,0,.25) 18%, #000 48%);
-  mask-image: linear-gradient(180deg, transparent 0%, rgba(0,0,0,.25) 18%, #000 48%);
+    linear-gradient(180deg, transparent 0%, rgba(3, 9, 12, .06) 16%, rgba(3, 9, 12, .34) 46%, rgba(3, 9, 12, .92) 100%),
+    url("/orion-hero.svg") 13% 76% / 900px auto no-repeat;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, rgba(0,0,0,.18) 20%, #000 48%);
+  mask-image: linear-gradient(180deg, transparent 0%, rgba(0,0,0,.18) 20%, #000 48%);
   pointer-events: none;
 }
 
 .context-atmosphere blockquote {
+  position: relative;
+  z-index: 1;
   margin: 0;
   max-width: 190px;
   color: rgba(205, 220, 224, .72);
@@ -575,14 +583,16 @@ body {
 .conversation-workspace {
   position: relative;
   z-index: 5;
+  grid-row: 2;
   left: calc(50% + var(--center-shift));
-  flex: 1 1 auto;
+  align-self: stretch;
   width: min(
     var(--conversation-max),
     calc(100% - var(--left-region) - var(--right-region) - (2 * var(--content-gutter)))
   );
-  min-height: 350px;
-  max-height: min(490px, calc(100% - var(--hero-height) + var(--workspace-overlap) - 12px));
+  min-height: 0;
+  height: calc(100% + var(--workspace-overlap) - 18px);
+  max-height: none;
   margin-top: calc(-1 * var(--workspace-overlap));
   margin-bottom: 18px;
   transform: translateX(-50%);
@@ -614,7 +624,9 @@ body {
 
 .transcript {
   min-height: 0;
-  overflow: auto;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 26px clamp(24px, 4vw, 46px) 10px;
   scrollbar-width: thin;
   scrollbar-color: rgba(99, 229, 239, .16) transparent;
@@ -776,6 +788,7 @@ body {
 
 .composer {
   position: relative;
+  align-self: end;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: stretch;
@@ -797,7 +810,6 @@ body {
   padding: 15px 14px;
   border: 1px solid rgba(137, 210, 221, .13);
   border-radius: 6px;
-  border: 0;
   outline: 0;
   background: transparent;
   color: var(--text);
@@ -1191,8 +1203,8 @@ body.approval-active .operational-details {
   :root {
     --left-region: 210px;
     --right-region: 300px;
-    --hero-height: clamp(380px, 48vh, 500px);
-    --workspace-overlap: 72px;
+    --hero-height: clamp(350px, 42vh, 455px);
+    --workspace-overlap: 58px;
   }
 
   .topbar {
@@ -1219,7 +1231,7 @@ body.approval-active .operational-details {
     --left-region: 190px;
     --right-region: 0px;
     --center-shift: calc(var(--left-region) / 2);
-    --hero-height: 400px;
+    --hero-height: 350px;
   }
 
   body { overflow: auto; }
@@ -1266,8 +1278,8 @@ body.approval-active .operational-details {
     --left-region: 0px;
     --right-region: 0px;
     --center-shift: 0px;
-    --hero-height: 340px;
-    --workspace-overlap: 42px;
+    --hero-height: 320px;
+    --workspace-overlap: 38px;
   }
 
   body { overflow: auto; }
@@ -1325,6 +1337,7 @@ body.approval-active .operational-details {
 
   .conversation-workspace {
     width: calc(100% - 20px);
+    height: auto;
     max-height: none;
     min-height: 430px;
   }
