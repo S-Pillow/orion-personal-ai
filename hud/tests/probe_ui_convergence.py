@@ -49,7 +49,7 @@ async function __fixtureSelectSession() {
 
 document.documentElement.dataset.fixtureClock = "22:24";
 
-if (__fixtureMode !== "motion") {
+if (__fixtureMode !== "motion" && __fixtureMode !== "core-review") {
   corePresence.destroy();
   ui.coreStage.dataset.motion = "reduced";
 }
@@ -60,6 +60,61 @@ if (__fixtureMode === "motion") {
   };
   __fixtureAssertThinking();
   setInterval(__fixtureAssertThinking, 250);
+}
+
+if (__fixtureMode === "core-review") {
+  setCore("READY", "Simulated fixture // isolated Core renderer review");
+  corePresence.setGaze("forward");
+
+  window.__orionCoreFixture = {
+    neutral() {
+      corePresence.setGaze("forward");
+      setCore("READY", "Simulated fixture // neutral Core review pose");
+    },
+    gaze(value) {
+      return corePresence.setGaze(value);
+    },
+    blink() {
+      return corePresence.blink();
+    },
+    state(value) {
+      setCore(value, "Simulated fixture // manual Core state review");
+    },
+    snapshot() {
+      return {
+        state: ui.coreStage.dataset.coreState,
+        gaze: ui.coreStage.dataset.gaze,
+        blinkPhase: ui.coreStage.dataset.blinkPhase,
+        motion: ui.coreStage.dataset.motion,
+      };
+    },
+  };
+
+  const controls = document.createElement("section");
+  controls.id = "coreReviewControls";
+  controls.setAttribute("aria-label", "Presentation-only Core review controls");
+  controls.style.cssText =
+    "position:fixed;left:18px;bottom:26px;z-index:80;padding:10px;"
+    + "display:grid;grid-template-columns:repeat(4,auto);gap:6px;"
+    + "background:rgba(3,10,14,.9);border:1px solid rgba(99,229,239,.22);"
+    + "font:10px ui-monospace;color:#cfeff2;";
+  controls.innerHTML =
+    '<button type="button" data-core-fixture="neutral">NEUTRAL</button>'
+    + '<button type="button" data-core-fixture="left">GAZE LEFT</button>'
+    + '<button type="button" data-core-fixture="right">GAZE RIGHT</button>'
+    + '<button type="button" data-core-fixture="blink">BLINK</button>'
+    + '<button type="button" data-core-fixture="waiting">WAITING</button>'
+    + '<button type="button" data-core-fixture="offline">OFFLINE</button>';
+  controls.addEventListener("click", (event) => {
+    const action = event.target?.dataset?.coreFixture;
+    if (action === "neutral") window.__orionCoreFixture.neutral();
+    if (action === "left") window.__orionCoreFixture.gaze("left");
+    if (action === "right") window.__orionCoreFixture.gaze("right");
+    if (action === "blink") window.__orionCoreFixture.blink();
+    if (action === "waiting") window.__orionCoreFixture.state("WAITING");
+    if (action === "offline") window.__orionCoreFixture.state("OFFLINE");
+  });
+  document.body.append(controls);
 }
 
 if (__fixtureMode === "review") {
@@ -207,6 +262,10 @@ class UIConvergenceFixture:
     def motion_url(self):
         return self.origin + "/?fixture=motion"
 
+    @property
+    def core_review_url(self):
+        return self.origin + "/?fixture=core-review"
+
     def close(self):
         with self.lock:
             if self.pending:
@@ -234,6 +293,7 @@ if __name__ == "__main__":
         print(f"SUMMON + APPROVAL HUD: {fixture.summon_approval_url}", flush=True)
         print(f"OFFLINE HUD: {fixture.offline_url}", flush=True)
         print(f"MOTION HUD: {fixture.motion_url}", flush=True)
+        print(f"CORE REVIEW HUD: {fixture.core_review_url}", flush=True)
         print(
             "Base: select orion-hud-main and send 'probe' for simulated approval.",
             flush=True,
