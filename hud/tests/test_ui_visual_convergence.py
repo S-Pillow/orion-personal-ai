@@ -8,13 +8,16 @@ INDEX = (HUD_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 STYLES = (HUD_ROOT / "static" / "styles.css").read_text(encoding="utf-8")
 TARGET = (HUD_ROOT / "static" / "target-layout.css").read_text(encoding="utf-8")
 HERO = (HUD_ROOT / "static" / "orion-hero.svg").read_text(encoding="utf-8")
+ENVIRONMENT = HUD_ROOT / "static" / "orion-environment.webp"
 APP = (HUD_ROOT / "static" / "app.js").read_text(encoding="utf-8")
 
 
 class FinalVisualConvergenceContractTests(unittest.TestCase):
     def test_owner_target_assets_are_loaded(self):
         self.assertIn('href="/target-layout.css"', INDEX)
-        self.assertIn('src="/orion-hero.svg"', INDEX)
+        self.assertIn('src="/orion-environment.webp"', INDEX)
+        self.assertTrue(ENVIRONMENT.exists())
+        self.assertGreater(ENVIRONMENT.stat().st_size, 10_000)
         self.assertIn("Orion owner-target layout", TARGET)
         self.assertIn("<svg", HERO)
 
@@ -139,7 +142,7 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
     def test_core_is_contained_and_foreground_matches_reference_geometry(self):
         self.assertIn("--hero-height: clamp(340px, 42vh, 368px);", TARGET)
         self.assertIn("--center-width: min(920px", TARGET)
-        self.assertIn("width: 282px;", TARGET)
+        self.assertIn("width: 296px;", TARGET)
         self.assertIn("grid-template-rows: minmax(0,1fr) 78px;", TARGET)
 
     def test_vertical_composition_fills_desktop_stage(self):
@@ -159,8 +162,8 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
 
     def test_center_axis_drives_hero_identity_and_workspace(self):
         self.assertIn("--center-shift:", TARGET)
-        self.assertIn("left: calc(50% + var(--center-shift));", TARGET)
-        self.assertIn("left: calc(50% + var(--center-shift));", TARGET)
+        self.assertIn("--core-shift: 54px;", TARGET)
+        self.assertIn("var(--core-shift)", TARGET)
 
     def test_approval_focus_and_summon_are_visually_prioritized(self):
         self.assertIn('document.body.classList.add("approval-active");', APP)
@@ -168,6 +171,10 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
         self.assertIn("body.approval-active .approval-panel", TARGET)
         self.assertIn("width: min(760px, calc(var(--center-width) - 60px));", TARGET)
         self.assertIn("max-height: 360px;", TARGET)
+        for element_id in ("approvalTitle", "approvalEffect", "approvalTarget"):
+            self.assertIn(f'id="{element_id}"', INDEX)
+        self.assertIn("projection.action_title", APP)
+        self.assertIn("projection.effect", APP)
 
     def test_header_detailed_provenance_is_demoted_not_deleted(self):
         for element_id in ("originStatus", "sourceStatus", "memoryUseStatus", "authorityStatus"):
