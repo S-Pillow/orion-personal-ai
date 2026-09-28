@@ -42,7 +42,7 @@ class ApprovalFixtureHandler(FakeHermesHandler):
     def do_GET(self):
         if self.path == "/health/detailed":
             self._send(200, {"status": "ok"})
-        elif self.path == "/api/sessions/session_1/messages":
+        elif self.path.startswith("/api/sessions/session_1/messages"):
             self._send(200, {"messages": [
                 {
                     "role": "user",
@@ -63,6 +63,19 @@ class ApprovalFixtureHandler(FakeHermesHandler):
                     "role": "assistant",
                     "created_at": "2026-09-27T05:41:00-04:00",
                     "content": "Agreed. The visual direction should use atmosphere for identity, while conversation and approvals stay readable and operationally truthful. Decorative depth should never compete with the work surface.",
+                },
+                {
+                    "role": "tool",
+                    "session_id": "session_1",
+                    "tool_name": "orion_vault_apply_plan",
+                    "content": json.dumps({
+                        "success": True,
+                        "mutation_performed": True,
+                        "recovery_required": False,
+                        "recovery_id": "f" * 64,
+                        "action": "edit_note",
+                        "target_relative_path": "fixtures/review-note.md",
+                    }),
                 },
             ]})
         else:

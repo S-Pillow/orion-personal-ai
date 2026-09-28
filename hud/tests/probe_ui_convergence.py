@@ -47,26 +47,38 @@ async function __fixtureSelectSession() {
   await loadMessages();
 }
 
-if (__fixtureMode === "review" || __fixtureMode === "summon") {
+document.documentElement.dataset.fixtureClock = "22:24";
+corePresence.destroy();
+ui.coreStage.dataset.motion = "reduced";
+
+if (__fixtureMode === "review") {
+  (async () => {
+    await __fixtureSelectSession();
+    addActivity(
+      "Reviewing project notes",
+      "Reading the isolated Orion visual-convergence fixture.",
+      "completed",
+    );
+    addActivity(
+      "Synthesizing key themes",
+      "Comparing the owner visual target with the current shell.",
+      "completed",
+    );
+    addActivity(
+      "Preparing proposal",
+      "Drafting the next visual-convergence steps.",
+      "running",
+    );
+  })();
+}
+
+if (__fixtureMode === "summon") {
   void __fixtureSelectSession();
 }
 
-if (__fixtureMode === "review") {
-  addActivity(
-    "Reading project files",
-    "Reviewing current Orion UI and memory-system notes.",
-    "running",
-  );
-  addActivity(
-    "Synthesizing insights",
-    "Comparing owner visual target against the active HUD branch.",
-    "running",
-  );
-  addActivity(
-    "Preparing response",
-    "Prioritizing composition, readability, and state presentation.",
-    "running",
-  );
+if (__fixtureMode === "offline") {
+  setHermesOnline(false);
+  setCore("OFFLINE", "Simulated fixture // no live Hermes claim");
 }
 
 if (__fixtureMode === "summon" || __fixtureMode === "summon-approval") {
@@ -104,14 +116,7 @@ class UIConvergenceFixture:
 
         app_path = self.static_root / "app.js"
         app_text = app_path.read_text(encoding="utf-8")
-        marker = "void summonController;"
-        if marker not in app_text:
-            raise RuntimeError("summon_controller_marker_missing")
-        app_text = app_text.replace(
-            marker,
-            marker + "\n" + FIXTURE_SNIPPET,
-            1,
-        )
+        app_text += "\n" + FIXTURE_SNIPPET + "\n"
         app_path.write_text(app_text, encoding="utf-8")
 
         self.hermes = ThreadingHTTPServer(
@@ -153,6 +158,10 @@ class UIConvergenceFixture:
     def summon_approval_url(self):
         return self.origin + "/?fixture=summon-approval"
 
+    @property
+    def offline_url(self):
+        return self.origin + "/?fixture=offline"
+
     def close(self):
         with self.lock:
             if self.pending:
@@ -177,6 +186,7 @@ if __name__ == "__main__":
         print(f"REVIEW HUD: {fixture.review_url}", flush=True)
         print(f"SUMMON HUD: {fixture.summon_url}", flush=True)
         print(f"SUMMON + APPROVAL HUD: {fixture.summon_approval_url}", flush=True)
+        print(f"OFFLINE HUD: {fixture.offline_url}", flush=True)
         print(
             "Base: select orion-hud-main and send 'probe' for simulated approval.",
             flush=True,

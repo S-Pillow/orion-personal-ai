@@ -252,6 +252,12 @@ function updateRunControls() {
 }
 
 function formatClock() {
+  const fixtureClock =
+    document.documentElement.dataset.fixtureClock || "";
+  if (fixtureClock) {
+    ui.clock.textContent = fixtureClock;
+    return;
+  }
   ui.clock.textContent = new Date().toLocaleTimeString([], {
     hour12: false,
     hour: "2-digit",
@@ -329,13 +335,99 @@ function showTranscriptEmpty(text) {
 }
 
 function formatMessageTime(value) {
-  if (!value) return "";
+  if (typeof value !== "string" || !value.trim()) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return date.toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function appendInlineFormatting(parent, value) {
+  const text = String(value || "");
+  const pattern = /(\*\*[^*\n]+\*\*|\`[^\`\n]+\`)/g;
+  let cursor = 0;
+  let match;
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > cursor) {
+      parent.append(document.createTextNode(text.slice(cursor, match.index)));
+    }
+    const token = match[0];
+    const node = token.startsWith("**")
+      ? document.createElement("strong")
+      : document.createElement("code");
+    node.textContent = token.startsWith("**")
+      ? token.slice(2, -2)
+      : token.slice(1, -1);
+    parent.append(node);
+    cursor = match.index + token.length;
+  }
+  if (cursor < text.length) {
+    parent.append(document.createTextNode(text.slice(cursor)));
+  }
+}
+
+function renderMessageContent(container, value) {
+  container.replaceChildren();
+  const lines = String(value || "").replace(/\r\n?/g, "\n").split("\n");
+  let paragraph = [];
+  let list = null;
+
+  function flushParagraph() {
+    if (!paragraph.length) return;
+    const p = document.createElement("p");
+    p.className = "message-plain-line";
+    appendInlineFormatting(p, paragraph.join("\n"));
+    container.append(p);
+    paragraph = [];
+  }
+
+  function closeList() {
+    list = null;
+  }
+
+  for (const line of lines) {
+    const heading = line.match(/^(#{2,3})\s+(.+)$/);
+    const bullet = line.match(/^[-*]\s+(.+)$/);
+    const numbered = line.match(/^\d+\.\s+(.+)$/);
+
+    if (heading) {
+      flushParagraph();
+      closeList();
+      const h = document.createElement(
+        heading[1].length === 2 ? "h2" : "h3",
+      );
+      appendInlineFormatting(h, heading[2]);
+      container.append(h);
+      continue;
+    }
+
+    if (bullet || numbered) {
+      flushParagraph();
+      const ordered = Boolean(numbered);
+      const tag = ordered ? "ol" : "ul";
+      if (!list || list.tagName.toLowerCase() !== tag) {
+        list = document.createElement(tag);
+        container.append(list);
+      }
+      const item = document.createElement("li");
+      appendInlineFormatting(item, (bullet || numbered)[1]);
+      list.append(item);
+      continue;
+    }
+
+    if (!line.trim()) {
+      flushParagraph();
+      closeList();
+      continue;
+    }
+
+    closeList();
+    paragraph.push(line);
+  }
+
+  flushParagraph();
 }
 
 function appendMessage(role, text = "", meta = {}) {
@@ -369,7 +461,7 @@ function appendMessage(role, text = "", meta = {}) {
 
   const body = document.createElement("div");
   body.className = "message-body";
-  body.textContent = text;
+  renderMessageContent(body, text);
 
   content.append(header, body);
   article.append(avatar, content);
@@ -388,8 +480,6 @@ function renderMessages(payload) {
       createdAt:
         m.created_at ||
         m.createdAt ||
-        m.timestamp ||
-        m.time ||
         "",
     }))
     .filter((m) => m.text.trim().length > 0);
@@ -1165,7 +1255,7 @@ function handleStreamEvent(eventName, data, assistant) {
       syncProvenancePresentation();
       if (typeof data?.content === "string" && data.content) {
         const assistantBody = ensureAssistantBody(assistant);
-        assistantBody.textContent = data.content;
+        renderMessageContent(assistantBody, data.content);
       }
 
       setCore("FINALIZING", "Reconciling Hermes session...");
