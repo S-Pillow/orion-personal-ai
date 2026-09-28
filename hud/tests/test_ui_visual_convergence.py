@@ -118,6 +118,35 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
         self.assertIn("ui.sendButton.hidden = running;", APP)
         self.assertIn(":focus-visible", TARGET)
 
+    def test_cinematic_core_uses_volumetric_asset_and_external_state(self):
+        self.assertIn('id="coreState"', INDEX)
+        core_ring = INDEX[INDEX.index('class="core-ring live-core"'):INDEX.index('class="core-presence-label"')]
+        self.assertNotIn('id="coreState"', core_ring)
+        for token in (
+            'id="coreOcclusion"',
+            'id="coreGlass"',
+            'architectural foreground / pedestal',
+            'foreground atmospheric veil',
+        ):
+            self.assertIn(token, HERO)
+        self.assertIn("clip-path: polygon(", TARGET)
+        self.assertIn("color-mix(in srgb, var(--core-tone)", TARGET)
+
+    def test_approval_focus_and_summon_are_visually_prioritized(self):
+        self.assertIn('document.body.classList.add("approval-active");', APP)
+        self.assertIn('document.body.classList.remove("approval-active");', APP)
+        self.assertIn("body.approval-active .approval-panel", TARGET)
+        self.assertIn("width: min(calc(100% - (2 * var(--content-gutter))), 900px);", TARGET)
+        self.assertIn("height: min(58vh, 520px);", TARGET)
+
+    def test_header_detailed_provenance_is_demoted_not_deleted(self):
+        for element_id in ("originStatus", "sourceStatus", "memoryUseStatus", "authorityStatus"):
+            self.assertIn(f'id="{element_id}"', INDEX)
+        self.assertIn(
+            ".topbar .provenance-status .provenance-chip:not(.authority-chip)",
+            TARGET,
+        )
+
     def test_visual_pass_does_not_add_runtime_transport(self):
         for token in (
             "/api/orion/summon",
