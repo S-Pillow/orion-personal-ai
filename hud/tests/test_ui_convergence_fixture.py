@@ -57,7 +57,7 @@ class UIConvergenceFixtureContractTests(unittest.TestCase):
         self.assertIn("?fixture=core-review", PROBE)
 
     def test_motion_fixture_keeps_live_presence_controller(self):
-        self.assertIn('if (__fixtureMode !== "motion")', PROBE)
+        self.assertIn('if (__fixtureMode !== "motion" && __fixtureMode !== "core-review")', PROBE)
         self.assertIn('__fixtureMode === "motion"', PROBE)
         self.assertIn('setCore("THINKING"', PROBE)
 
