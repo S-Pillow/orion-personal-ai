@@ -929,6 +929,7 @@ function addActivity(name, preview, event = "running") {
   const item = document.createElement("div");
   item.className = "activity-item";
   item.dataset.tool = name || "tool";
+  item.dataset.event = event;
   const nameEl = document.createElement("div");
   nameEl.className = "activity-name";
   nameEl.textContent = name || "tool";
@@ -949,6 +950,7 @@ function finishActivity(name, failed = false) {
   if (!item) return;
   const status = item.querySelector(".activity-state");
   if (status) status.textContent = failed ? "FAILED" : "COMPLETED";
+  item.dataset.event = failed ? "failed" : "completed";
   item.classList.toggle("failed", failed);
 }
 
