@@ -1,116 +1,53 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 760" role="img" aria-label="Decorative Orion cosmic environment">
   <defs>
-    <radialGradient id="sky" cx="50%" cy="34%" r="72%">
-      <stop offset="0" stop-color="#17313a"/>
-      <stop offset=".36" stop-color="#0a171d"/>
-      <stop offset="1" stop-color="#020609"/>
-    </radialGradient>
-    <radialGradient id="orb" cx="50%" cy="43%" r="62%">
-      <stop offset="0" stop-color="#10272f"/>
-      <stop offset=".46" stop-color="#08151a"/>
-      <stop offset=".82" stop-color="#02070a"/>
-      <stop offset="1" stop-color="#000203"/>
-    </radialGradient>
-    <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#d6fbff" stop-opacity=".9"/>
-      <stop offset=".22" stop-color="#5dd8e6" stop-opacity=".82"/>
-      <stop offset=".55" stop-color="#2c8794" stop-opacity=".25"/>
-      <stop offset=".82" stop-color="#74e8f2" stop-opacity=".78"/>
-      <stop offset="1" stop-color="#d8fdff" stop-opacity=".86"/>
-    </linearGradient>
-    <linearGradient id="floor" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#15262d"/>
-      <stop offset=".28" stop-color="#0b151a"/>
-      <stop offset="1" stop-color="#020507"/>
-    </linearGradient>
-    <linearGradient id="cyanLine" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#6ce9f3" stop-opacity="0"/>
-      <stop offset=".5" stop-color="#6ce9f3" stop-opacity=".82"/>
-      <stop offset="1" stop-color="#6ce9f3" stop-opacity="0"/>
-    </linearGradient>
-    <linearGradient id="reflection" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#64deea" stop-opacity=".16"/>
-      <stop offset="1" stop-color="#64deea" stop-opacity="0"/>
-    </linearGradient>
-    <filter id="glow" x="-100%" y="-100%" width="300%" height="300%">
-      <feGaussianBlur stdDeviation="12" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-    <filter id="soft" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="34"/>
-    </filter>
-    <filter id="grain" x="-20%" y="-20%" width="140%" height="140%">
-      <feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="2" seed="7" result="noise"/>
-      <feColorMatrix in="noise" type="saturate" values="0" result="mono"/>
-      <feComponentTransfer in="mono">
-        <feFuncA type="table" tableValues="0 .055"/>
-      </feComponentTransfer>
-    </filter>
+    <radialGradient id="sky" cx="50%" cy="34%" r="82%"><stop offset="0" stop-color="#173842"/><stop offset=".34" stop-color="#0a1b22"/><stop offset=".7" stop-color="#061015"/><stop offset="1" stop-color="#020609"/></radialGradient>
+    <radialGradient id="coreVolume" cx="44%" cy="34%" r="70%"><stop offset="0" stop-color="#17323b"/><stop offset=".25" stop-color="#0c2027"/><stop offset=".52" stop-color="#061217"/><stop offset=".78" stop-color="#020608"/><stop offset="1" stop-color="#000203"/></radialGradient>
+    <radialGradient id="coreGlass" cx="42%" cy="28%" r="76%"><stop offset="0" stop-color="#9eeef4" stop-opacity=".14"/><stop offset=".28" stop-color="#5ecbd7" stop-opacity=".04"/><stop offset=".6" stop-color="#020608" stop-opacity=".02"/><stop offset="1" stop-color="#000" stop-opacity=".5"/></radialGradient>
+    <linearGradient id="rimBright" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#d9fcff" stop-opacity=".2"/><stop offset=".16" stop-color="#87f5fb" stop-opacity=".88"/><stop offset=".42" stop-color="#35aeba" stop-opacity=".26"/><stop offset=".7" stop-color="#0d3b43" stop-opacity=".12"/><stop offset=".9" stop-color="#74e8f2" stop-opacity=".74"/><stop offset="1" stop-color="#d8fdff" stop-opacity=".34"/></linearGradient>
+    <linearGradient id="floor" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#193039"/><stop offset=".16" stop-color="#102127"/><stop offset=".52" stop-color="#081116"/><stop offset="1" stop-color="#020507"/></linearGradient>
+    <linearGradient id="beam" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d9fdff" stop-opacity="0"/><stop offset=".2" stop-color="#a8f8fc" stop-opacity=".72"/><stop offset=".5" stop-color="#62dce8" stop-opacity=".94"/><stop offset=".8" stop-color="#a8f8fc" stop-opacity=".62"/><stop offset="1" stop-color="#d9fdff" stop-opacity="0"/></linearGradient>
+    <linearGradient id="horizonGlow" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#61dbe6" stop-opacity="0"/><stop offset=".24" stop-color="#61dbe6" stop-opacity=".12"/><stop offset=".5" stop-color="#a8f8fc" stop-opacity=".55"/><stop offset=".76" stop-color="#61dbe6" stop-opacity=".12"/><stop offset="1" stop-color="#61dbe6" stop-opacity="0"/></linearGradient>
+    <linearGradient id="reflection" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8ef1f6" stop-opacity=".28"/><stop offset=".45" stop-color="#4ec7d2" stop-opacity=".07"/><stop offset="1" stop-color="#4ec7d2" stop-opacity="0"/></linearGradient>
+    <filter id="glowSmall" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="7" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="glowLarge" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="24"/></filter>
+    <filter id="atmosphere" x="-30%" y="-50%" width="160%" height="200%"><feGaussianBlur stdDeviation="38"/></filter>
+    <filter id="grain" x="-20%" y="-20%" width="140%" height="140%"><feTurbulence type="fractalNoise" baseFrequency=".72" numOctaves="3" seed="17" result="noise"/><feColorMatrix in="noise" type="saturate" values="0" result="mono"/><feComponentTransfer in="mono"><feFuncA type="table" tableValues="0 .045"/></feComponentTransfer></filter>
+    <mask id="coreOcclusion"><rect width="1600" height="760" fill="white"/><circle cx="800" cy="276" r="171" fill="black"/></mask>
+    <clipPath id="coreClip"><circle cx="800" cy="276" r="166"/></clipPath>
   </defs>
-
   <rect width="1600" height="760" fill="url(#sky)"/>
-  <rect width="1600" height="760" filter="url(#grain)" opacity=".32"/>
-
-  <g fill="#b8f5fa" opacity=".56">
-    <circle cx="112" cy="84" r="1.1"/><circle cx="183" cy="146" r=".9"/>
-    <circle cx="266" cy="106" r="1.2"/><circle cx="354" cy="64" r=".8"/>
-    <circle cx="438" cy="138" r="1.0"/><circle cx="527" cy="88" r=".8"/>
-    <circle cx="1078" cy="70" r="1.1"/><circle cx="1168" cy="128" r=".9"/>
-    <circle cx="1264" cy="88" r="1.2"/><circle cx="1364" cy="140" r=".8"/>
-    <circle cx="1475" cy="72" r="1.0"/><circle cx="1518" cy="176" r=".7"/>
-    <circle cx="325" cy="246" r=".8"/><circle cx="1228" cy="232" r=".7"/>
-    <circle cx="1326" cy="284" r=".9"/><circle cx="236" cy="298" r=".7"/>
-  </g>
-
-  <circle cx="-92" cy="454" r="330" fill="#081116" stroke="#29434c" stroke-width="2" opacity=".92"/>
-  <ellipse cx="98" cy="344" rx="230" ry="52" fill="#153039" opacity=".22" filter="url(#soft)"/>
-
-  <ellipse cx="800" cy="284" rx="248" ry="248" fill="#53dcea" opacity=".055" filter="url(#soft)"/>
-  <circle cx="800" cy="284" r="220" fill="none" stroke="#66e7f1" stroke-opacity=".12" stroke-width="2"/>
-  <circle cx="800" cy="284" r="198" fill="none" stroke="#84eff7" stroke-opacity=".18" stroke-width="1"/>
-  <circle cx="800" cy="284" r="180" fill="url(#orb)" stroke="url(#rim)" stroke-width="4" filter="url(#glow)"/>
-  <circle cx="800" cy="284" r="171" fill="none" stroke="#91f3f8" stroke-opacity=".12" stroke-width="1"/>
-  <ellipse cx="800" cy="284" rx="244" ry="108" fill="none" stroke="#72dce6" stroke-opacity=".16"/>
-  <ellipse cx="800" cy="284" rx="224" ry="132" fill="none" stroke="#72dce6" stroke-opacity=".09" transform="rotate(-17 800 284)"/>
-
-  <path d="M667 245 C705 190 756 164 800 164 C844 164 895 190 933 245"
-        fill="none" stroke="#6fe6ef" stroke-opacity=".08" stroke-width="34" filter="url(#soft)"/>
-  <path d="M676 300 C716 341 755 360 800 360 C845 360 884 341 924 300"
-        fill="none" stroke="#4db7c2" stroke-opacity=".055" stroke-width="30" filter="url(#soft)"/>
-
-  <rect x="797" y="42" width="6" height="162" fill="#8ef1f6" opacity=".48" filter="url(#glow)"/>
-  <rect x="798.5" y="42" width="3" height="162" fill="#d8fdff" opacity=".68"/>
-  <rect x="797" y="358" width="6" height="108" fill="#8ef1f6" opacity=".30" filter="url(#glow)"/>
-  <rect x="798.5" y="358" width="3" height="108" fill="#d8fdff" opacity=".45"/>
-
-  <path d="M650 476 C690 458 750 452 800 452 C850 452 910 458 950 476"
-        fill="none" stroke="#4f6970" stroke-width="2" opacity=".76"/>
-  <path d="M546 502 C642 480 712 486 800 486 C888 486 958 480 1054 502"
-        fill="none" stroke="#33484f" stroke-width="2" opacity=".54"/>
-
-  <path d="M0 492 C160 468 322 480 466 470 C618 460 696 474 800 474 C904 474 982 460 1134 470 C1278 480 1440 468 1600 492 L1600 760 L0 760 Z"
-        fill="url(#floor)"/>
-  <path d="M0 506 C250 486 432 496 610 488 C776 480 988 486 1600 504"
-        fill="none" stroke="#365059" stroke-width="2" opacity=".66"/>
-  <path d="M190 532 L1410 532" stroke="url(#cyanLine)" stroke-width="1.2" opacity=".32"/>
-  <path d="M306 570 L1294 570" stroke="url(#cyanLine)" stroke-width="1" opacity=".20"/>
-  <path d="M464 612 L1136 612" stroke="url(#cyanLine)" stroke-width="1" opacity=".14"/>
-
-  <path d="M605 506 L556 760 L718 760 L752 506 Z" fill="#091116" opacity=".88"/>
-  <path d="M995 506 L1044 760 L882 760 L848 506 Z" fill="#091116" opacity=".88"/>
-  <path d="M618 508 L590 744" stroke="#29444c" stroke-width="2" opacity=".55"/>
-  <path d="M982 508 L1010 744" stroke="#29444c" stroke-width="2" opacity=".55"/>
-
-  <g opacity=".72">
-    <path d="M474 504 L474 458 L486 447 L498 458 L498 504" fill="#050a0d" stroke="#34535d"/>
-    <path d="M1102 504 L1102 458 L1114 447 L1126 458 L1126 504" fill="#050a0d" stroke="#34535d"/>
-    <circle cx="486" cy="449" r="3" fill="#77eaf2" filter="url(#glow)"/>
-    <circle cx="1114" cy="449" r="3" fill="#77eaf2" filter="url(#glow)"/>
-  </g>
-
-  <path d="M700 502 L756 760 L844 760 L900 502" fill="url(#reflection)" opacity=".32"/>
-  <path d="M798 502 L798 760" stroke="#66e7f1" stroke-opacity=".16"/>
-  <path d="M802 502 L802 760" stroke="#66e7f1" stroke-opacity=".08"/>
-
-  <rect x="0" y="0" width="1600" height="760" fill="none" stroke="#8ceff5" stroke-opacity=".04" stroke-width="2"/>
+  <ellipse cx="800" cy="320" rx="620" ry="250" fill="#17404a" opacity=".12" filter="url(#atmosphere)"/>
+  <rect width="1600" height="760" filter="url(#grain)" opacity=".34"/>
+  <g fill="#b9f6fb"><circle cx="112" cy="84" r="1.1" opacity=".58"/><circle cx="183" cy="146" r=".8" opacity=".42"/><circle cx="266" cy="106" r="1.15" opacity=".58"/><circle cx="354" cy="64" r=".8" opacity=".42"/><circle cx="438" cy="138" r="1" opacity=".5"/><circle cx="527" cy="88" r=".7" opacity=".4"/><circle cx="1078" cy="70" r="1" opacity=".5"/><circle cx="1168" cy="128" r=".9" opacity=".48"/><circle cx="1264" cy="88" r="1.2" opacity=".58"/><circle cx="1364" cy="140" r=".8" opacity=".42"/><circle cx="1475" cy="72" r="1" opacity=".52"/><circle cx="1518" cy="176" r=".7" opacity=".4"/></g>
+  <circle cx="1460" cy="205" r="44" fill="#a7c1c8" opacity=".13"/>
+  <path d="M0 466 C116 420 196 441 274 414 C366 382 430 430 528 405 C632 378 704 420 800 393 C908 362 1014 418 1118 398 C1230 376 1348 420 1600 378 L1600 506 L0 506 Z" fill="#071116" opacity=".96"/>
+  <path d="M0 477 C118 431 198 452 276 425 C366 394 431 441 530 416 C634 389 705 432 801 405 C910 374 1016 430 1120 410 C1232 388 1348 432 1600 390" fill="none" stroke="#37545c" stroke-width="1.2" opacity=".38"/>
+  <g mask="url(#coreOcclusion)"><rect x="794" y="18" width="12" height="520" fill="url(#beam)" opacity=".26" filter="url(#glowLarge)"/><rect x="798.5" y="18" width="3" height="520" fill="url(#beam)" opacity=".78" filter="url(#glowSmall)"/></g>
+  <circle cx="800" cy="276" r="224" fill="none" stroke="#65dce7" stroke-width="22" opacity=".045" filter="url(#glowLarge)"/>
+  <path d="M612 161 A224 224 0 0 1 989 159" fill="none" stroke="#70e5ef" stroke-width="1.2" opacity=".22"/>
+  <path d="M995 371 A224 224 0 0 1 646 430" fill="none" stroke="#70e5ef" stroke-width="1" opacity=".12"/>
+  <path d="M632 120 A258 258 0 0 1 1048 299" fill="none" stroke="#6edee9" stroke-width=".8" opacity=".11"/>
+  <path d="M566 306 A246 122 -12 0 0 1003 356" fill="none" stroke="#72dce6" stroke-width=".9" opacity=".1"/>
+  <circle cx="800" cy="276" r="190" fill="none" stroke="#56d5e1" stroke-width="22" opacity=".08" filter="url(#glowLarge)"/>
+  <circle cx="800" cy="276" r="188" fill="none" stroke="url(#rimBright)" stroke-width="4.5" filter="url(#glowSmall)"/>
+  <circle cx="800" cy="276" r="181" fill="none" stroke="#b6fbff" stroke-width=".8" opacity=".25"/>
+  <circle cx="800" cy="276" r="171" fill="url(#coreVolume)"/>
+  <circle cx="800" cy="276" r="167" fill="url(#coreGlass)"/>
+  <g clip-path="url(#coreClip)"><ellipse cx="742" cy="212" rx="132" ry="118" fill="#69dce8" opacity=".035"/><ellipse cx="865" cy="338" rx="118" ry="80" fill="#000" opacity=".44"/><path d="M640 308 C706 244 762 225 800 225 C845 225 896 248 960 312 C916 376 854 407 800 407 C740 407 682 371 640 308 Z" fill="#00090c" opacity=".52"/><path d="M650 200 C708 155 758 143 806 146 C861 150 907 178 946 225" fill="none" stroke="#a6f6fa" stroke-width="18" opacity=".025" filter="url(#glowLarge)"/></g>
+  <ellipse cx="800" cy="475" rx="210" ry="28" fill="#61dbe6" opacity=".10" filter="url(#glowLarge)"/>
+  <path d="M0 492 C160 468 322 480 466 470 C618 460 696 474 800 474 C904 474 982 460 1134 470 C1278 480 1440 468 1600 492 L1600 760 L0 760 Z" fill="url(#floor)"/>
+  <path d="M0 502 C268 480 520 491 800 480 C1080 491 1332 480 1600 502" fill="none" stroke="url(#horizonGlow)" stroke-width="2.4" opacity=".62"/>
+  <path d="M0 514 C268 494 520 504 800 493 C1080 504 1332 494 1600 514" fill="none" stroke="#45616a" stroke-width="1" opacity=".32"/>
+  <!-- architectural foreground / pedestal -->
+  <path d="M620 500 L980 500 L1030 760 L570 760 Z" fill="#050b0e" opacity=".92"/>
+  <path d="M648 504 L952 504 L924 760 L676 760 Z" fill="#0a1418" opacity=".82"/>
+  <path d="M716 504 L884 504 L852 760 L748 760 Z" fill="#0d1a20" opacity=".62"/>
+  <path d="M800 504 L800 760" stroke="#83edf3" stroke-width="2" opacity=".16"/>
+  <path d="M698 520 L902 520" stroke="url(#horizonGlow)" stroke-width="1.2" opacity=".58"/>
+  <path d="M730 536 L870 536" stroke="#8eeff4" stroke-width="1" opacity=".18"/>
+  <path d="M742 494 L780 760 L820 760 L858 494" fill="url(#reflection)" opacity=".74"/>
+  <ellipse cx="800" cy="538" rx="178" ry="18" fill="#5ed4df" opacity=".08" filter="url(#glowLarge)"/>
+  <g opacity=".78"><path d="M474 508 L474 458 L486 446 L498 458 L498 508" fill="#050a0d" stroke="#34535d"/><path d="M1102 508 L1102 458 L1114 446 L1126 458 L1126 508" fill="#050a0d" stroke="#34535d"/><circle cx="486" cy="448" r="3" fill="#77eaf2" filter="url(#glowSmall)"/><circle cx="1114" cy="448" r="3" fill="#77eaf2" filter="url(#glowSmall)"/></g>
+  <!-- foreground atmospheric veil -->
+  <path d="M0 448 C360 414 614 455 800 448 C1030 438 1260 410 1600 450 L1600 570 C1260 540 1010 560 800 554 C560 548 310 530 0 562 Z" fill="#4ac6d0" opacity=".022" filter="url(#atmosphere)"/>
 </svg>
