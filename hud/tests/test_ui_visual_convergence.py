@@ -47,7 +47,7 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
     def test_conversation_is_foreground_surface(self):
         self.assertIn(".conversation-workspace", TARGET)
         self.assertIn("backdrop-filter: blur(12px);", TARGET)
-        self.assertIn("--workspace-overlap: 86px;", TARGET)
+        self.assertIn("--workspace-overlap: 72px;", TARGET)
         self.assertIn("calc(-1 * var(--workspace-overlap))", TARGET)
         self.assertIn(".composer-actions", INDEX)
         self.assertIn("grid-template-columns: minmax(0, 1fr) auto;", TARGET)
@@ -105,7 +105,7 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
         )
         self.assertNotIn("grid-template-columns: 1fr 86px 86px;", STYLES + TARGET)
         self.assertIn("--left-region: clamp(220px, 15vw, 275px);", TARGET)
-        self.assertIn("--workspace-overlap: 86px;", TARGET)
+        self.assertIn("--workspace-overlap: 72px;", TARGET)
         self.assertIn(".center-stage {", TARGET)
         self.assertIn("position: absolute;", TARGET)
         self.assertNotIn("grid-template-columns:\n    var(--rail-left-width)", TARGET)
@@ -130,8 +130,24 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
             'foreground atmospheric veil',
         ):
             self.assertIn(token, HERO)
-        self.assertIn("clip-path: polygon(", TARGET)
-        self.assertIn("color-mix(in srgb, var(--core-tone)", TARGET)
+        self.assertIn("recessed eye apertures", HERO)
+        self.assertIn('fill="url(#eyeLightL)"', HERO)
+        self.assertIn('fill="url(#eyeLightR)"', HERO)
+        self.assertIn(".core-mask {", TARGET)
+        self.assertIn("opacity: 0;", TARGET)
+
+    def test_speaker_marks_replace_placeholder_initials(self):
+        self.assertIn('avatar.textContent = "";', APP)
+        self.assertIn('avatar.dataset.speaker = isUser ? "user" : "orion";', APP)
+        self.assertIn('.message-avatar[data-speaker="user"]::before', TARGET)
+        self.assertIn('.message-avatar[data-speaker="orion"]::before', TARGET)
+        self.assertIn("grid-template-columns: 42px minmax(0, 1fr);", TARGET)
+
+    def test_core_is_contained_and_conversation_is_denser(self):
+        self.assertIn("--hero-height: clamp(440px, 52vh, 590px);", TARGET)
+        self.assertIn("--workspace-overlap: 72px;", TARGET)
+        self.assertIn("max-height: min(490px,", TARGET)
+        self.assertIn("object-position: 50% 50%;", TARGET)
 
     def test_approval_focus_and_summon_are_visually_prioritized(self):
         self.assertIn('document.body.classList.add("approval-active");', APP)
