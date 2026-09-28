@@ -51,6 +51,12 @@ class UIConvergenceFixtureContractTests(unittest.TestCase):
         self.assertIn("corePresence.destroy();", PROBE)
         self.assertIn('dataset.motion = "reduced"', PROBE)
         self.assertIn("?fixture=offline", PROBE)
+        self.assertIn("?fixture=motion", PROBE)
+
+    def test_motion_fixture_keeps_live_presence_controller(self):
+        self.assertIn('if (__fixtureMode !== "motion")', PROBE)
+        self.assertIn('__fixtureMode === "motion"', PROBE)
+        self.assertIn('setCore("THINKING"', PROBE)
 
     def test_fixture_content_is_explicitly_presentation_only(self):
         self.assertIn("presentation-only fixture content", PROBE)
