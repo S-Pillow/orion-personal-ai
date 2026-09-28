@@ -75,6 +75,37 @@ def review_capture(browser, fixture, width: int, height: int, name: str) -> dict
     return report
 
 
+def keyboard_approval_check(page) -> None:
+    buttons = page.locator("#approvalActions button")
+    assert buttons.count() == 4
+    buttons.nth(0).focus()
+    assert page.evaluate("document.activeElement === document.querySelectorAll('#approvalActions button')[0]")
+    for index in range(1, 4):
+        page.keyboard.press("Tab")
+        assert page.evaluate(
+            f"document.activeElement === document.querySelectorAll('#approvalActions button')[{index}]"
+        )
+
+
+def mobile_review_capture(browser, fixture) -> dict:
+    page = browser.new_page(viewport={"width": 390, "height": 844})
+    page.goto(fixture.review_url, wait_until="networkidle")
+    wait_review(page)
+    state = rect(page, "#coreState")
+    conversation = rect(page, ".conversation-workspace")
+    composer = rect(page, ".composer")
+    assert state["y"] + state["height"] <= conversation["y"] + 1
+    assert not overlap(state, conversation)
+    assert composer["width"] <= 374
+    page.screenshot(path=str(OUT / "mobile-review-390x844.png"), full_page=False)
+    page.close()
+    return {
+        "core_state": state,
+        "conversation": conversation,
+        "composer": composer,
+    }
+
+
 def approval_capture(browser, fixture) -> dict:
     page = browser.new_page(viewport={"width": 1672, "height": 941})
     page.goto(fixture.summon_approval_url, wait_until="domcontentloaded")
@@ -86,6 +117,7 @@ def approval_capture(browser, fixture) -> dict:
     conversation = rect(page, ".conversation-workspace")
     buttons = page.locator("#approvalActions button")
     assert buttons.count() == 4
+    keyboard_approval_check(page)
     for index in range(buttons.count()):
         box = buttons.nth(index).bounding_box()
         assert box is not None
@@ -131,6 +163,7 @@ def mobile_approval_capture(browser, fixture) -> dict:
     assert approval["width"] <= 358
     buttons = page.locator("#approvalActions button")
     assert buttons.count() == 4
+    keyboard_approval_check(page)
     for index in range(buttons.count()):
         box = buttons.nth(index).bounding_box()
         assert box is not None
@@ -170,6 +203,10 @@ def main() -> None:
                 "desktop_1440x900": review_capture(
                     browser, fixture, 1440, 900, "desktop-review-1440x900"
                 ),
+                "desktop_1366x768": review_capture(
+                    browser, fixture, 1366, 768, "desktop-review-1366x768"
+                ),
+                "mobile_review": mobile_review_capture(browser, fixture),
                 "summon_approval": approval_capture(browser, fixture),
                 "offline": offline_capture(browser, fixture),
                 "mobile_approval": mobile_approval_capture(browser, fixture),

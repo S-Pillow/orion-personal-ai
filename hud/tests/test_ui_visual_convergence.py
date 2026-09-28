@@ -50,7 +50,7 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
         self.assertIn("--center-width: min(920px", TARGET)
         self.assertIn('class="workspace-pane foreground-workspace"', INDEX)
         self.assertIn('class="composer-actions"', INDEX)
-        self.assertIn("grid-template-columns: 44px minmax(0,1fr) auto;", TARGET)
+        self.assertIn("grid-template-columns: minmax(0,1fr) auto;", TARGET)
 
     def test_context_and_activity_rails_are_editorial(self):
         self.assertIn(".context-sidebar", TARGET)
@@ -188,6 +188,11 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
             "grid-template-columns: 260px minmax(760px, 1fr) 330px;",
             STYLES + TARGET,
         )
+
+    def test_unsupported_composer_controls_are_not_advertised(self):
+        self.assertNotIn("composer-plus", INDEX)
+        self.assertNotIn('aria-label="Attach', INDEX)
+        self.assertNotIn('aria-label="Microphone', INDEX)
 
     def test_visual_pass_does_not_add_runtime_transport(self):
         for token in (
