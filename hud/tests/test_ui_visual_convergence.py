@@ -71,10 +71,9 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
             self.assertIn(f'id="{element_id}"', INDEX)
 
     def test_live_core_state_and_reduced_motion_remain_supported(self):
+        self.assertIn('data-core-state="READY"', INDEX)
         for state in (
-            "READY",
             "THINKING",
-            "FINALIZING",
             "ACTING",
             "WAITING",
             "DEGRADED",

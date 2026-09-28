@@ -250,7 +250,7 @@ class Phase3AdaptiveWorkspaceContractTests(unittest.TestCase):
         )
 
         self.assertIn(
-            "OPEN IAI BRAIN",
+            "OPEN NATIVE IAI BRAIN",
             INDEX,
         )
 

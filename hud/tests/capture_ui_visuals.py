@@ -77,7 +77,7 @@ def review_capture(browser, fixture, width: int, height: int, name: str) -> dict
 
 def approval_capture(browser, fixture) -> dict:
     page = browser.new_page(viewport={"width": 1672, "height": 941})
-    page.goto(fixture.summon_approval_url, wait_until="networkidle")
+    page.goto(fixture.summon_approval_url, wait_until="domcontentloaded")
     page.wait_for_function(
         "() => !document.querySelector('#approvalPanel')?.classList.contains('hidden')"
     )
@@ -93,6 +93,10 @@ def approval_capture(browser, fixture) -> dict:
         assert box["x"] + box["width"] <= approval["x"] + approval["width"] + 1
     assert conversation["x"] + conversation["width"] <= right["x"] + 2
     page.screenshot(path=str(OUT / "desktop-summon-approval.png"), full_page=True)
+    page.get_by_role("button", name="DENY").click()
+    page.wait_for_function(
+        "() => document.querySelector('#approvalPanel')?.classList.contains('hidden')"
+    )
     page.close()
     return {"approval": approval, "right": right, "conversation": conversation}
 
@@ -115,7 +119,7 @@ def offline_capture(browser, fixture) -> dict:
 
 def mobile_approval_capture(browser, fixture) -> dict:
     page = browser.new_page(viewport={"width": 390, "height": 844})
-    page.goto(fixture.summon_approval_url, wait_until="networkidle")
+    page.goto(fixture.summon_approval_url, wait_until="domcontentloaded")
     page.wait_for_function(
         "() => !document.querySelector('#approvalPanel')?.classList.contains('hidden')"
     )
@@ -133,6 +137,10 @@ def mobile_approval_capture(browser, fixture) -> dict:
         assert box["x"] >= -1
         assert box["x"] + box["width"] <= 391
     page.screenshot(path=str(OUT / "mobile-approval-390x844.png"), full_page=False)
+    page.get_by_role("button", name="DENY").click()
+    page.wait_for_function(
+        "() => document.querySelector('#approvalPanel')?.classList.contains('hidden')"
+    )
     page.close()
     return {"approval": approval, "right": right}
 

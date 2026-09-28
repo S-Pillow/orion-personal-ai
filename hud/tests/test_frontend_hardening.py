@@ -7,6 +7,7 @@ from pathlib import Path
 HUD_ROOT = Path(__file__).resolve().parents[1]
 APP_JS = (HUD_ROOT / "static" / "app.js").read_text(encoding="utf-8")
 STYLES = (HUD_ROOT / "static" / "styles.css").read_text(encoding="utf-8")
+TARGET = (HUD_ROOT / "static" / "target-layout.css").read_text(encoding="utf-8")
 INDEX_HTML = (HUD_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 
 
@@ -71,11 +72,11 @@ class FrontendHardeningContractTests(unittest.TestCase):
     def test_degraded_status_has_warning_presentation(self):
         self.assertIn(
             ".status-chip.degraded",
-            STYLES,
+            TARGET,
         )
         self.assertIn(
-            "color: var(--warn);",
-            STYLES,
+            "color: #dfb85d;",
+            TARGET,
         )
 
     def test_existing_truthful_terminal_states_remain_present(self):

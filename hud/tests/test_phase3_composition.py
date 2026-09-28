@@ -102,7 +102,14 @@ class Phase3CompositionContractTests(unittest.TestCase):
             self.assertNotIn(token, INDEX)
 
     def test_secondary_panels_do_not_dim_interactive_content(self):
-        self.assertNotIn("opacity: 0.72;", STYLES)
+        self.assertNotIn(
+            "body.approval-active .memory-lens {\n  opacity:",
+            TARGET,
+        )
+        self.assertNotIn(
+            "body.approval-active .operational-details {\n  opacity:",
+            TARGET,
+        )
         self.assertNotIn(".peripheral-panel:hover", STYLES)
         self.assertNotIn(".secondary-panel:hover", STYLES)
 

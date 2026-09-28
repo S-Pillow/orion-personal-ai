@@ -24,6 +24,9 @@ WORKSPACE = (
 STYLES = (HUD_ROOT / "static" / "styles.css").read_text(
     encoding="utf-8"
 )
+TARGET = (HUD_ROOT / "static" / "target-layout.css").read_text(
+    encoding="utf-8"
+)
 
 BRIDGE = (HUD_ROOT / "orion_hud_bridge.py").read_text(
     encoding="utf-8"

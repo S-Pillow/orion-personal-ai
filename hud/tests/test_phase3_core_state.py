@@ -159,7 +159,7 @@ class Phase3CoreStateContractTests(unittest.TestCase):
 
     def test_memory_handoff_is_explicit_vendor_surface(self):
         self.assertIn(
-            "OPEN IAI BRAIN",
+            "OPEN NATIVE IAI BRAIN",
             INDEX,
         )
         self.assertIn(
