@@ -55,7 +55,11 @@ if (__fixtureMode !== "motion") {
 }
 
 if (__fixtureMode === "motion") {
-  setCore("THINKING", "Simulated fixture // active Core motion verification");
+  const __fixtureAssertThinking = () => {
+    setCore("THINKING", "Simulated fixture // active Core motion verification");
+  };
+  __fixtureAssertThinking();
+  setInterval(__fixtureAssertThinking, 250);
 }
 
 if (__fixtureMode === "review") {
