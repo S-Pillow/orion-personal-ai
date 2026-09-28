@@ -1,0 +1,35 @@
+name: Orion UI verification
+
+on:
+  push:
+    branches:
+      - feature/orion-ui-visual-convergence-pass
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Python HUD tests
+        run: python -m unittest discover -s hud/tests -p "test_*.py" -v
+      - name: Node renderer tests
+        run: node --test hud/tests/test_approval_rendering.cjs hud/tests/test_summon_rendering.cjs hud/tests/test_action_workspace_semantics.cjs
+      - name: Install Playwright
+        run: |
+          python -m pip install --disable-pip-version-check playwright==1.56.0
+          python -m playwright install --with-deps chromium
+      - name: Capture desktop and mobile fixtures
+        run: python hud/tests/capture_ui_visuals.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: orion-ui-visual-artifacts
+          path: ui-visual-artifacts/
+          if-no-files-found: warn
