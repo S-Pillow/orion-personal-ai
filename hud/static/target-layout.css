@@ -1534,3 +1534,302 @@ body::before {
     flex: 1 1 auto;
   }
 }
+
+
+/* Cinematic Core rebuild — presentation only, runtime truth unchanged. */
+.hero-scene-art {
+  opacity: 1;
+  object-position: 50% 48%;
+  filter: saturate(1.04) contrast(1.04);
+}
+
+.hero-scene::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    radial-gradient(circle at 50% 38%, rgba(95, 224, 234, 0.05), transparent 24%),
+    linear-gradient(90deg, rgba(3, 8, 11, 0.34), transparent 18%, transparent 82%, rgba(3, 8, 11, 0.34));
+  pointer-events: none;
+}
+
+.live-core {
+  width: 360px;
+  height: 360px;
+  transform:
+    translateX(var(--head-shift))
+    rotateY(var(--head-yaw));
+  opacity: var(--core-opacity);
+  transition: transform 220ms ease, opacity 220ms ease;
+}
+
+.core-mask {
+  position: relative;
+  top: 0;
+  width: 224px;
+  height: 112px;
+  display: block;
+  transform:
+    translate(var(--gaze-x), var(--gaze-y))
+    translate(var(--saccade-x), var(--saccade-y));
+  transition: transform 160ms ease;
+}
+
+.core-eye {
+  position: absolute;
+  top: 45px;
+  width: 78px;
+  height: 24px;
+  border: 0;
+  border-radius: 65% 35% 72% 28% / 70% 42% 58% 30%;
+  background:
+    linear-gradient(180deg, rgba(218, 254, 255, 0.98), rgba(89, 224, 235, 0.90) 34%, rgba(48, 170, 185, 0.46) 62%, transparent 70%);
+  box-shadow:
+    0 -1px 4px rgba(224, 254, 255, 0.72),
+    0 0 13px color-mix(in srgb, var(--core-tone) 82%, transparent),
+    0 0 30px color-mix(in srgb, var(--core-tone) 42%, transparent);
+  opacity: 0.92;
+  clip-path: polygon(0 58%, 18% 29%, 48% 17%, 78% 28%, 100% 51%, 76% 44%, 47% 45%, 20% 53%);
+}
+
+.core-eye-left {
+  left: 18px;
+  transform: rotate(7deg) scaleX(.96);
+}
+
+.core-eye-right {
+  right: 18px;
+  transform: rotate(-7deg) scaleX(.96);
+}
+
+.core-stage[data-core-state="WAITING"] .core-eye,
+.core-stage[data-core-state="DEGRADED"] .core-eye,
+.core-stage[data-core-state="STOPPING"] .core-eye {
+  filter: sepia(.25);
+}
+
+.core-stage[data-core-state="ERROR"] .core-eye,
+.core-stage[data-core-state="OFFLINE"] .core-eye {
+  opacity: .56;
+}
+
+.core-presence-label {
+  bottom: 28px;
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, .72);
+}
+
+.core-presence-label span {
+  font-size: 20px;
+  font-weight: 400;
+  letter-spacing: .5em;
+}
+
+.core-presence-label b {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  color: rgba(202, 222, 226, .72);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: .22em;
+}
+
+.core-presence-label b strong {
+  color: var(--core-tone);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-shadow: 0 0 12px color-mix(in srgb, var(--core-tone) 60%, transparent);
+}
+
+.core-presence-label b i {
+  color: rgba(139, 174, 181, .6);
+  font-style: normal;
+}
+
+#coreDetail {
+  bottom: 7px;
+  max-width: 60%;
+  overflow: hidden;
+  color: rgba(144, 171, 177, .42);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Foreground workspace belongs to the hero rather than floating above it. */
+.conversation-workspace {
+  border-color: rgba(132, 206, 218, .12);
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, rgba(10, 25, 31, .90), rgba(5, 13, 17, .96));
+  box-shadow:
+    0 -1px 0 rgba(116, 226, 235, .12),
+    0 22px 54px rgba(0, 0, 0, .34);
+}
+
+.conversation-workspace::before {
+  content: "";
+  position: absolute;
+  top: -32px;
+  right: 7%;
+  left: 7%;
+  height: 42px;
+  background:
+    radial-gradient(ellipse at center bottom, rgba(91, 222, 232, .13), transparent 68%);
+  filter: blur(10px);
+  pointer-events: none;
+}
+
+.transcript {
+  padding: 26px 30px 20px;
+}
+
+.composer {
+  min-height: 72px;
+  padding: 10px;
+  border-color: rgba(137, 210, 221, .18);
+  border-radius: 9px;
+  background:
+    linear-gradient(180deg, rgba(8, 18, 23, .9), rgba(6, 14, 18, .98));
+}
+
+.composer textarea {
+  min-height: 52px;
+  padding: 15px 14px;
+  font-size: 14px;
+}
+
+.composer-actions > button {
+  min-width: 104px;
+  min-height: 48px;
+}
+
+/* Summoned evidence stays focused without replacing the whole center workspace. */
+.summon-panel {
+  top: auto;
+  right: auto;
+  bottom: max(22px, var(--content-gutter));
+  left: 50%;
+  width: min(calc(100% - (2 * var(--content-gutter))), 900px);
+  height: min(58vh, 520px);
+  min-height: 280px;
+  max-height: calc(100% - 120px);
+  transform: translateX(-50%);
+  padding: 20px 22px;
+  overflow: auto;
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, rgba(8, 22, 28, .97), rgba(4, 11, 15, .985));
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, .48),
+    0 0 0 1px rgba(108, 220, 231, .08);
+}
+
+/* Header telemetry is secondary; detailed provenance remains available in System. */
+.topbar .provenance-status .provenance-chip:not(.authority-chip) {
+  display: none;
+}
+
+.top-status {
+  gap: 14px;
+}
+
+#bridgeStatus,
+#hermesStatus,
+#authorityStatus {
+  font-size: 8px;
+  opacity: .84;
+}
+
+/* Rail hierarchy and approval focus. */
+.activity-panel:has(.activity-list > .muted-line:only-child) {
+  padding-bottom: 8px;
+  margin-bottom: 10px;
+}
+
+.activity-panel:has(.activity-list > .muted-line:only-child) .operational-title {
+  margin-bottom: 7px;
+}
+
+.activity-panel:has(.activity-list > .muted-line:only-child) .muted-line {
+  font-size: 9px;
+  opacity: .64;
+}
+
+body.approval-active .approval-panel {
+  padding: 16px;
+  box-shadow:
+    inset 0 0 0 1px rgba(220, 163, 63, .34),
+    0 18px 48px rgba(0, 0, 0, .30);
+}
+
+body.approval-active .activity-panel {
+  max-height: 68px;
+  overflow: hidden;
+  opacity: .62;
+}
+
+body.approval-active .action-evidence-panel {
+  max-height: 220px;
+  overflow: auto;
+}
+
+body.approval-active .action-technical {
+  display: none;
+}
+
+body.approval-active .memory-lens,
+body.approval-active .operational-details {
+  opacity: .5;
+}
+
+.operational-details summary {
+  padding: 8px 0;
+  color: var(--target-secondary);
+  font-size: 10px;
+  letter-spacing: .12em;
+  cursor: pointer;
+}
+
+.context-atmosphere {
+  min-height: 250px;
+  padding: 150px 24px 22px;
+  background:
+    linear-gradient(180deg, transparent, rgba(4, 10, 13, .20) 18%, rgba(4, 10, 13, .88)),
+    url("/orion-hero.svg") 18% 82% / 760px auto no-repeat;
+}
+
+.context-atmosphere blockquote {
+  padding-left: 2px;
+  font-size: 14px;
+}
+
+@media (max-width: 1360px) {
+  .live-core { width: 320px; height: 320px; }
+  .core-mask { width: 205px; }
+  .core-eye { width: 70px; }
+  .summon-panel {
+    width: min(calc(100% - 32px), 820px);
+    height: min(56vh, 470px);
+  }
+}
+
+@media (max-width: 760px) {
+  .core-presence-label span { font-size: 16px; }
+  .core-presence-label b {
+    gap: 6px;
+    font-size: 7px;
+    letter-spacing: .14em;
+  }
+  .summon-panel {
+    width: calc(100% - 20px);
+    max-height: 62vh;
+  }
+}
