@@ -264,8 +264,8 @@ body {
 .core-visual {
   left: calc(50% + var(--center-shift));
   top: 47%;
-  width: 300px;
-  height: 300px;
+  width: 282px;
+  height: 282px;
   transform: translate(-50%, -50%);
   color: var(--core-accent);
   filter: drop-shadow(0 0 26px rgba(99,229,239,.10));
@@ -290,12 +290,21 @@ body {
   opacity: .23;
 }
 
+.core-halo-inner {
+  stroke-width: .55;
+  opacity: .13;
+}
+
 .core-orbit-detail {
   fill: none;
   stroke: currentColor;
   stroke-width: .8;
-  opacity: .14;
+  opacity: .12;
   transform-origin: 160px 160px;
+}
+
+.core-orbit-c {
+  opacity: .07;
 }
 
 .core-face {
@@ -306,7 +315,13 @@ body {
 .core-face-sheen { opacity: .88; }
 
 .core-face-plane {
-  fill: rgba(0, 5, 8, .55);
+  fill: rgba(0, 5, 8, .46);
+}
+
+.core-inner-rim {
+  fill: none;
+  stroke: rgba(177, 240, 245, .10);
+  stroke-width: .7;
 }
 
 .core-eye-group {
@@ -320,8 +335,8 @@ body {
 .core-eye-highlight {
   fill: none;
   stroke: #e9feff;
-  stroke-width: 1.1;
-  opacity: .62;
+  stroke-width: .9;
+  opacity: .54;
 }
 
 .core-stage[data-gaze="left"] { --eye-x: -5px; --eye-y: 1px; }
