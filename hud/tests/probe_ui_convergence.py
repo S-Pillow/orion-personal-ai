@@ -77,8 +77,12 @@ if (__fixtureMode === "summon") {
 }
 
 if (__fixtureMode === "offline") {
-  setHermesOnline(false);
-  setCore("OFFLINE", "Simulated fixture // no live Hermes claim");
+  const __fixtureAssertOffline = () => {
+    setHermesOnline(false);
+    setCore("OFFLINE", "Simulated fixture // no live Hermes claim");
+  };
+  setTimeout(__fixtureAssertOffline, 300);
+  setInterval(__fixtureAssertOffline, 500);
 }
 
 if (__fixtureMode === "summon" || __fixtureMode === "summon-approval") {
