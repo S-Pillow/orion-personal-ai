@@ -13,6 +13,9 @@ INDEX = (HUD_ROOT / "static" / "index.html").read_text(
 STYLES = (HUD_ROOT / "static" / "styles.css").read_text(
     encoding="utf-8"
 )
+TARGET = (HUD_ROOT / "static" / "target-layout.css").read_text(
+    encoding="utf-8"
+)
 
 
 class Phase3CompositionContractTests(unittest.TestCase):
@@ -69,11 +72,12 @@ class Phase3CompositionContractTests(unittest.TestCase):
         self.assertIn("ORIGIN &#183; UNOBSERVED", INDEX)
 
     def test_center_and_core_are_visually_prioritized(self):
-        self.assertIn("P3-05A composition convergence", STYLES)
-        self.assertIn("minmax(560px, 1fr)", STYLES)
-        self.assertIn("minmax(230px, 38vh)", STYLES)
-        self.assertIn("max-width: min(82%, 760px);", STYLES)
-        self.assertIn("width: 160px;", STYLES)
+        self.assertIn('data-presentation-shell="environment-first"', INDEX)
+        self.assertIn(".center-stage {", TARGET)
+        self.assertIn("position: absolute;", TARGET)
+        self.assertIn("--hero-height: clamp(410px, 50vh, 560px);", TARGET)
+        self.assertIn("--workspace-overlap: 86px;", TARGET)
+        self.assertIn(".conversation-workspace {", TARGET)
 
     def test_future_phase_controls_are_not_advertised(self):
         for token in (
