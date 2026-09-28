@@ -30,7 +30,7 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
 
     def test_top_navigation_is_integrated_into_chrome(self):
         topbar_start = INDEX.index('<header class="topbar">')
-        main_start = INDEX.index('<main class="hud-grid">')
+        main_start = INDEX.index("<main ")
         topbar = INDEX[topbar_start:main_start]
         self.assertIn("workspace-switcher", topbar)
         self.assertIn(">CONVERSATION</button>", topbar)
@@ -38,7 +38,7 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
         self.assertIn(">MEMORY</button>", topbar)
 
     def test_core_is_scene_not_css_ring_field(self):
-        self.assertIn("hero-scene-art", INDEX)
+        self.assertIn("scene-environment", INDEX)
         self.assertIn("hero-thoughts-left", INDEX)
         self.assertIn("hero-thoughts-right", INDEX)
         self.assertIn("LISTENING. THINKING. WITH YOU.", INDEX)
@@ -47,10 +47,10 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
     def test_conversation_is_foreground_surface(self):
         self.assertIn(".conversation-workspace", TARGET)
         self.assertIn("backdrop-filter: blur(12px);", TARGET)
-        self.assertIn("--workspace-overlap: 64px;", TARGET)
-        self.assertIn("calc(-1 * var(--workspace-overlap))", TARGET)
-        self.assertIn(".composer-actions", INDEX)
-        self.assertIn("grid-template-columns: minmax(0, 1fr) auto;", TARGET)
+        self.assertIn("--center-width: min(920px", TARGET)
+        self.assertIn('class="workspace-pane foreground-workspace"', INDEX)
+        self.assertIn('class="composer-actions"', INDEX)
+        self.assertIn("grid-template-columns: 44px minmax(0,1fr) auto;", TARGET)
 
     def test_context_and_activity_rails_are_editorial(self):
         self.assertIn(".context-sidebar", TARGET)
@@ -82,8 +82,8 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
             "OFFLINE",
         ):
             with self.subTest(state=state):
-                self.assertIn(f'data-core-state="{state}"', STYLES)
-        self.assertIn("@media (prefers-reduced-motion: reduce)", STYLES)
+                self.assertIn(f'data-core-state="{state}"', TARGET)
+        self.assertIn("@media (prefers-reduced-motion: reduce)", TARGET)
 
     def test_conversation_and_rails_have_product_hierarchy(self):
         for token in (
@@ -94,9 +94,9 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
             "approvalCommand",
         ):
             self.assertIn(token, INDEX + APP)
-        self.assertIn("--conversation-max: 1080px;", TARGET)
-        self.assertIn("--left-region: clamp(220px, 15vw, 275px);", TARGET)
-        self.assertIn("--right-region: clamp(285px, 20vw, 360px);", TARGET)
+        self.assertIn("--center-width: min(920px", TARGET)
+        self.assertIn("--left-region: clamp(238px, 15.1vw, 260px);", TARGET)
+        self.assertIn("--right-region: clamp(360px, 24.2vw, 410px);", TARGET)
 
     def test_structural_layout_has_one_authoritative_definition(self):
         self.assertNotIn(
@@ -104,8 +104,8 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
             STYLES,
         )
         self.assertNotIn("grid-template-columns: 1fr 86px 86px;", STYLES + TARGET)
-        self.assertIn("--left-region: clamp(220px, 15vw, 275px);", TARGET)
-        self.assertIn("--workspace-overlap: 64px;", TARGET)
+        self.assertIn("--left-region: clamp(238px, 15.1vw, 260px);", TARGET)
+        self.assertIn("--right-region: clamp(360px, 24.2vw, 410px);", TARGET)
         self.assertIn(".center-stage {", TARGET)
         self.assertIn("position: absolute;", TARGET)
         self.assertNotIn("grid-template-columns:\n    var(--rail-left-width)", TARGET)
@@ -119,65 +119,55 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
         self.assertIn("ui.sendButton.hidden = running;", APP)
         self.assertIn(":focus-visible", TARGET)
 
-    def test_cinematic_core_uses_volumetric_asset_and_external_state(self):
+    def test_cinematic_core_is_addressable_and_environment_has_no_baked_face(self):
         self.assertIn('id="coreState"', INDEX)
-        core_ring = INDEX[INDEX.index('class="core-ring live-core"'):INDEX.index('class="core-presence-label"')]
-        self.assertNotIn('id="coreState"', core_ring)
-        for token in (
-            'id="coreVolume"',
-            'id="coreSheen"',
-            'illuminated platform and foreground architecture',
-            'floor reflection and haze',
-        ):
-            self.assertIn(token, HERO)
-        self.assertIn("recessed eye apertures", HERO)
-        self.assertIn('fill="url(#eyeLightL)"', HERO)
-        self.assertIn('fill="url(#eyeLightR)"', HERO)
-        self.assertIn(".core-mask {", TARGET)
-        self.assertIn("opacity: 0;", TARGET)
+        core = INDEX[INDEX.index('class="core-visual live-core"'):INDEX.index('class="core-presence-label"')]
+        self.assertNotIn('id="coreState"', core)
+        self.assertIn('class="core-eye core-eye-left"', core)
+        self.assertIn('class="core-eye core-eye-right"', core)
+        self.assertIn('class="core-halo core-halo-outer"', core)
+        self.assertNotIn("core-eye", HERO)
+        self.assertIn(".core-stage.is-blinking .core-eye-group", TARGET)
+        self.assertIn('.core-stage[data-core-state="OFFLINE"] .core-visual', TARGET)
 
     def test_speaker_marks_replace_placeholder_initials(self):
         self.assertIn('avatar.textContent = "";', APP)
         self.assertIn('avatar.dataset.speaker = isUser ? "user" : "orion";', APP)
         self.assertIn('.message-avatar[data-speaker="user"]::before', TARGET)
         self.assertIn('.message-avatar[data-speaker="orion"]::before', TARGET)
-        self.assertIn("grid-template-columns: 42px minmax(0, 1fr);", TARGET)
+        self.assertIn("grid-template-columns: 46px minmax(0,1fr);", TARGET)
 
-    def test_core_is_contained_and_conversation_is_denser(self):
-        self.assertIn("--hero-height: clamp(380px, 44vh, 500px);", TARGET)
-        self.assertIn("--workspace-overlap: 64px;", TARGET)
-        self.assertIn("max-height: none;", TARGET)
-        self.assertIn("object-position: 50% 50%;", TARGET)
+    def test_core_is_contained_and_foreground_matches_reference_geometry(self):
+        self.assertIn("--hero-height: clamp(340px, 42vh, 368px);", TARGET)
+        self.assertIn("--center-width: min(920px", TARGET)
+        self.assertIn("width: 300px;", TARGET)
+        self.assertIn("grid-template-rows: minmax(0,1fr) 78px;", TARGET)
 
-    def test_vertical_composition_eliminates_desktop_dead_zone(self):
+    def test_vertical_composition_fills_desktop_stage(self):
         self.assertIn(
             "grid-template-rows: var(--hero-height) minmax(0, 1fr);",
             TARGET,
         )
-        self.assertIn(
-            "height: calc(100% + var(--workspace-overlap) - 18px);",
-            TARGET,
-        )
-        self.assertIn("height: 100%;\n  overflow-y: auto;", TARGET)
-        self.assertIn("align-self: end;", TARGET)
-        self.assertIn('viewBox="0 0 1600 560"', HERO)
+        self.assertIn("height: 100%;", TARGET)
+        self.assertIn("overflow-y: auto;", TARGET)
+        self.assertIn('viewBox="0 0 1600 900"', HERO)
 
     def test_left_atmosphere_is_integrated_background_layer(self):
-        self.assertIn("height: 42%;", TARGET)
+        self.assertIn("height: 35%;", TARGET)
         self.assertIn("mask-image: linear-gradient(180deg", TARGET)
         self.assertIn("align-items: flex-end;", TARGET)
         self.assertNotIn("padding: 22px 20px 250px;", TARGET)
 
     def test_center_axis_drives_hero_identity_and_workspace(self):
         self.assertIn("--center-shift:", TARGET)
-        self.assertIn("transform: translateX(var(--center-shift));", TARGET)
+        self.assertIn("left: calc(50% + var(--center-shift));", TARGET)
         self.assertIn("left: calc(50% + var(--center-shift));", TARGET)
 
     def test_approval_focus_and_summon_are_visually_prioritized(self):
         self.assertIn('document.body.classList.add("approval-active");', APP)
         self.assertIn('document.body.classList.remove("approval-active");', APP)
         self.assertIn("body.approval-active .approval-panel", TARGET)
-        self.assertIn("width: min(\n    760px,", TARGET)
+        self.assertIn("width: min(760px, calc(var(--center-width) - 60px));", TARGET)
         self.assertIn("max-height: 360px;", TARGET)
 
     def test_header_detailed_provenance_is_demoted_not_deleted(self):
