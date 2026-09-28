@@ -53,6 +53,7 @@ STATIC_FILES = {
     "/styles.css": ("styles.css", "text/css; charset=utf-8"),
     "/target-layout.css": ("target-layout.css", "text/css; charset=utf-8"),
     "/orion-hero.svg": ("orion-hero.svg", "image/svg+xml"),
+    "/orion-environment.webp": ("orion-environment.webp", "image/webp"),
 }
 
 
