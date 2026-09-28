@@ -40,7 +40,9 @@ class UIConvergenceFixtureContractTests(unittest.TestCase):
     def test_fixture_can_auto_drive_real_submit_path_for_approval_overlap(self):
         self.assertIn('__fixtureMode === "approval" || __fixtureMode === "summon-approval"', PROBE)
         self.assertIn('state.sessionId = "session_1";', PROBE)
-        self.assertIn('ui.messageInput.value = "probe";', PROBE)
+        self.assertIn('"Prepare the next Orion interface proposal from the reviewed notes. "', PROBE)
+        self.assertIn('"Show me the exact change before anything is written."', PROBE)
+        self.assertIn('"Preparing proposal"', PROBE)
         self.assertIn("ui.composer.requestSubmit();", PROBE)
 
     def test_review_fixture_resets_transcript_to_reference_start(self):
