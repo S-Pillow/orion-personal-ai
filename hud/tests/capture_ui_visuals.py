@@ -97,6 +97,8 @@ def mobile_review_capture(browser, fixture) -> dict:
     assert state["y"] + state["height"] <= conversation["y"] + 1
     assert not overlap(state, conversation)
     assert composer["width"] <= 374
+    assert composer["y"] >= 0
+    assert composer["y"] + composer["height"] <= 844.5
     page.screenshot(path=str(OUT / "mobile-review-390x844.png"), full_page=False)
     page.close()
     return {
@@ -171,6 +173,8 @@ def offline_capture(browser, fixture) -> dict:
     assert "offline" in (status.get_attribute("class") or "")
     status_color = status.evaluate("(el) => getComputedStyle(el).color")
     core_opacity = core.evaluate("(el) => getComputedStyle(el).opacity")
+    assert status_color == "rgb(214, 124, 114)"
+    assert abs(float(core_opacity) - 0.52) < 0.01
     page.screenshot(path=str(OUT / "desktop-offline.png"), full_page=True)
     page.close()
     return {"status_color": status_color, "core_opacity": core_opacity}
@@ -205,17 +209,58 @@ def mobile_approval_capture(browser, fixture) -> dict:
     return {"approval": approval, "right": right}
 
 
-def reduced_motion_check(browser, fixture) -> dict:
-    page = browser.new_page(viewport={"width": 1440, "height": 900})
-    page.emulate_media(reduced_motion="reduce")
-    page.goto(fixture.review_url, wait_until="networkidle")
-    wait_review(page)
-    animation = page.locator(".core-halo-outer").evaluate(
+def motion_preference_check(browser, fixture) -> dict:
+    full = browser.new_page(viewport={"width": 1440, "height": 900})
+    full.emulate_media(reduced_motion="no-preference")
+    full.goto(fixture.motion_url, wait_until="networkidle")
+    full.wait_for_function(
+        "() => document.querySelector('#coreStage')?.dataset.coreState === 'THINKING'"
+    )
+    full_animation = full.locator(".core-halo-outer").evaluate(
         "(el) => getComputedStyle(el).animationName"
     )
+    full_motion = full.locator("#coreStage").get_attribute("data-motion")
+    assert full_animation == "core-pulse"
+    assert full_motion == "full"
+    full.close()
+
+    reduced = browser.new_page(viewport={"width": 1440, "height": 900})
+    reduced.emulate_media(reduced_motion="reduce")
+    reduced.goto(fixture.motion_url, wait_until="networkidle")
+    reduced.wait_for_function(
+        "() => document.querySelector('#coreStage')?.dataset.coreState === 'THINKING'"
+    )
+    reduced_animation = reduced.locator(".core-halo-outer").evaluate(
+        "(el) => getComputedStyle(el).animationName"
+    )
+    reduced_motion = reduced.locator("#coreStage").get_attribute("data-motion")
+    reduced.close()
+    assert reduced_animation == "none"
+    assert reduced_motion == "reduced"
+    return {
+        "full_animation": full_animation,
+        "full_motion": full_motion,
+        "reduced_animation": reduced_animation,
+        "reduced_motion": reduced_motion,
+    }
+
+
+def mobile_keyboard_capture(browser, fixture) -> dict:
+    page = browser.new_page(viewport={"width": 390, "height": 844})
+    page.goto(fixture.review_url, wait_until="networkidle")
+    wait_review(page)
+    page.locator("#messageInput").focus()
+    page.set_viewport_size({"width": 390, "height": 520})
+    page.wait_for_timeout(150)
+    composer = rect(page, ".composer")
+    assert composer["y"] >= 0
+    assert composer["y"] + composer["height"] <= 520.5
+    page.screenshot(
+        path=str(OUT / "mobile-keyboard-simulated-390x520.png"),
+        full_page=False,
+    )
     page.close()
-    assert animation == "none"
-    return {"core_halo_animation": animation}
+    return {"composer": composer, "viewport": [390, 520]}
 
 
 def main() -> None:
@@ -238,7 +283,8 @@ def main() -> None:
                 "summon_approval": approval_capture(browser, fixture),
                 "offline": offline_capture(browser, fixture),
                 "mobile_approval": mobile_approval_capture(browser, fixture),
-                "reduced_motion": reduced_motion_check(browser, fixture),
+                "mobile_keyboard": mobile_keyboard_capture(browser, fixture),
+                "motion_preferences": motion_preference_check(browser, fixture),
             }
             browser.close()
         (OUT / "geometry-report.json").write_text(
