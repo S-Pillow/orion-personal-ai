@@ -29,6 +29,10 @@ def approval_event(run_id):
     return {
         "event": "approval.request", "run_id": run_id,
         "command": "orion_vault_apply_plan", "description": DESCRIPTION,
+        "action_title": "Review proposed Orion note update",
+        "target": "C:\\Orion-Disposable-Fixture\\vault\\note.md",
+        "effect": "Apply the displayed Markdown diff after an explicit operator decision.",
+        "operation": "edit_note",
         "pattern_key": "plugin_rule:orion_disposable_display_fixture",
         "allow_session": True, "allow_permanent": True,
         "choices": ["once", "session", "always", "deny"],
