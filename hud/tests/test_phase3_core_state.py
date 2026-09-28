@@ -21,6 +21,9 @@ CORE = (HUD_ROOT / "static" / "core-state.js").read_text(
 STYLES = (HUD_ROOT / "static" / "styles.css").read_text(
     encoding="utf-8"
 )
+TARGET = (HUD_ROOT / "static" / "target-layout.css").read_text(
+    encoding="utf-8"
+)
 
 
 class Phase3CoreStateContractTests(unittest.TestCase):
@@ -114,14 +117,12 @@ class Phase3CoreStateContractTests(unittest.TestCase):
             with self.subTest(token=token):
                 self.assertIn(token, CORE)
 
+        self.assertIn('class="core-eye-group"', INDEX)
         self.assertIn(
-            "@keyframes core-breathe",
-            STYLES,
+            ".core-stage.is-blinking .core-eye-group",
+            TARGET,
         )
-        self.assertIn(
-            "@keyframes core-halo-drift",
-            STYLES,
-        )
+        self.assertIn("@keyframes core-pulse", TARGET)
 
     def test_reduced_motion_disables_generated_motion(self):
         self.assertIn(
@@ -134,7 +135,7 @@ class Phase3CoreStateContractTests(unittest.TestCase):
         )
         self.assertIn(
             "@media (prefers-reduced-motion: reduce)",
-            STYLES,
+            TARGET,
         )
 
     def test_core_module_has_no_runtime_or_data_authority(self):

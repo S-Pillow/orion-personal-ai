@@ -43,18 +43,20 @@ class UIConvergenceContractTests(unittest.TestCase):
         )
 
     def test_core_is_visually_promoted(self):
-        self.assertIn("--hero-height: clamp(380px, 44vh, 500px);", self.target)
+        self.assertIn("--hero-height: clamp(340px, 42vh, 368px);", self.target)
         self.assertIn(".hero-scene {", self.target)
-        self.assertIn(".core-mask {", self.target)
-        self.assertIn("clip-path: polygon(", self.target)
+        self.assertIn('class="core-visual live-core"', self.html)
+        self.assertIn('class="core-eye-group"', self.html)
+        self.assertIn(".core-stage.is-blinking .core-eye-group", self.target)
 
-    def test_embedded_core_eyes_are_owned_by_scene_asset(self):
+    def test_visible_core_eyes_are_addressable_inline_svg(self):
         hero = (STATIC / "orion-hero.svg").read_text(encoding="utf-8")
-        self.assertIn("recessed eye apertures", hero)
-        self.assertIn('fill="url(#eyeLightL)"', hero)
-        self.assertIn('fill="url(#eyeLightR)"', hero)
-        self.assertIn(".core-mask {", self.target)
-        self.assertIn("opacity: 0;", self.target)
+        self.assertNotIn("core-eye", hero)
+        self.assertIn('class="core-eye core-eye-left"', self.html)
+        self.assertIn('class="core-eye core-eye-right"', self.html)
+        self.assertIn('class="core-eye-group"', self.html)
+        self.assertIn('[data-gaze="left"]', self.target)
+        self.assertIn("is-blinking", self.target)
 
     def test_secondary_diagnostics_are_environment_regions(self):
         self.assertIn(".context-sidebar {", self.target)
@@ -70,14 +72,17 @@ class UIConvergenceContractTests(unittest.TestCase):
         )
         self.assertIn("grid-row: 2;", self.target)
         self.assertIn(
-            "height: calc(100% + var(--workspace-overlap) - 18px);",
+            "grid-template-rows: minmax(0,1fr) 78px;",
             self.target,
         )
-        self.assertIn("align-self: end;", self.target)
+        self.assertIn(".composer {", self.target)
 
     def test_approval_visually_outranks_lower_priority_context(self):
         self.assertIn("body.approval-active .approval-panel", self.target)
-        self.assertIn("body.approval-active .memory-lens", self.target)
+        self.assertNotIn(
+            "body.approval-active .activity-sidebar {\n  width:",
+            self.target,
+        )
         self.assertIn("body.approval-active .action-evidence-panel", self.target)
 
 

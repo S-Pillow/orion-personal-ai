@@ -75,16 +75,21 @@ class Phase3CompositionContractTests(unittest.TestCase):
         self.assertIn('data-presentation-shell="environment-first"', INDEX)
         self.assertIn(".center-stage {", TARGET)
         self.assertIn("position: absolute;", TARGET)
-        self.assertIn("--hero-height: clamp(380px, 44vh, 500px);", TARGET)
-        self.assertIn("--workspace-overlap: 64px;", TARGET)
+        self.assertIn("--hero-height: clamp(340px, 42vh, 368px);", TARGET)
+        self.assertIn("--center-width: min(920px", TARGET)
+        self.assertIn(".foreground-workspace {", TARGET)
         self.assertIn(".conversation-workspace {", TARGET)
         self.assertIn(
             "grid-template-rows: var(--hero-height) minmax(0, 1fr);",
             TARGET,
         )
         self.assertIn(
-            "height: calc(100% + var(--workspace-overlap) - 18px);",
+            "grid-template-rows: minmax(0,1fr) 78px;",
             TARGET,
+        )
+        self.assertIn(
+            'class="workspace-pane foreground-workspace"',
+            INDEX,
         )
 
     def test_future_phase_controls_are_not_advertised(self):
@@ -104,7 +109,7 @@ class Phase3CompositionContractTests(unittest.TestCase):
     def test_reduced_motion_contract_remains(self):
         self.assertIn(
             "@media (prefers-reduced-motion: reduce)",
-            STYLES,
+            TARGET,
         )
         self.assertIn(
             "animation-duration: 0.001ms !important;",
