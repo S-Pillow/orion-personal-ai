@@ -362,7 +362,19 @@ body {
 .core-face-sheen { opacity: .68; }
 
 .core-face-plane {
-  fill: rgba(0, 3, 5, .68);
+  fill: rgba(0, 3, 5, .38);
+  filter: drop-shadow(0 7px 12px rgba(0,0,0,.34));
+}
+
+.core-face-contour {
+  fill:none;
+  stroke:rgba(141,231,237,.085);
+  stroke-width:.8;
+  filter:drop-shadow(0 0 5px rgba(99,229,239,.06));
+}
+
+.core-face-contour-lower {
+  opacity:.55;
 }
 
 .core-inner-rim {
