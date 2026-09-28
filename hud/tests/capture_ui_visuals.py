@@ -114,6 +114,9 @@ def pending_approval_capture(browser, fixture) -> dict:
     page.wait_for_function(
         "() => !document.querySelector('#approvalPanel')?.classList.contains('hidden')"
     )
+    page.locator("#transcript").evaluate("(el) => { el.scrollTop = 0; }")
+    page.wait_for_timeout(75)
+    assert page.locator("#transcript").evaluate("(el) => el.scrollTop") == 0
     approval = rect(page, "#approvalPanel")
     right = rect(page, ".activity-sidebar")
     conversation = rect(page, ".conversation-workspace")
@@ -141,6 +144,9 @@ def approval_capture(browser, fixture) -> dict:
     page.wait_for_function(
         "() => !document.querySelector('#approvalPanel')?.classList.contains('hidden')"
     )
+    page.locator("#transcript").evaluate("(el) => { el.scrollTop = 0; }")
+    page.wait_for_timeout(75)
+    assert page.locator("#transcript").evaluate("(el) => el.scrollTop") == 0
     approval = rect(page, "#approvalPanel")
     right = rect(page, ".activity-sidebar")
     conversation = rect(page, ".conversation-workspace")
