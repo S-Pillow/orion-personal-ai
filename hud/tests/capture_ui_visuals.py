@@ -269,6 +269,103 @@ def mobile_keyboard_capture(browser, fixture) -> dict:
     return {"composer": composer, "viewport": [390, 520]}
 
 
+def core_renderer_capture(browser, fixture) -> dict:
+    context = browser.new_context(
+        viewport={"width": 1440, "height": 900},
+        record_video_dir=str(OUT),
+        record_video_size={"width": 1440, "height": 900},
+    )
+    page = context.new_page()
+    page.goto(fixture.core_review_url, wait_until="networkidle")
+    page.wait_for_function("() => Boolean(window.__orionCoreFixture)")
+
+    def snapshot(name: str) -> dict:
+        state = page.evaluate("() => window.__orionCoreFixture.snapshot()")
+        page.screenshot(path=str(OUT / f"core-{name}.png"), full_page=False)
+        return state
+
+    neutral = snapshot("neutral")
+    assert neutral["state"] == "READY"
+    assert neutral["gaze"] == "forward"
+    assert neutral["blinkPhase"] == "open"
+
+    page.evaluate("() => window.__orionCoreFixture.gaze('left')")
+    left = snapshot("gaze-left")
+    assert left["gaze"] == "left"
+
+    page.evaluate("() => window.__orionCoreFixture.gaze('right')")
+    right = snapshot("gaze-right")
+    assert right["gaze"] == "right"
+
+    page.evaluate("() => window.__orionCoreFixture.gaze('left')")
+    assert page.evaluate("() => window.__orionCoreFixture.blink()") is True
+    page.wait_for_function(
+        "() => document.querySelector('#coreStage')?.dataset.blinkPhase === 'closed'"
+    )
+    closed = snapshot("blink-closed")
+    assert closed["gaze"] == "left"
+
+    page.wait_for_function(
+        "() => document.querySelector('#coreStage')?.dataset.blinkPhase === 'opening'"
+    )
+    reopening = snapshot("blink-reopening")
+    assert reopening["gaze"] == "left"
+
+    page.wait_for_function(
+        "() => document.querySelector('#coreStage')?.dataset.blinkPhase === 'open'"
+    )
+
+    page.evaluate("() => window.__orionCoreFixture.state('WAITING')")
+    waiting = snapshot("waiting")
+    assert waiting["state"] == "WAITING"
+
+    page.evaluate("() => window.__orionCoreFixture.gaze('right')")
+    assert page.evaluate("() => window.__orionCoreFixture.blink()") is True
+    page.wait_for_function(
+        "() => document.querySelector('#coreStage')?.dataset.blinkPhase === 'closed'"
+    )
+    page.evaluate("() => window.__orionCoreFixture.state('THINKING')")
+    page.wait_for_function(
+        "() => document.querySelector('#coreStage')?.dataset.blinkPhase === 'open'"
+    )
+    after_state_change = page.evaluate(
+        "() => window.__orionCoreFixture.snapshot()"
+    )
+    assert after_state_change["state"] == "THINKING"
+    assert after_state_change["blinkPhase"] == "open"
+
+    page.evaluate("() => window.__orionCoreFixture.state('OFFLINE')")
+    offline = snapshot("offline")
+    assert offline["state"] == "OFFLINE"
+    assert offline["gaze"] == "forward"
+    assert offline["blinkPhase"] == "open"
+
+    page.evaluate("() => window.__orionCoreFixture.neutral()")
+    page.wait_for_timeout(220)
+    page.evaluate("() => window.__orionCoreFixture.gaze('left')")
+    page.wait_for_timeout(320)
+    page.evaluate("() => window.__orionCoreFixture.blink()")
+    page.wait_for_timeout(420)
+    page.evaluate("() => window.__orionCoreFixture.gaze('forward')")
+    page.wait_for_timeout(240)
+
+    video = page.video
+    page.close()
+    video.save_as(str(OUT / "core-motion-review.webm"))
+    context.close()
+
+    return {
+        "neutral": neutral,
+        "left": left,
+        "right": right,
+        "closed": closed,
+        "reopening": reopening,
+        "waiting": waiting,
+        "after_state_change": after_state_change,
+        "offline": offline,
+    }
+
+
 def main() -> None:
     fixture = UIConvergenceFixture()
     try:
@@ -291,6 +388,7 @@ def main() -> None:
                 "mobile_approval": mobile_approval_capture(browser, fixture),
                 "mobile_keyboard": mobile_keyboard_capture(browser, fixture),
                 "motion_preferences": motion_preference_check(browser, fixture),
+                "core_renderer": core_renderer_capture(browser, fixture),
             }
             browser.close()
         (OUT / "geometry-report.json").write_text(
