@@ -1,6 +1,7 @@
 "use strict";
 
 import { installCorePresence } from "./core-state.js";
+import { ORION_ENVIRONMENT_DATA_URI } from "./environment-data.js";
 import { installWorkspaceController } from "./workspace-state.js";
 import { installSummonController } from "./summon-state.js";
 import {
@@ -14,6 +15,7 @@ import {
 const $ = (id) => document.getElementById(id);
 
 const ui = {
+  sceneEnvironment: $("sceneEnvironment"),
   bridgeStatus: $("bridgeStatus"),
   hermesStatus: $("hermesStatus"),
   originStatus: $("originStatus"),
@@ -94,6 +96,10 @@ const ui = {
   jobCount: $("jobCount"),
   footerSession: $("footerSession"),
 };
+
+if (ui.sceneEnvironment && ORION_ENVIRONMENT_DATA_URI) {
+  ui.sceneEnvironment.src = ORION_ENVIRONMENT_DATA_URI;
+}
 
 const state = {
   sessionId: localStorage.getItem("orion.hermesSession") || "",
