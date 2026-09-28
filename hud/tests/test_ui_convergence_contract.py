@@ -43,10 +43,18 @@ class UIConvergenceContractTests(unittest.TestCase):
         )
 
     def test_core_is_visually_promoted(self):
-        self.assertIn("--hero-height: clamp(410px, 50vh, 560px);", self.target)
+        self.assertIn("--hero-height: clamp(440px, 52vh, 590px);", self.target)
         self.assertIn(".hero-scene {", self.target)
         self.assertIn(".core-mask {", self.target)
         self.assertIn("clip-path: polygon(", self.target)
+
+    def test_embedded_core_eyes_are_owned_by_scene_asset(self):
+        hero = (STATIC / "orion-hero.svg").read_text(encoding="utf-8")
+        self.assertIn("recessed eye apertures", hero)
+        self.assertIn('fill="url(#eyeLightL)"', hero)
+        self.assertIn('fill="url(#eyeLightR)"', hero)
+        self.assertIn(".core-mask {", self.target)
+        self.assertIn("opacity: 0;", self.target)
 
     def test_secondary_diagnostics_are_environment_regions(self):
         self.assertIn(".context-sidebar {", self.target)
