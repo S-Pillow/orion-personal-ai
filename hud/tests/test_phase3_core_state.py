@@ -80,7 +80,7 @@ class Phase3CoreStateContractTests(unittest.TestCase):
         self.assertIn('root.dataset.gaze = "forward";', CORE)
         self.assertIn('data-core-state="READY"', INDEX)
         self.assertIn('data-gaze="forward"', INDEX)
-        self.assertIn('data-blink-phase', CORE)
+        self.assertIn("root.dataset.blinkPhase", CORE)
 
     def test_presence_motion_uses_independent_lids_and_attention(self):
         for token in (
