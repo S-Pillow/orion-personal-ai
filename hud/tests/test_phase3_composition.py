@@ -75,8 +75,8 @@ class Phase3CompositionContractTests(unittest.TestCase):
         self.assertIn('data-presentation-shell="environment-first"', INDEX)
         self.assertIn(".center-stage {", TARGET)
         self.assertIn("position: absolute;", TARGET)
-        self.assertIn("--hero-height: clamp(410px, 50vh, 560px);", TARGET)
-        self.assertIn("--workspace-overlap: 86px;", TARGET)
+        self.assertIn("--hero-height: clamp(440px, 52vh, 590px);", TARGET)
+        self.assertIn("--workspace-overlap: 72px;", TARGET)
         self.assertIn(".conversation-workspace {", TARGET)
 
     def test_future_phase_controls_are_not_advertised(self):
