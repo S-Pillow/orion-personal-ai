@@ -114,9 +114,29 @@ if (__fixtureMode === "approval" || __fixtureMode === "summon-approval") {
   (async () => {
     await __fixtureSelectSession();
     ui.transcript.scrollTop = 0;
+    addActivity(
+      "Reviewing project notes",
+      "Reading the isolated Orion visual-convergence fixture.",
+      "completed",
+    );
+    addActivity(
+      "Synthesizing key themes",
+      "Comparing the supplied reference with the current shell.",
+      "completed",
+    );
+    addActivity(
+      "Preparing proposal",
+      "Drafting the next Orion interface proposal for operator review.",
+      "running",
+    );
     await new Promise((resolve) => setTimeout(resolve, 75));
-    ui.messageInput.value = "probe";
+    ui.messageInput.value =
+      "Prepare the next Orion interface proposal from the reviewed notes. "
+      + "Show me the exact change before anything is written.";
     ui.composer.requestSubmit();
+    setTimeout(() => {
+      ui.transcript.scrollTop = 0;
+    }, 200);
   })();
 }
 '''
