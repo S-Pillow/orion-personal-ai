@@ -48,8 +48,15 @@ async function __fixtureSelectSession() {
 }
 
 document.documentElement.dataset.fixtureClock = "22:24";
-corePresence.destroy();
-ui.coreStage.dataset.motion = "reduced";
+
+if (__fixtureMode !== "motion") {
+  corePresence.destroy();
+  ui.coreStage.dataset.motion = "reduced";
+}
+
+if (__fixtureMode === "motion") {
+  setCore("THINKING", "Simulated fixture // active Core motion verification");
+}
 
 if (__fixtureMode === "review") {
   (async () => {
@@ -172,6 +179,10 @@ class UIConvergenceFixture:
     def offline_url(self):
         return self.origin + "/?fixture=offline"
 
+    @property
+    def motion_url(self):
+        return self.origin + "/?fixture=motion"
+
     def close(self):
         with self.lock:
             if self.pending:
@@ -198,6 +209,7 @@ if __name__ == "__main__":
         print(f"APPROVAL HUD: {fixture.approval_url}", flush=True)
         print(f"SUMMON + APPROVAL HUD: {fixture.summon_approval_url}", flush=True)
         print(f"OFFLINE HUD: {fixture.offline_url}", flush=True)
+        print(f"MOTION HUD: {fixture.motion_url}", flush=True)
         print(
             "Base: select orion-hud-main and send 'probe' for simulated approval.",
             flush=True,
