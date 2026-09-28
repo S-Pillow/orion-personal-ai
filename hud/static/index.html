@@ -140,95 +140,108 @@
             <span>BRIGHTER THINKING.”</span>
           </div>
           <div class="core-visual live-core" aria-hidden="true">
-            <svg viewBox="0 0 320 320" focusable="false" aria-hidden="true">
+            <svg class="core-orb" viewBox="0 0 320 320" focusable="false" aria-hidden="true">
               <defs>
-                <radialGradient id="coreFaceGradient" cx="42%" cy="30%" r="74%">
-                  <stop offset="0" stop-color="#1b3c46"/>
-                  <stop offset=".25" stop-color="#102930"/>
-                  <stop offset=".54" stop-color="#09191f"/>
-                  <stop offset=".78" stop-color="#041014"/>
-                  <stop offset="1" stop-color="#010507"/>
+                <!-- Continuous glass: no forehead ellipse or lower-face patch. -->
+                <radialGradient id="coreGlass" cx=".42" cy=".35" r=".66">
+                  <stop offset="0" stop-color="#0c222e"/>
+                  <stop offset=".44" stop-color="#07151e"/>
+                  <stop offset=".78" stop-color="#020a11"/>
+                  <stop offset="1" stop-color="#01050a"/>
                 </radialGradient>
-                <radialGradient id="coreSheenGradient" cx="38%" cy="24%" r="64%">
-                  <stop offset="0" stop-color="#d5fbfd" stop-opacity=".12"/>
-                  <stop offset=".22" stop-color="#7ce2e9" stop-opacity=".055"/>
-                  <stop offset=".5" stop-color="#3faeba" stop-opacity=".016"/>
-                  <stop offset="1" stop-color="#000" stop-opacity="0"/>
+                <radialGradient id="coreEdgeLight" cx=".5" cy=".5" r=".5">
+                  <stop offset=".80" stop-color="#49cde6" stop-opacity="0"/>
+                  <stop offset=".94" stop-color="#49cde6" stop-opacity=".04"/>
+                  <stop offset="1" stop-color="#8cecff" stop-opacity=".32"/>
                 </radialGradient>
-                <linearGradient id="coreEdgeShade" x1="0" y1=".08" x2="1" y2=".92">
-                  <stop offset="0" stop-color="#061116" stop-opacity=".06"/>
-                  <stop offset=".45" stop-color="#020709" stop-opacity=".18"/>
-                  <stop offset=".76" stop-color="#000" stop-opacity=".48"/>
-                  <stop offset="1" stop-color="#000" stop-opacity=".72"/>
+                <linearGradient id="coreRimSpectrum" x1=".1" y1="0" x2=".85" y2="1">
+                  <stop offset="0" stop-color="#e7fcff"/>
+                  <stop offset=".24" stop-color="#70dcf7"/>
+                  <stop offset=".52" stop-color="#245b76"/>
+                  <stop offset=".75" stop-color="#59cee9"/>
+                  <stop offset="1" stop-color="#d5fbff"/>
                 </linearGradient>
-                <linearGradient id="coreEyeLight" x1="0" y1="0" x2="1" y2="0">
-                  <stop offset="0" stop-color="#73e9f0" stop-opacity=".16"/>
-                  <stop offset=".28" stop-color="#9bf4f8" stop-opacity=".72"/>
-                  <stop offset=".52" stop-color="#efffff" stop-opacity="1"/>
-                  <stop offset=".76" stop-color="#8aedf4" stop-opacity=".76"/>
-                  <stop offset="1" stop-color="#54c7d2" stop-opacity=".14"/>
-                </linearGradient>
-                <clipPath id="coreSphereClip">
-                  <circle cx="160" cy="160" r="124"/>
-                </clipPath>
-                <clipPath id="coreEyeClipLeft">
-                  <path d="M91 157 C108 147 126 145 145 151 C132 151 119 154 109 159 C103 162 98 162 92 160 Z"/>
-                </clipPath>
-                <clipPath id="coreEyeClipRight">
-                  <path d="M229 157 C212 147 194 145 175 151 C188 151 201 154 211 159 C217 162 222 162 228 160 Z"/>
-                </clipPath>
-                <filter id="coreEyeGlow" x="-80%" y="-200%" width="260%" height="500%">
-                  <feGaussianBlur stdDeviation="1.25"/>
-                </filter>
-                <filter id="coreRimGlow" x="-60%" y="-60%" width="220%" height="220%">
-                  <feGaussianBlur stdDeviation="4.5"/>
-                </filter>
+                <radialGradient id="coreEyeLight">
+                  <stop offset="0" stop-color="#fff"/>
+                  <stop offset=".18" stop-color="#eaffff"/>
+                  <stop offset=".48" stop-color="#8ceefe"/>
+                  <stop offset="1" stop-color="#258db4" stop-opacity=".3"/>
+                </radialGradient>
+                <radialGradient id="coreLightSpill">
+                  <stop offset="0" stop-color="#66dfff" stop-opacity=".14"/>
+                  <stop offset="1" stop-color="#66dfff" stop-opacity="0"/>
+                </radialGradient>
+                <clipPath id="coreSphereClip"><circle cx="160" cy="160" r="121"/></clipPath>
+                <path id="coreEyeLeftShape" d="M86 148 C101 141 123 142 143 154 C125 166 102 165 86 148Z"/>
+                <path id="coreEyeRightShape" d="M234 148 C219 141 197 142 177 154 C195 166 218 165 234 148Z"/>
+                <clipPath id="coreEyeClipLeft"><use href="#coreEyeLeftShape"/></clipPath>
+                <clipPath id="coreEyeClipRight"><use href="#coreEyeRightShape"/></clipPath>
+                <!-- Masks stay fixed; only their black shutters move. -->
+                <mask id="coreLidMaskLeft" maskUnits="userSpaceOnUse" x="76" y="126" width="80" height="58" style="mask-type: luminance">
+                  <rect x="76" y="126" width="80" height="58" fill="white"/>
+                  <rect class="core-eye-lid core-eye-lid-top" x="76" y="110" width="80" height="44"/>
+                  <rect class="core-eye-lid core-eye-lid-bottom" x="76" y="154" width="80" height="44"/>
+                </mask>
+                <mask id="coreLidMaskRight" maskUnits="userSpaceOnUse" x="164" y="126" width="80" height="58" style="mask-type: luminance">
+                  <rect x="164" y="126" width="80" height="58" fill="white"/>
+                  <rect class="core-eye-lid core-eye-lid-top" x="164" y="110" width="80" height="44"/>
+                  <rect class="core-eye-lid core-eye-lid-bottom" x="164" y="154" width="80" height="44"/>
+                </mask>
+                <filter id="coreEyeGlow" x="-30%" y="-100%" width="160%" height="300%"><feGaussianBlur stdDeviation="1.25"/></filter>
+                <filter id="coreRimGlow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="3"/></filter>
               </defs>
 
+              <!-- A quiet instrument-like orbit around the illuminated glass edge. -->
               <g class="core-halo-group">
-                <circle class="core-halo core-halo-bloom" cx="160" cy="160" r="146"/>
-                <circle class="core-halo core-halo-outer" cx="160" cy="160" r="146"/>
-                <circle class="core-halo core-halo-mid" cx="160" cy="160" r="137"/>
-                <circle class="core-halo core-halo-inner" cx="160" cy="160" r="130"/>
-                <path class="core-rim-arc core-rim-arc-a" d="M67 64 A136 136 0 0 1 143 25"/>
-                <path class="core-rim-arc core-rim-arc-b" d="M242 254 A136 136 0 0 1 203 286"/>
-                <path class="core-orbit-detail core-orbit-a" d="M48 93 C102 27 222 22 280 101"/>
-                <path class="core-orbit-detail core-orbit-b" d="M42 210 C108 289 226 292 286 205"/>
+                <circle class="core-orbit-track" cx="160" cy="160" r="148"/>
+                <path class="core-orbit-detail" d="M27 111 A142 142 0 0 1 196 23 M293 209 A142 142 0 0 1 124 297"/>
+                <path class="core-orbit-tick" d="M160 9V16 M311 160H304 M160 311V304 M9 160H16"/>
+                <circle class="core-halo core-halo-bloom" cx="160" cy="160" r="127"/>
+                <circle class="core-halo core-halo-outer" cx="160" cy="160" r="127"/>
+                <path class="core-rim-arc" d="M44 109 A127 127 0 0 1 161 33 M276 211 A127 127 0 0 1 159 287"/>
               </g>
-
               <g class="core-face-group">
-                <circle class="core-face" cx="160" cy="160" r="124" fill="url(#coreFaceGradient)"/>
-                <circle class="core-face-sheen" cx="160" cy="160" r="121" fill="url(#coreSheenGradient)"/>
-                <g clip-path="url(#coreSphereClip)">
-                  <ellipse class="core-surface-highlight" cx="132" cy="108" rx="78" ry="57"/>
-                  <path class="core-edge-shade" d="M49 173 C79 130 121 112 161 113 C210 113 249 137 275 178 C258 232 214 274 160 281 C105 274 64 230 49 173 Z" fill="url(#coreEdgeShade)"/>
+                <circle class="core-face" cx="160" cy="160" r="121" fill="url(#coreGlass)"/>
+                <circle class="core-surface-edge" cx="160" cy="160" r="121" fill="url(#coreEdgeLight)"/>
+                <g class="core-surface-depth" clip-path="url(#coreSphereClip)">
+                  <ellipse cx="113" cy="154" rx="55" ry="34" fill="url(#coreLightSpill)"/>
+                  <ellipse cx="207" cy="154" rx="55" ry="34" fill="url(#coreLightSpill)"/>
+                  <path class="core-glass-reflection" d="M58 123 A109 109 0 0 1 124 55 M196 265 A111 111 0 0 0 261 196"/>
+                  <g class="core-starlight">
+                    <circle cx="119" cy="82" r=".65"/><circle cx="188" cy="73" r=".45"/>
+                    <circle cx="220" cy="110" r=".55"/><circle cx="82" cy="187" r=".4"/>
+                    <circle cx="134" cy="231" r=".65"/><circle cx="198" cy="217" r=".4"/>
+                  </g>
                 </g>
-                <circle class="core-inner-rim" cx="160" cy="160" r="116"/>
+                <circle class="core-inner-rim" cx="160" cy="160" r="119"/>
 
                 <g class="core-eye-system core-eye-left">
-                  <path class="core-eye-aperture" d="M91 157 C108 147 126 145 145 151 C132 151 119 154 109 159 C103 162 98 162 92 160 Z"/>
-                  <g class="core-eye-bloom" clip-path="url(#coreEyeClipLeft)">
-                    <rect class="core-eye-luminance core-eye-luminance-left" x="88" y="145" width="62" height="22" rx="9" fill="url(#coreEyeLight)"/>
+                  <g class="core-eye-shutter" mask="url(#coreLidMaskLeft)">
+                    <use class="core-eye-bloom" href="#coreEyeLeftShape"/>
+                    <use class="core-eye-aperture" href="#coreEyeLeftShape"/>
+                    <g class="core-eye-window" clip-path="url(#coreEyeClipLeft)">
+                      <g class="core-eye-content core-eye-content-left">
+                        <ellipse class="core-eye-luminance" cx="116" cy="153" rx="31" ry="14" fill="url(#coreEyeLight)"/>
+                        <ellipse class="core-eye-focus" cx="118" cy="153" rx="3" ry="7"/>
+                        <path class="core-eye-highlight" d="M95 148 Q117 144 136 153"/>
+                      </g>
+                    </g>
                   </g>
-                  <g class="core-eye-content core-eye-content-left" clip-path="url(#coreEyeClipLeft)">
-                    <rect class="core-eye-luminance core-eye-luminance-left" x="90" y="147" width="58" height="18" rx="8" fill="url(#coreEyeLight)"/>
-                    <path class="core-eye-highlight" d="M103 157 C114 152 124 151 134 152"/>
-                  </g>
-                  <rect class="core-eye-lid core-eye-lid-top" x="88" y="143" width="62" height="14" rx="6" clip-path="url(#coreEyeClipLeft)"/>
-                  <rect class="core-eye-lid core-eye-lid-bottom" x="88" y="161" width="62" height="14" rx="6" clip-path="url(#coreEyeClipLeft)"/>
+                  <path class="core-eye-seam" d="M91 153 Q115 158 139 154"/>
                 </g>
-
                 <g class="core-eye-system core-eye-right">
-                  <path class="core-eye-aperture" d="M229 157 C212 147 194 145 175 151 C188 151 201 154 211 159 C217 162 222 162 228 160 Z"/>
-                  <g class="core-eye-bloom" clip-path="url(#coreEyeClipRight)">
-                    <rect class="core-eye-luminance core-eye-luminance-right" x="170" y="145" width="62" height="22" rx="9" fill="url(#coreEyeLight)"/>
+                  <g class="core-eye-shutter" mask="url(#coreLidMaskRight)">
+                    <use class="core-eye-bloom" href="#coreEyeRightShape"/>
+                    <use class="core-eye-aperture" href="#coreEyeRightShape"/>
+                    <g class="core-eye-window" clip-path="url(#coreEyeClipRight)">
+                      <g class="core-eye-content core-eye-content-right">
+                        <ellipse class="core-eye-luminance" cx="204" cy="153" rx="31" ry="14" fill="url(#coreEyeLight)"/>
+                        <ellipse class="core-eye-focus" cx="202" cy="153" rx="3" ry="7"/>
+                        <path class="core-eye-highlight" d="M225 148 Q203 144 184 153"/>
+                      </g>
+                    </g>
                   </g>
-                  <g class="core-eye-content core-eye-content-right" clip-path="url(#coreEyeClipRight)">
-                    <rect class="core-eye-luminance core-eye-luminance-right" x="172" y="147" width="58" height="18" rx="8" fill="url(#coreEyeLight)"/>
-                    <path class="core-eye-highlight" d="M217 157 C206 152 196 151 186 152"/>
-                  </g>
-                  <rect class="core-eye-lid core-eye-lid-top" x="170" y="143" width="62" height="14" rx="6" clip-path="url(#coreEyeClipRight)"/>
-                  <rect class="core-eye-lid core-eye-lid-bottom" x="170" y="161" width="62" height="14" rx="6" clip-path="url(#coreEyeClipRight)"/>
+                  <path class="core-eye-seam" d="M229 153 Q205 158 181 154"/>
                 </g>
               </g>
             </svg>

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 HUD_ROOT = Path(__file__).resolve().parents[1]
@@ -140,8 +141,27 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
         core = INDEX[INDEX.index('class="core-visual live-core"'):INDEX.index('class="core-presence-label"')]
         self.assertNotIn("core-face-plane", core)
         self.assertNotIn("core-face-contour", core)
-        self.assertIn("core-surface-highlight", core)
-        self.assertIn("core-edge-shade", core)
+        self.assertNotIn("core-surface-highlight", core)
+        self.assertNotIn("core-edge-shade", core)
+        self.assertIn('class="core-face" cx="160" cy="160" r="121"', core)
+
+    def test_eye_masks_enclose_bloom_and_stationary_apertures(self):
+        start = INDEX.index('<svg class="core-orb"')
+        core = ET.fromstring(INDEX[start:INDEX.index("</svg>", start) + 6])
+        for side in ("Left", "Right"):
+            with self.subTest(side=side):
+                shutter = core.find(f'.//g[@mask="url(#coreLidMask{side})"]')
+                self.assertIsNotNone(shutter)
+                self.assertIsNotNone(shutter.find('./use[@class="core-eye-bloom"]'))
+                self.assertIsNotNone(shutter.find('./use[@class="core-eye-aperture"]'))
+                window = shutter.find(f'./g[@clip-path="url(#coreEyeClip{side})"]')
+                self.assertIsNotNone(window)
+                content = window.find("./g")
+                self.assertIn("core-eye-content", content.get("class"))
+                self.assertNotIn("clip-path", content.attrib)
+                mask = core.find(f'.//mask[@id="coreLidMask{side}"]')
+                self.assertEqual(mask.get("maskUnits"), "userSpaceOnUse")
+                self.assertEqual(len(mask.findall("./rect[@class]")), 2)
 
     def test_eye_glow_is_separate_from_sharp_eye_art(self):
         self.assertIn('id="coreEyeGlow"', INDEX)

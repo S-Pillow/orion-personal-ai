@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
+from io import BytesIO
 from pathlib import Path
 
+from PIL import Image
 from playwright.sync_api import sync_playwright
 
 from probe_ui_convergence import UIConvergenceFixture
@@ -270,70 +273,84 @@ def mobile_keyboard_capture(browser, fixture) -> dict:
 
 
 def core_renderer_capture(browser, fixture) -> dict:
-    context = browser.new_context(
-        viewport={"width": 1440, "height": 900},
-        record_video_dir=str(OUT),
-        record_video_size={"width": 1440, "height": 900},
-    )
+    # Freeze JS timers for pose captures: the closed hold is only 30ms, shorter
+    # than screenshot stabilization. Record normal-speed motion separately.
+    context = browser.new_context(viewport={"width": 1440, "height": 900})
     page = context.new_page()
+    page.clock.install(time=datetime(2025, 4, 28, 22, 23, tzinfo=timezone.utc))
     page.goto(fixture.core_review_url, wait_until="networkidle")
     page.wait_for_function("() => Boolean(window.__orionCoreFixture)")
+    page.clock.pause_at(datetime(2025, 4, 28, 22, 24, tzinfo=timezone.utc))
+    page.evaluate("() => { window.__orionCoreFixture.state('OFFLINE'); window.__orionCoreFixture.neutral(); }")
 
     def snapshot(name: str) -> dict:
         state = page.evaluate("() => window.__orionCoreFixture.snapshot()")
-        page.screenshot(path=str(OUT / f"core-{name}.png"), full_page=False)
+        # Complete finite CSS transitions to their current target without
+        # letting the controller advance to another blink phase.
+        png = page.screenshot(path=str(OUT / f"core-{name}.png"), animations="disabled")
+        assert page.evaluate("() => window.__orionCoreFixture.snapshot()") == state
+        orb = rect(page, ".core-orb")
+        scale = orb["width"] / 320
+        eye_box = tuple(round(v) for v in (
+            orb["x"] + 80 * scale, orb["y"] + 136 * scale,
+            orb["x"] + 240 * scale, orb["y"] + 176 * scale,
+        ))
+        pixels = Image.open(BytesIO(png)).convert("RGB").crop(eye_box)
+        state["bright_eye_pixels"] = sum(g > 150 and b > 170 for r, g, b in pixels.getdata())
         return state
 
     neutral = snapshot("neutral")
     assert neutral["state"] == "READY"
     assert neutral["gaze"] == "forward"
     assert neutral["blinkPhase"] == "open"
+    assert neutral["bright_eye_pixels"] > 50, neutral
+    aperture = rect(page, ".core-eye-left .core-eye-aperture")
 
     page.evaluate("() => window.__orionCoreFixture.gaze('left')")
     left = snapshot("gaze-left")
+    left_focus = rect(page, ".core-eye-left .core-eye-focus")
     assert left["gaze"] == "left"
+    assert rect(page, ".core-eye-left .core-eye-aperture") == aperture
 
     page.evaluate("() => window.__orionCoreFixture.gaze('right')")
     right = snapshot("gaze-right")
+    right_focus = rect(page, ".core-eye-left .core-eye-focus")
     assert right["gaze"] == "right"
+    assert rect(page, ".core-eye-left .core-eye-aperture") == aperture
+    assert 5 < right_focus["x"] - left_focus["x"] < 9
 
     page.evaluate("() => window.__orionCoreFixture.gaze('left')")
     assert page.evaluate("() => window.__orionCoreFixture.blink()") is True
-    page.wait_for_function(
-        "() => document.querySelector('#coreStage')?.dataset.blinkPhase === 'closed'"
-    )
+    page.clock.run_for(80)
     closed = snapshot("blink-closed")
+    assert closed["blinkPhase"] == "closed"
     assert closed["gaze"] == "left"
+    # Tests the rendered output, including glow: checking a class alone missed
+    # the previous bright-eye leak in the purported closed frame.
+    assert closed["bright_eye_pixels"] < neutral["bright_eye_pixels"] * .12, closed
 
-    page.wait_for_function(
-        "() => document.querySelector('#coreStage')?.dataset.blinkPhase === 'opening'"
-    )
-    reopening = snapshot("blink-reopening")
-    assert reopening["gaze"] == "left"
-
-    page.wait_for_function(
-        "() => document.querySelector('#coreStage')?.dataset.blinkPhase === 'open'"
-    )
+    page.clock.run_for(30)
+    assert page.evaluate("() => window.__orionCoreFixture.snapshot().blinkPhase") == "opening"
+    page.clock.run_for(140)
+    reopened = snapshot("blink-reopened")
+    assert reopened["blinkPhase"] == "open"
+    assert reopened["gaze"] == "left"
+    assert reopened["bright_eye_pixels"] > neutral["bright_eye_pixels"] * .8
 
     page.evaluate("() => window.__orionCoreFixture.state('WAITING')")
     waiting = snapshot("waiting")
     assert waiting["state"] == "WAITING"
 
-    page.evaluate("() => window.__orionCoreFixture.gaze('right')")
     assert page.evaluate("() => window.__orionCoreFixture.blink()") is True
-    page.wait_for_function(
-        "() => document.querySelector('#coreStage')?.dataset.blinkPhase === 'closed'"
-    )
+    page.clock.run_for(80)
     page.evaluate("() => window.__orionCoreFixture.state('THINKING')")
-    page.wait_for_function(
-        "() => document.querySelector('#coreStage')?.dataset.blinkPhase === 'open'"
-    )
-    after_state_change = page.evaluate(
-        "() => window.__orionCoreFixture.snapshot()"
-    )
+    page.clock.run_for(170)
+    after_state_change = page.evaluate("() => window.__orionCoreFixture.snapshot()")
     assert after_state_change["state"] == "THINKING"
     assert after_state_change["blinkPhase"] == "open"
 
+    assert page.evaluate("() => window.__orionCoreFixture.blink()") is True
+    page.clock.run_for(80)
     page.evaluate("() => window.__orionCoreFixture.state('OFFLINE')")
     offline = snapshot("offline")
     assert offline["state"] == "OFFLINE"
@@ -341,28 +358,44 @@ def core_renderer_capture(browser, fixture) -> dict:
     assert offline["blinkPhase"] == "open"
 
     page.evaluate("() => window.__orionCoreFixture.neutral()")
-    page.wait_for_timeout(220)
-    page.evaluate("() => window.__orionCoreFixture.gaze('left')")
-    page.wait_for_timeout(320)
-    page.evaluate("() => window.__orionCoreFixture.blink()")
-    page.wait_for_timeout(420)
-    page.evaluate("() => window.__orionCoreFixture.gaze('forward')")
-    page.wait_for_timeout(240)
+    assert page.evaluate("() => window.__orionCoreFixture.blink()") is True
+    page.clock.run_for(80)
+    page.emulate_media(reduced_motion="reduce")
+    page.clock.run_for(32)
+    reduced = snapshot("reduced-motion")
+    assert reduced["motion"] == "reduced"
+    assert reduced["blinkPhase"] == "open"
+    assert reduced["gaze"] == "forward"
+    assert page.evaluate("() => window.__orionCoreFixture.blink()") is False
+    context.close()
 
+    # This recording uses the unmodified production controller and real time.
+    live = browser.new_context(
+        viewport={"width": 1440, "height": 900},
+        record_video_dir=str(OUT),
+        record_video_size={"width": 1440, "height": 900},
+    )
+    page = live.new_page()
+    page.goto(fixture.core_review_url, wait_until="networkidle")
+    page.wait_for_function("() => Boolean(window.__orionCoreFixture)")
+    page.wait_for_timeout(800)
+    for gaze in ("left", "right", "forward"):
+        page.evaluate("gaze => window.__orionCoreFixture.gaze(gaze)", gaze)
+        page.wait_for_timeout(650)
+        page.evaluate("() => window.__orionCoreFixture.blink()")
+        page.wait_for_timeout(650)
+    page.evaluate("() => window.__orionCoreFixture.state('WAITING')")
+    page.wait_for_timeout(800)
     video = page.video
     page.close()
     video.save_as(str(OUT / "core-motion-review.webm"))
-    context.close()
+    live.close()
 
     return {
-        "neutral": neutral,
-        "left": left,
-        "right": right,
-        "closed": closed,
-        "reopening": reopening,
-        "waiting": waiting,
-        "after_state_change": after_state_change,
-        "offline": offline,
+        "neutral": neutral, "left": left, "right": right, "closed": closed,
+        "reopened": reopened, "waiting": waiting,
+        "after_state_change": after_state_change, "offline": offline,
+        "reduced_motion": reduced,
     }
 
 
