@@ -139,7 +139,7 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
     def test_core_is_contained_and_foreground_matches_reference_geometry(self):
         self.assertIn("--hero-height: clamp(340px, 42vh, 368px);", TARGET)
         self.assertIn("--center-width: min(920px", TARGET)
-        self.assertIn("width: 300px;", TARGET)
+        self.assertIn("width: 282px;", TARGET)
         self.assertIn("grid-template-rows: minmax(0,1fr) 78px;", TARGET)
 
     def test_vertical_composition_fills_desktop_stage(self):
