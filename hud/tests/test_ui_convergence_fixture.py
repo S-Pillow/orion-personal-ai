@@ -66,8 +66,8 @@ class UIConvergenceFixtureContractTests(unittest.TestCase):
         self.assertIn("window.__orionCoreFixture", PROBE)
         self.assertIn('corePresence.setGaze("forward")', PROBE)
         self.assertIn("corePresence.blink()", PROBE)
-        self.assertIn('setCore("WAITING"', PROBE)
-        self.assertIn('setCore("OFFLINE"', PROBE)
+        self.assertIn('window.__orionCoreFixture.state("WAITING")', PROBE)
+        self.assertIn('window.__orionCoreFixture.state("OFFLINE")', PROBE)
         self.assertIn('id = "coreReviewControls"', PROBE)
 
     def test_fixture_content_is_explicitly_presentation_only(self):
