@@ -108,7 +108,7 @@
     <section class="center-stage center-experience" aria-label="Orion adaptive workspace">
       <img
         class="scene-environment"
-        src="/orion-hero.svg"
+        src="/orion-environment.webp"
         alt=""
         aria-hidden="true"
       >
@@ -510,7 +510,15 @@
             <strong>DECISION PENDING</strong>
             <span>Hermes approval is not execution evidence.</span>
           </div>
-          <div class="approval-subhead">WHAT ORION WANTS TO DO</div>
+          <div class="approval-overview">
+            <h2 id="approvalTitle">Protected action approval</h2>
+            <p id="approvalEffect" class="approval-effect">Hermes requires an operator decision before protected execution.</p>
+            <dl class="approval-overview-facts">
+              <div><dt>TARGET</dt><dd id="approvalTarget">—</dd></div>
+              <div><dt>AUTHORITY</dt><dd>Human approval required</dd></div>
+            </dl>
+          </div>
+          <div class="approval-subhead">TECHNICAL OPERATION</div>
           <div id="approvalCommand" class="approval-command"></div>
           <div class="approval-subhead approval-detail-label">EXACT APPROVAL DETAIL</div>
           <div id="approvalDetail" class="approval-detail" tabindex="0" role="region" aria-label="Complete approval details"></div>
