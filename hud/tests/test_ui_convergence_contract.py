@@ -46,17 +46,18 @@ class UIConvergenceContractTests(unittest.TestCase):
         self.assertIn("--hero-height: clamp(340px, 42vh, 368px);", self.target)
         self.assertIn(".hero-scene {", self.target)
         self.assertIn('class="core-visual live-core"', self.html)
-        self.assertIn('class="core-eye-group"', self.html)
-        self.assertIn(".core-stage.is-blinking .core-eye-group", self.target)
+        self.assertIn('class="core-eye-aperture"', self.html)
+        self.assertIn('class="core-eye-lid core-eye-lid-top"', self.html)
+        self.assertIn(".core-stage.blink-closing .core-eye-lid-top", self.target)
 
     def test_visible_core_eyes_are_addressable_inline_svg(self):
         hero = (STATIC / "orion-hero.svg").read_text(encoding="utf-8")
         self.assertNotIn("core-eye", hero)
-        self.assertIn('class="core-eye core-eye-left"', self.html)
-        self.assertIn('class="core-eye core-eye-right"', self.html)
-        self.assertIn('class="core-eye-group"', self.html)
+        self.assertIn('class="core-eye-aperture"', self.html)
+        self.assertIn('class="core-eye-content core-eye-content-left"', self.html)
+        self.assertIn('class="core-eye-content core-eye-content-right"', self.html)
         self.assertIn('[data-gaze="left"]', self.target)
-        self.assertIn("is-blinking", self.target)
+        self.assertIn("blink-closing", self.target)
 
     def test_secondary_diagnostics_are_environment_regions(self):
         self.assertIn(".context-sidebar {", self.target)
