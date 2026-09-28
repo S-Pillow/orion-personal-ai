@@ -1204,10 +1204,11 @@ body.approval-active .approval-panel {
 }
 body.approval-active .activity-panel { max-height:138px; overflow:hidden; }
 body.approval-active .action-evidence-panel {
-  max-height:58px;
+  max-height:38px;
   overflow:hidden;
-  opacity:.72;
+  opacity:.58;
 }
+body.approval-active .action-evidence-panel .action-headline,
 body.approval-active .action-evidence-panel .action-facts,
 body.approval-active .action-evidence-panel .action-diff-wrap,
 body.approval-active .action-evidence-panel .action-history,
