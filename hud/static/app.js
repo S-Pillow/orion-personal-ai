@@ -346,7 +346,8 @@ function appendMessage(role, text = "", meta = {}) {
   const avatar = document.createElement("span");
   avatar.className = "message-avatar";
   avatar.setAttribute("aria-hidden", "true");
-  avatar.textContent = isUser ? "Y" : "O";
+  avatar.textContent = "";
+  avatar.dataset.speaker = isUser ? "user" : "orion";
 
   const content = document.createElement("div");
   content.className = "message-content";
