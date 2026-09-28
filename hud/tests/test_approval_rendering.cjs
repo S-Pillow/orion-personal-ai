@@ -15,6 +15,9 @@ const source = app.slice(start, end);
 function renderer() {
   const clicked = [];
   let scrolled = 0;
+  const title = { textContent: "" };
+  const effect = { textContent: "" };
+  const target = { textContent: "" };
   const command = { textContent: "" };
   const detail = { textContent: "", scrollTop: 99 };
   Object.defineProperty(command, "innerHTML", { set() { throw Error("Unsafe HTML rendering"); } });
@@ -34,6 +37,9 @@ function renderer() {
         classList: { remove() {} },
         scrollIntoView() { scrolled += 1; },
       },
+      approvalTitle: title,
+      approvalEffect: effect,
+      approvalTarget: target,
       approvalCommand: command,
       approvalDetail: detail,
       approvalActions: actions,
@@ -50,6 +56,9 @@ function renderer() {
   vm.runInContext(source, context);
   return {
     show: (data) => context.showApproval(data),
+    title,
+    effect,
+    target,
     command,
     detail,
     actions,
@@ -104,4 +113,22 @@ test("unknown choices are not granted and new requests replace old details/actio
   r.show({ reason: "fallback reason", choices: [] });
   assert.equal(r.detail.textContent, "fallback reason");
   assert.equal(r.actions.children.length, 0);
+});
+
+
+test("structured display metadata improves hierarchy without replacing exact detail", () => {
+  const r = renderer();
+  r.show({
+    command: "orion_vault_apply_plan",
+    description: "EXACT DETAIL",
+    action_title: "Review proposed note update",
+    target: "C:/vault/note.md",
+    effect: "Apply the displayed diff.",
+    choices: ["once", "deny"],
+  });
+  assert.equal(r.title.textContent, "Review proposed note update");
+  assert.equal(r.target.textContent, "C:/vault/note.md");
+  assert.equal(r.effect.textContent, "Apply the displayed diff.");
+  assert.equal(r.command.textContent, "orion_vault_apply_plan");
+  assert.equal(r.detail.textContent, "EXACT DETAIL");
 });
