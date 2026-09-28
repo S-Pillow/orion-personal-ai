@@ -19,6 +19,7 @@ class UIConvergenceFixtureContractTests(unittest.TestCase):
         self.assertNotIn("/api/orion/summon", PROBE)
         self.assertIn("?fixture=review", PROBE)
         self.assertIn("?fixture=summon", PROBE)
+        self.assertIn("?fixture=approval", PROBE)
         self.assertIn("?fixture=summon-approval", PROBE)
         self.assertIn('app_text += "\\n" + FIXTURE_SNIPPET + "\\n"', PROBE)
 
@@ -37,10 +38,13 @@ class UIConvergenceFixtureContractTests(unittest.TestCase):
         )
 
     def test_fixture_can_auto_drive_real_submit_path_for_approval_overlap(self):
-        self.assertIn('__fixtureMode === "summon-approval"', PROBE)
+        self.assertIn('__fixtureMode === "approval" || __fixtureMode === "summon-approval"', PROBE)
         self.assertIn('state.sessionId = "session_1";', PROBE)
         self.assertIn('ui.messageInput.value = "probe";', PROBE)
         self.assertIn("ui.composer.requestSubmit();", PROBE)
+
+    def test_review_fixture_resets_transcript_to_reference_start(self):
+        self.assertIn("ui.transcript.scrollTop = 0;", PROBE)
 
     def test_fixture_clock_and_motion_are_deterministic(self):
         self.assertIn('dataset.fixtureClock = "22:24"', PROBE)

@@ -54,6 +54,7 @@ ui.coreStage.dataset.motion = "reduced";
 if (__fixtureMode === "review") {
   (async () => {
     await __fixtureSelectSession();
+    ui.transcript.scrollTop = 0;
     addActivity(
       "Reviewing project notes",
       "Reading the isolated Orion visual-convergence fixture.",
@@ -98,9 +99,10 @@ if (__fixtureMode === "summon" || __fixtureMode === "summon-approval") {
   });
 }
 
-if (__fixtureMode === "summon-approval") {
+if (__fixtureMode === "approval" || __fixtureMode === "summon-approval") {
   (async () => {
     await __fixtureSelectSession();
+    ui.transcript.scrollTop = 0;
     await new Promise((resolve) => setTimeout(resolve, 75));
     ui.messageInput.value = "probe";
     ui.composer.requestSubmit();
@@ -159,6 +161,10 @@ class UIConvergenceFixture:
         return self.origin + "/?fixture=summon"
 
     @property
+    def approval_url(self):
+        return self.origin + "/?fixture=approval"
+
+    @property
     def summon_approval_url(self):
         return self.origin + "/?fixture=summon-approval"
 
@@ -189,6 +195,7 @@ if __name__ == "__main__":
         print(f"BASE HUD: {fixture.origin}", flush=True)
         print(f"REVIEW HUD: {fixture.review_url}", flush=True)
         print(f"SUMMON HUD: {fixture.summon_url}", flush=True)
+        print(f"APPROVAL HUD: {fixture.approval_url}", flush=True)
         print(f"SUMMON + APPROVAL HUD: {fixture.summon_approval_url}", flush=True)
         print(f"OFFLINE HUD: {fixture.offline_url}", flush=True)
         print(

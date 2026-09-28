@@ -106,6 +106,33 @@ def mobile_review_capture(browser, fixture) -> dict:
     }
 
 
+def pending_approval_capture(browser, fixture) -> dict:
+    page = browser.new_page(viewport={"width": 1672, "height": 941})
+    page.goto(fixture.approval_url, wait_until="domcontentloaded")
+    page.wait_for_function(
+        "() => !document.querySelector('#approvalPanel')?.classList.contains('hidden')"
+    )
+    approval = rect(page, "#approvalPanel")
+    right = rect(page, ".activity-sidebar")
+    conversation = rect(page, ".conversation-workspace")
+    buttons = page.locator("#approvalActions button")
+    assert buttons.count() == 4
+    keyboard_approval_check(page)
+    for index in range(buttons.count()):
+        box = buttons.nth(index).bounding_box()
+        assert box is not None
+        assert box["x"] >= approval["x"] - 1
+        assert box["x"] + box["width"] <= approval["x"] + approval["width"] + 1
+    assert conversation["x"] + conversation["width"] <= right["x"] + 2
+    page.screenshot(path=str(OUT / "desktop-approval-1672x941.png"), full_page=True)
+    page.get_by_role("button", name="DENY").click()
+    page.wait_for_function(
+        "() => document.querySelector('#approvalPanel')?.classList.contains('hidden')"
+    )
+    page.close()
+    return {"approval": approval, "right": right, "conversation": conversation}
+
+
 def approval_capture(browser, fixture) -> dict:
     page = browser.new_page(viewport={"width": 1672, "height": 941})
     page.goto(fixture.summon_approval_url, wait_until="domcontentloaded")
@@ -207,6 +234,7 @@ def main() -> None:
                     browser, fixture, 1366, 768, "desktop-review-1366x768"
                 ),
                 "mobile_review": mobile_review_capture(browser, fixture),
+                "pending_approval": pending_approval_capture(browser, fixture),
                 "summon_approval": approval_capture(browser, fixture),
                 "offline": offline_capture(browser, fixture),
                 "mobile_approval": mobile_approval_capture(browser, fixture),
