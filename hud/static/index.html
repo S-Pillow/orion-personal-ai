@@ -106,7 +106,12 @@
     </aside>
 
     <section class="center-stage center-experience" aria-label="Orion adaptive workspace">
-
+      <img
+        class="scene-environment"
+        src="/orion-hero.svg"
+        alt=""
+        aria-hidden="true"
+      >
 
       <div
         id="workspaceShell"
@@ -122,7 +127,6 @@
           data-gaze="forward"
           data-motion="full"
         >
-          <img class="hero-scene-art" src="/orion-hero.svg" alt="" aria-hidden="true">
           <div class="hero-thoughts hero-thoughts-left" aria-hidden="true">
             <span>CLARITY</span>
             <span>CONTEXT</span>
@@ -134,17 +138,64 @@
             <span>“SAME SKY.</span>
             <span>BRIGHTER THINKING.”</span>
           </div>
-          <div class="core-ring live-core" aria-hidden="true">
-            <div class="core-mask">
-              <span class="core-eye core-eye-left"></span>
-              <span class="core-eye core-eye-right"></span>
-            </div>
+          <div class="core-visual live-core" aria-hidden="true">
+            <svg viewBox="0 0 320 320" focusable="false" aria-hidden="true">
+              <defs>
+                <radialGradient id="coreFaceGradient" cx="42%" cy="30%" r="72%">
+                  <stop offset="0" stop-color="#173842"/>
+                  <stop offset=".28" stop-color="#0c2229"/>
+                  <stop offset=".62" stop-color="#061116"/>
+                  <stop offset="1" stop-color="#010406"/>
+                </radialGradient>
+                <radialGradient id="coreSheenGradient" cx="38%" cy="22%" r="70%">
+                  <stop offset="0" stop-color="#d4fcff" stop-opacity=".14"/>
+                  <stop offset=".32" stop-color="#6fdce6" stop-opacity=".045"/>
+                  <stop offset=".7" stop-color="#2aa0ad" stop-opacity=".01"/>
+                  <stop offset="1" stop-color="#000" stop-opacity="0"/>
+                </radialGradient>
+                <linearGradient id="coreEyeGradient" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0" stop-color="currentColor" stop-opacity=".06"/>
+                  <stop offset=".24" stop-color="currentColor" stop-opacity=".55"/>
+                  <stop offset=".53" stop-color="#e9feff" stop-opacity=".98"/>
+                  <stop offset=".78" stop-color="currentColor" stop-opacity=".7"/>
+                  <stop offset="1" stop-color="currentColor" stop-opacity=".08"/>
+                </linearGradient>
+                <filter id="coreGlow" x="-100%" y="-100%" width="300%" height="300%">
+                  <feGaussianBlur stdDeviation="5" result="blur"/>
+                  <feMerge>
+                    <feMergeNode in="blur"/>
+                    <feMergeNode in="SourceGraphic"/>
+                  </feMerge>
+                </filter>
+              </defs>
+              <g class="core-halo-group">
+                <circle class="core-halo core-halo-outer" cx="160" cy="160" r="146"/>
+                <circle class="core-halo core-halo-mid" cx="160" cy="160" r="137"/>
+                <path class="core-orbit-detail core-orbit-a" d="M48 93 C102 27 222 22 280 101"/>
+                <path class="core-orbit-detail core-orbit-b" d="M42 210 C108 289 226 292 286 205"/>
+              </g>
+              <g class="core-face-group">
+                <circle class="core-face" cx="160" cy="160" r="124" fill="url(#coreFaceGradient)"/>
+                <circle class="core-face-sheen" cx="160" cy="160" r="121" fill="url(#coreSheenGradient)"/>
+                <path class="core-face-plane" d="M52 176 C84 132 121 118 160 120 C200 118 238 134 268 176 C244 230 207 260 160 264 C112 260 76 230 52 176 Z"/>
+                <g class="core-eye-group" filter="url(#coreGlow)">
+                  <path class="core-eye core-eye-left" fill="url(#coreEyeGradient)" d="M87 157 C106 141 127 137 147 142 C132 145 120 151 110 159 C103 165 95 166 84 163 Z"/>
+                  <path class="core-eye core-eye-right" fill="url(#coreEyeGradient)" d="M233 157 C214 141 193 137 173 142 C188 145 200 151 210 159 C217 165 225 166 236 163 Z"/>
+                  <path class="core-eye-highlight core-eye-highlight-left" d="M96 158 C109 149 121 147 134 147"/>
+                  <path class="core-eye-highlight core-eye-highlight-right" d="M224 158 C211 149 199 147 186 147"/>
+                </g>
+              </g>
+            </svg>
           </div>
           <div class="core-presence-label">
-            <span>ORION</span>
-            <b><strong id="coreState">READY</strong><i aria-hidden="true">•</i> LISTENING. THINKING. WITH YOU.</b>
+            <span class="core-name">ORION</span>
+            <div class="core-presence-status">
+              <strong id="coreState">READY</strong>
+              <i aria-hidden="true">•</i>
+              <span>LISTENING. THINKING. WITH YOU.</span>
+            </div>
+            <p id="coreDetail">Observed Hermes state // Orion presentation only</p>
           </div>
-          <p id="coreDetail">Observed Hermes state // Orion presentation only</p>
         </div>
 
         <section
@@ -180,30 +231,38 @@
           ></a>
         </section>
 
-        <section
-          class="workspace-pane conversation-workspace"
+        <div
+          class="workspace-pane foreground-workspace"
           data-workspace-pane="conversation"
           aria-labelledby="workspaceConversationButton"
         >
-          <div
-            id="transcript"
-            class="transcript"
-            role="log"
-            aria-live="polite"
-            aria-label="Conversation transcript"
-          >
-            <div class="empty-state">
-              <strong>ORION HUD LINK READY</strong>
-              <span>Select or create a Hermes session to begin.</span>
+          <section class="conversation-workspace" aria-label="Conversation">
+            <div
+              id="transcript"
+              class="transcript"
+              role="log"
+              aria-live="polite"
+              aria-label="Conversation transcript"
+            >
+              <div class="empty-state">
+                <strong>ORION HUD LINK READY</strong>
+                <span>Select or create a Hermes session to begin.</span>
+              </div>
             </div>
-          </div>
+          </section>
 
           <form id="composer" class="composer">
+            <button
+              class="composer-plus"
+              type="button"
+              aria-label="Additional input options unavailable"
+              disabled
+            >+</button>
             <label class="sr-only" for="messageInput">Message Orion</label>
             <textarea
               id="messageInput"
               rows="1"
-              placeholder="Message Orion..."
+              placeholder="Ask anything, plan, create, analyze..."
               maxlength="65536"
             ></textarea>
             <div class="composer-actions" aria-label="Message actions">
@@ -211,7 +270,7 @@
                 id="sendButton"
                 class="primary-button"
                 type="submit"
-              >SEND</button>
+              >SEND <span aria-hidden="true">→</span></button>
               <button
                 id="stopButton"
                 class="stop-button"
@@ -221,7 +280,7 @@
               >STOP</button>
             </div>
           </form>
-        </section>
+        </div>
 
         <section
           class="workspace-pane system-workspace"
@@ -443,51 +502,54 @@
         </div>
       </section>
 
-      <section id="approvalPanel" class="approval-panel operational-card hidden">
-        <div class="approval-heading">
-          <span>PENDING APPROVAL</span>
-          <b>!</b>
-        </div>
-        <div class="approval-truth">
-          <strong>DECISION PENDING</strong>
-          <span>Hermes approval is not execution evidence.</span>
-        </div>
-        <div class="approval-subhead">WHAT ORION WANTS TO DO</div>
-        <div id="approvalCommand" class="approval-command"></div>
-        <div class="approval-subhead approval-detail-label">EXACT APPROVAL DETAIL</div>
-        <div id="approvalDetail" class="approval-detail" tabindex="0" role="region" aria-label="Complete approval details"></div>
-        <div id="approvalActions" class="approval-actions"></div>
-      </section>
+      <div class="action-stack" aria-label="Action and evidence">
+        <section id="approvalPanel" class="approval-panel operational-card hidden">
+          <div class="approval-heading">
+            <span>PENDING APPROVAL</span>
+            <b>!</b>
+          </div>
+          <div class="approval-truth">
+            <strong>DECISION PENDING</strong>
+            <span>Hermes approval is not execution evidence.</span>
+          </div>
+          <div class="approval-subhead">WHAT ORION WANTS TO DO</div>
+          <div id="approvalCommand" class="approval-command"></div>
+          <div class="approval-subhead approval-detail-label">EXACT APPROVAL DETAIL</div>
+          <div id="approvalDetail" class="approval-detail" tabindex="0" role="region" aria-label="Complete approval details"></div>
+          <div id="approvalActions" class="approval-actions"></div>
+        </section>
 
-      <section
-        id="actionEvidencePanel"
-        class="action-evidence-panel operational-card hidden"
-        aria-label="Protected action evidence"
-      >
-        <div class="operational-title"><span>ACTION EVIDENCE</span></div>
-        <div class="action-headline">
-          <span id="actionStateBadge" class="action-state-badge" data-action-state="unknown">UNKNOWN</span>
-          <p id="actionSummary" class="action-summary">No protected action evidence selected.</p>
-        </div>
-        <dl class="action-facts">
-          <div><dt>Operation</dt><dd id="actionOperation">—</dd></div>
-          <div><dt>Target</dt><dd id="actionTarget">—</dd></div>
-          <div><dt>Execution</dt><dd id="actionExecution">UNKNOWN</dd></div>
-          <div><dt>Recovery</dt><dd id="actionRecovery">UNOBSERVED</dd></div>
-        </dl>
-        <div id="actionDiffWrap" class="action-diff-wrap hidden">
-          <div class="mini-title">EXACT DIFF</div>
-          <pre id="actionDiff" class="action-diff" tabindex="0" aria-label="Exact proposed diff"></pre>
-        </div>
-        <div class="action-history">
-          <div class="mini-title">RECENT EVIDENCE</div>
-          <div id="actionEvidenceList" class="action-evidence-list"></div>
-        </div>
-        <details id="actionTechnical" class="action-technical">
-          <summary>TECHNICAL EVIDENCE</summary>
-          <dl id="actionTechnicalList" class="action-technical-list"></dl>
-        </details>
-      </section>
+        <section
+          id="actionEvidencePanel"
+          class="action-evidence-panel operational-card hidden"
+          aria-label="Protected action evidence"
+        >
+          <div class="operational-title"><span>ACTION EVIDENCE</span></div>
+          <div class="action-headline">
+            <span id="actionStateBadge" class="action-state-badge" data-action-state="unknown">UNKNOWN</span>
+            <p id="actionSummary" class="action-summary">No protected action evidence selected.</p>
+          </div>
+          <dl class="action-facts">
+            <div><dt>Operation</dt><dd id="actionOperation">—</dd></div>
+            <div><dt>Target</dt><dd id="actionTarget">—</dd></div>
+            <div><dt>Execution</dt><dd id="actionExecution">UNKNOWN</dd></div>
+            <div><dt>Recovery</dt><dd id="actionRecovery">UNOBSERVED</dd></div>
+          </dl>
+          <div id="actionDiffWrap" class="action-diff-wrap hidden">
+            <div class="mini-title">EXACT DIFF</div>
+            <pre id="actionDiff" class="action-diff" tabindex="0" aria-label="Exact proposed diff"></pre>
+          </div>
+          <div class="action-history">
+            <div class="mini-title">RECENT EVIDENCE</div>
+            <div id="actionEvidenceList" class="action-evidence-list"></div>
+          </div>
+          <details id="actionTechnical" class="action-technical">
+            <summary>TECHNICAL EVIDENCE</summary>
+            <dl id="actionTechnicalList" class="action-technical-list"></dl>
+          </details>
+        </section>
+      </div>
+
 
       <section class="memory-lens operational-card">
         <div class="operational-title"><span>MEMORY LENS</span></div>
