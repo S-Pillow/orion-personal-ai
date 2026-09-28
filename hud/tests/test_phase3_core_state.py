@@ -68,61 +68,40 @@ class Phase3CoreStateContractTests(unittest.TestCase):
                     APP,
                 )
 
-    def test_gaze_mapping_is_deterministic(self):
-        expected = (
-            'READY: "forward"',
-            'LINKING: "center"',
-            'THINKING: "center"',
-            'FINALIZING: "center"',
-            'ACTING: "right"',
-            'WAITING: "right"',
-            'STOPPING: "center"',
-            'DEGRADED: "left"',
-            'OFFLINE: "left"',
-            'ERROR: "left"',
-        )
-
-        for fragment in expected:
-            with self.subTest(fragment=fragment):
-                self.assertIn(fragment, CORE)
+    def test_operational_state_does_not_force_attention_direction(self):
+        self.assertIn('return "forward";', CORE)
+        self.assertNotIn('WAITING: "right"', CORE)
+        self.assertNotIn('ERROR: "left"', CORE)
+        self.assertIn("function setGaze(value, duration = 0)", CORE)
+        self.assertIn("function glance(value, duration = 520)", CORE)
 
     def test_core_state_and_gaze_are_testable_dom_data(self):
-        self.assertIn(
-            "root.dataset.coreState = state;",
-            CORE,
-        )
-        self.assertIn(
-            "root.dataset.gaze = gaze;",
-            CORE,
-        )
-        self.assertIn(
-            'data-core-state="READY"',
-            INDEX,
-        )
-        self.assertIn(
-            'data-gaze="forward"',
-            INDEX,
-        )
+        self.assertIn("root.dataset.coreState = state;", CORE)
+        self.assertIn('root.dataset.gaze = "forward";', CORE)
+        self.assertIn('data-core-state="READY"', INDEX)
+        self.assertIn('data-gaze="forward"', INDEX)
+        self.assertIn('data-blink-phase', CORE)
 
-    def test_presence_motion_is_low_cost_local_presentation(self):
+    def test_presence_motion_uses_independent_lids_and_attention(self):
         for token in (
-            "is-blinking",
-            "saccade-left",
-            "saccade-right",
-            "saccade-up",
-            "saccade-down",
-            "randomDelay(2800, 3200)",
-            "randomDelay(1700, 2100)",
+            "blink-closing",
+            "blink-closed",
+            "blink-opening",
+            "BLINK_TIMING",
+            "closing: 80",
+            "closed: 30",
+            "opening: 140",
+            "randomDelay(3600, 4000)",
         ):
             with self.subTest(token=token):
                 self.assertIn(token, CORE)
 
-        self.assertIn('class="core-eye-group"', INDEX)
-        self.assertIn(
-            ".core-stage.is-blinking .core-eye-group",
-            TARGET,
-        )
-        self.assertIn("@keyframes core-pulse", TARGET)
+        self.assertIn('class="core-eye-aperture"', INDEX)
+        self.assertIn('class="core-eye-content core-eye-content-left"', INDEX)
+        self.assertIn('class="core-eye-lid core-eye-lid-top"', INDEX)
+        self.assertIn(".core-stage.blink-closing .core-eye-lid-top", TARGET)
+        self.assertNotIn("scaleY(.08)", TARGET)
+        self.assertNotIn("scheduleSaccade", CORE)
 
     def test_reduced_motion_disables_generated_motion(self):
         self.assertIn(
