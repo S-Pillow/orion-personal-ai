@@ -38,10 +38,13 @@ function renderer() {
       approvalDetail: detail,
       approvalActions: actions,
     },
-    document: { createElement() { return {
-      classList: { add() {} },
-      addEventListener(_event, callback) { this.click = callback; },
-    }; } },
+    document: {
+      body: { classList: { add() {}, remove() {} } },
+      createElement() { return {
+        classList: { add() {} },
+        addEventListener(_event, callback) { this.click = callback; },
+      }; },
+    },
     decideApproval(choice) { clicked.push(choice); },
   });
   vm.runInContext(source, context);

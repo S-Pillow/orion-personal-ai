@@ -20,7 +20,7 @@ class UIConvergenceFixtureContractTests(unittest.TestCase):
         self.assertIn("?fixture=review", PROBE)
         self.assertIn("?fixture=summon", PROBE)
         self.assertIn("?fixture=summon-approval", PROBE)
-        self.assertIn("void summonController;", PROBE)
+        self.assertIn('app_text += "\\n" + FIXTURE_SNIPPET + "\\n"', PROBE)
 
     def test_fixture_can_auto_load_seeded_review_session(self):
         self.assertIn('__fixtureMode === "review"', PROBE)
@@ -29,10 +29,8 @@ class UIConvergenceFixtureContractTests(unittest.TestCase):
         self.assertIn("await loadMessages();", PROBE)
 
     def test_fixture_avoids_duplicate_session_bootstrap_for_summon_approval(self):
-        self.assertIn(
-            'if (__fixtureMode === "review" || __fixtureMode === "summon")',
-            PROBE,
-        )
+        self.assertIn('if (__fixtureMode === "summon")', PROBE)
+        self.assertIn('if (__fixtureMode === "review")', PROBE)
         self.assertNotIn(
             '__fixtureMode === "review"\n  || __fixtureMode === "summon"\n  || __fixtureMode === "summon-approval"',
             PROBE,
@@ -43,6 +41,12 @@ class UIConvergenceFixtureContractTests(unittest.TestCase):
         self.assertIn('state.sessionId = "session_1";', PROBE)
         self.assertIn('ui.messageInput.value = "probe";', PROBE)
         self.assertIn("ui.composer.requestSubmit();", PROBE)
+
+    def test_fixture_clock_and_motion_are_deterministic(self):
+        self.assertIn('dataset.fixtureClock = "22:24"', PROBE)
+        self.assertIn("corePresence.destroy();", PROBE)
+        self.assertIn('dataset.motion = "reduced"', PROBE)
+        self.assertIn("?fixture=offline", PROBE)
 
     def test_fixture_content_is_explicitly_presentation_only(self):
         self.assertIn("presentation-only fixture content", PROBE)
