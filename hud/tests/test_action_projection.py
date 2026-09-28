@@ -175,6 +175,29 @@ class ActionProjectionTests(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, rendered)
 
+    def test_approval_request_projects_optional_display_metadata_only(self):
+        projected = project_approval_request({
+            "event": "approval.request",
+            "run_id": "run_1",
+            "command": "orion_vault_apply_plan",
+            "description": "Exact approval payload",
+            "choices": ["once", "deny"],
+            "action_title": "Review proposed note update",
+            "target": "C:/vault/note.md",
+            "effect": "Apply the displayed Markdown diff.",
+            "operation": "edit_note",
+            "private_field": "do-not-export",
+        })
+        self.assertEqual(projected["action_title"], "Review proposed note update")
+        self.assertEqual(projected["target"], "C:/vault/note.md")
+        self.assertEqual(projected["effect"], "Apply the displayed Markdown diff.")
+        self.assertEqual(projected["operation"], "edit_note")
+        self.assertEqual(
+            projected["projection"]["action_title"],
+            "Review proposed note update",
+        )
+        self.assertNotIn("private_field", json.dumps(projected))
+
     def test_approval_command_must_survive_exact_validation(self):
         base = {
             "run_id": "run_1",
