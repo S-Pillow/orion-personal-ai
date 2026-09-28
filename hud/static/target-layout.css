@@ -602,7 +602,7 @@ body {
   padding: 0 18px 28px;
   background:
     linear-gradient(180deg, transparent, rgba(3,9,12,.28) 40%, rgba(3,9,12,.91) 100%),
-    url("/orion-environment.webp") 8% 76% / 920px auto no-repeat;
+    url("/orion-hero.svg") 8% 76% / 920px auto no-repeat;
   -webkit-mask-image: linear-gradient(180deg, transparent 0%, rgba(0,0,0,.35) 28%, #000 58%);
   mask-image: linear-gradient(180deg, transparent 0%, rgba(0,0,0,.35) 28%, #000 58%);
   pointer-events: none;
