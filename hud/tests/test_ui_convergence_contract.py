@@ -43,7 +43,7 @@ class UIConvergenceContractTests(unittest.TestCase):
         )
 
     def test_core_is_visually_promoted(self):
-        self.assertIn("--hero-height: clamp(440px, 52vh, 590px);", self.target)
+        self.assertIn("--hero-height: clamp(380px, 44vh, 500px);", self.target)
         self.assertIn(".hero-scene {", self.target)
         self.assertIn(".core-mask {", self.target)
         self.assertIn("clip-path: polygon(", self.target)
@@ -62,6 +62,18 @@ class UIConvergenceContractTests(unittest.TestCase):
         self.assertIn("position: absolute;", self.target)
         self.assertIn("linear-gradient(90deg", self.target)
         self.assertNotIn("grid-template-columns: minmax(230px, 285px)", self.css + self.target)
+
+    def test_conversation_consumes_remaining_stage_height(self):
+        self.assertIn(
+            "grid-template-rows: var(--hero-height) minmax(0, 1fr);",
+            self.target,
+        )
+        self.assertIn("grid-row: 2;", self.target)
+        self.assertIn(
+            "height: calc(100% + var(--workspace-overlap) - 18px);",
+            self.target,
+        )
+        self.assertIn("align-self: end;", self.target)
 
     def test_approval_visually_outranks_lower_priority_context(self):
         self.assertIn("body.approval-active .approval-panel", self.target)
