@@ -142,53 +142,93 @@
           <div class="core-visual live-core" aria-hidden="true">
             <svg viewBox="0 0 320 320" focusable="false" aria-hidden="true">
               <defs>
-                <radialGradient id="coreFaceGradient" cx="42%" cy="30%" r="72%">
-                  <stop offset="0" stop-color="#173842"/>
-                  <stop offset=".28" stop-color="#0c2229"/>
-                  <stop offset=".62" stop-color="#061116"/>
-                  <stop offset="1" stop-color="#010406"/>
+                <radialGradient id="coreFaceGradient" cx="42%" cy="30%" r="74%">
+                  <stop offset="0" stop-color="#1b3c46"/>
+                  <stop offset=".25" stop-color="#102930"/>
+                  <stop offset=".54" stop-color="#09191f"/>
+                  <stop offset=".78" stop-color="#041014"/>
+                  <stop offset="1" stop-color="#010507"/>
                 </radialGradient>
-                <radialGradient id="coreSheenGradient" cx="38%" cy="22%" r="70%">
-                  <stop offset="0" stop-color="#d4fcff" stop-opacity=".14"/>
-                  <stop offset=".32" stop-color="#6fdce6" stop-opacity=".045"/>
-                  <stop offset=".7" stop-color="#2aa0ad" stop-opacity=".01"/>
+                <radialGradient id="coreSheenGradient" cx="38%" cy="24%" r="64%">
+                  <stop offset="0" stop-color="#d5fbfd" stop-opacity=".12"/>
+                  <stop offset=".22" stop-color="#7ce2e9" stop-opacity=".055"/>
+                  <stop offset=".5" stop-color="#3faeba" stop-opacity=".016"/>
                   <stop offset="1" stop-color="#000" stop-opacity="0"/>
                 </radialGradient>
-                <linearGradient id="coreEyeGradient" x1="0" y1="0" x2="1" y2="0">
-                  <stop offset="0" stop-color="currentColor" stop-opacity=".06"/>
-                  <stop offset=".24" stop-color="currentColor" stop-opacity=".55"/>
-                  <stop offset=".53" stop-color="#e9feff" stop-opacity=".98"/>
-                  <stop offset=".78" stop-color="currentColor" stop-opacity=".7"/>
-                  <stop offset="1" stop-color="currentColor" stop-opacity=".08"/>
+                <linearGradient id="coreEdgeShade" x1="0" y1=".08" x2="1" y2=".92">
+                  <stop offset="0" stop-color="#061116" stop-opacity=".06"/>
+                  <stop offset=".45" stop-color="#020709" stop-opacity=".18"/>
+                  <stop offset=".76" stop-color="#000" stop-opacity=".48"/>
+                  <stop offset="1" stop-color="#000" stop-opacity=".72"/>
                 </linearGradient>
-                <filter id="coreGlow" x="-100%" y="-100%" width="300%" height="300%">
-                  <feGaussianBlur stdDeviation="5" result="blur"/>
-                  <feMerge>
-                    <feMergeNode in="blur"/>
-                    <feMergeNode in="SourceGraphic"/>
-                  </feMerge>
+                <linearGradient id="coreEyeLight" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0" stop-color="#73e9f0" stop-opacity=".16"/>
+                  <stop offset=".28" stop-color="#9bf4f8" stop-opacity=".72"/>
+                  <stop offset=".52" stop-color="#efffff" stop-opacity="1"/>
+                  <stop offset=".76" stop-color="#8aedf4" stop-opacity=".76"/>
+                  <stop offset="1" stop-color="#54c7d2" stop-opacity=".14"/>
+                </linearGradient>
+                <clipPath id="coreSphereClip">
+                  <circle cx="160" cy="160" r="124"/>
+                </clipPath>
+                <clipPath id="coreEyeClipLeft">
+                  <path d="M91 157 C108 147 126 145 145 151 C132 151 119 154 109 159 C103 162 98 162 92 160 Z"/>
+                </clipPath>
+                <clipPath id="coreEyeClipRight">
+                  <path d="M229 157 C212 147 194 145 175 151 C188 151 201 154 211 159 C217 162 222 162 228 160 Z"/>
+                </clipPath>
+                <filter id="coreEyeGlow" x="-80%" y="-200%" width="260%" height="500%">
+                  <feGaussianBlur stdDeviation="1.25"/>
+                </filter>
+                <filter id="coreRimGlow" x="-60%" y="-60%" width="220%" height="220%">
+                  <feGaussianBlur stdDeviation="4.5"/>
                 </filter>
               </defs>
+
               <g class="core-halo-group">
+                <circle class="core-halo core-halo-bloom" cx="160" cy="160" r="146"/>
                 <circle class="core-halo core-halo-outer" cx="160" cy="160" r="146"/>
                 <circle class="core-halo core-halo-mid" cx="160" cy="160" r="137"/>
                 <circle class="core-halo core-halo-inner" cx="160" cy="160" r="130"/>
+                <path class="core-rim-arc core-rim-arc-a" d="M67 64 A136 136 0 0 1 143 25"/>
+                <path class="core-rim-arc core-rim-arc-b" d="M242 254 A136 136 0 0 1 203 286"/>
                 <path class="core-orbit-detail core-orbit-a" d="M48 93 C102 27 222 22 280 101"/>
                 <path class="core-orbit-detail core-orbit-b" d="M42 210 C108 289 226 292 286 205"/>
-                <path class="core-orbit-detail core-orbit-c" d="M31 161 C77 116 243 116 289 161"/>
               </g>
+
               <g class="core-face-group">
                 <circle class="core-face" cx="160" cy="160" r="124" fill="url(#coreFaceGradient)"/>
                 <circle class="core-face-sheen" cx="160" cy="160" r="121" fill="url(#coreSheenGradient)"/>
-                <path class="core-face-plane" d="M92 174 C111 153 135 146 160 146 C185 146 209 153 228 174 C212 199 188 214 160 216 C132 214 108 199 92 174 Z"/>
-                <path class="core-face-contour" d="M94 143 C114 129 137 123 160 123 C184 123 207 129 226 143"/>
-                <path class="core-face-contour core-face-contour-lower" d="M112 206 C128 218 144 223 160 224 C176 223 192 218 208 206"/>
+                <g clip-path="url(#coreSphereClip)">
+                  <ellipse class="core-surface-highlight" cx="132" cy="108" rx="78" ry="57"/>
+                  <path class="core-edge-shade" d="M49 173 C79 130 121 112 161 113 C210 113 249 137 275 178 C258 232 214 274 160 281 C105 274 64 230 49 173 Z" fill="url(#coreEdgeShade)"/>
+                </g>
                 <circle class="core-inner-rim" cx="160" cy="160" r="116"/>
-                <g class="core-eye-group" filter="url(#coreGlow)">
-                  <path class="core-eye core-eye-left" fill="url(#coreEyeGradient)" d="M100 158 C112 150 125 148 137 151 C126 152 118 154 111 158 C107 161 103 161 98 160 Z"/>
-                  <path class="core-eye core-eye-right" fill="url(#coreEyeGradient)" d="M220 158 C208 150 195 148 183 151 C194 152 202 154 209 158 C213 161 217 161 222 160 Z"/>
-                  <path class="core-eye-highlight core-eye-highlight-left" d="M106 157 C115 153 123 152 131 152"/>
-                  <path class="core-eye-highlight core-eye-highlight-right" d="M214 157 C205 153 197 152 189 152"/>
+
+                <g class="core-eye-system core-eye-left">
+                  <path class="core-eye-aperture" d="M91 157 C108 147 126 145 145 151 C132 151 119 154 109 159 C103 162 98 162 92 160 Z"/>
+                  <g class="core-eye-bloom" clip-path="url(#coreEyeClipLeft)">
+                    <rect class="core-eye-luminance core-eye-luminance-left" x="88" y="145" width="62" height="22" rx="9" fill="url(#coreEyeLight)"/>
+                  </g>
+                  <g class="core-eye-content core-eye-content-left" clip-path="url(#coreEyeClipLeft)">
+                    <rect class="core-eye-luminance core-eye-luminance-left" x="90" y="147" width="58" height="18" rx="8" fill="url(#coreEyeLight)"/>
+                    <path class="core-eye-highlight" d="M103 157 C114 152 124 151 134 152"/>
+                  </g>
+                  <rect class="core-eye-lid core-eye-lid-top" x="88" y="143" width="62" height="14" rx="6"/>
+                  <rect class="core-eye-lid core-eye-lid-bottom" x="88" y="161" width="62" height="14" rx="6"/>
+                </g>
+
+                <g class="core-eye-system core-eye-right">
+                  <path class="core-eye-aperture" d="M229 157 C212 147 194 145 175 151 C188 151 201 154 211 159 C217 162 222 162 228 160 Z"/>
+                  <g class="core-eye-bloom" clip-path="url(#coreEyeClipRight)">
+                    <rect class="core-eye-luminance core-eye-luminance-right" x="170" y="145" width="62" height="22" rx="9" fill="url(#coreEyeLight)"/>
+                  </g>
+                  <g class="core-eye-content core-eye-content-right" clip-path="url(#coreEyeClipRight)">
+                    <rect class="core-eye-luminance core-eye-luminance-right" x="172" y="147" width="58" height="18" rx="8" fill="url(#coreEyeLight)"/>
+                    <path class="core-eye-highlight" d="M217 157 C206 152 196 151 186 152"/>
+                  </g>
+                  <rect class="core-eye-lid core-eye-lid-top" x="170" y="143" width="62" height="14" rx="6"/>
+                  <rect class="core-eye-lid core-eye-lid-bottom" x="170" y="161" width="62" height="14" rx="6"/>
                 </g>
               </g>
             </svg>
