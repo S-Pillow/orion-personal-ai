@@ -80,6 +80,9 @@ const ui = {
   actionTechnical: $("actionTechnical"),
   actionTechnicalList: $("actionTechnicalList"),
   approvalPanel: $("approvalPanel"),
+  approvalTitle: $("approvalTitle"),
+  approvalEffect: $("approvalEffect"),
+  approvalTarget: $("approvalTarget"),
   approvalCommand: $("approvalCommand"),
   approvalDetail: $("approvalDetail"),
   approvalActions: $("approvalActions"),
@@ -955,6 +958,10 @@ function hideApproval() {
   syncProvenancePresentation();
   workspaceController.setApprovalFocus(false);
   ui.approvalPanel.classList.add("hidden");
+  ui.approvalTitle.textContent = "Protected action approval";
+  ui.approvalEffect.textContent =
+    "Hermes requires an operator decision before protected execution.";
+  ui.approvalTarget.textContent = "—";
   ui.approvalCommand.textContent = "";
   ui.approvalDetail.textContent = "";
   ui.approvalActions.replaceChildren();
@@ -973,20 +980,42 @@ function showApproval(data) {
       behavior: "smooth",
     });
   }
-  // Hermes sends the command and exact approval description separately.
-  // Keep both complete and literal. The command is visually promoted, while
-  // the exact description remains intact in its own scrollable region.
+  // Structured display metadata is optional. It may improve hierarchy, but
+  // it never replaces the canonical command or exact approval description.
+  const projection =
+    data?.projection && typeof data.projection === "object"
+      ? data.projection
+      : {};
+
   const command = String(
     data.command ||
     data.tool_name ||
+    projection.command ||
     data.reason ||
     "Hermes protected action"
   );
   ui.approvalCommand.textContent = command;
 
+  ui.approvalTitle.textContent = String(
+    data.action_title ||
+    projection.action_title ||
+    "Protected action approval"
+  );
+  ui.approvalEffect.textContent = String(
+    data.effect ||
+    projection.effect ||
+    "Hermes requires an operator decision before protected execution."
+  );
+  ui.approvalTarget.textContent = String(
+    data.target ||
+    projection.target ||
+    "—"
+  );
+
   const description = String(
     data.description ||
     data.reason ||
+    projection.description ||
     "Hermes requires an operator decision."
   );
   ui.approvalDetail.textContent = description;
@@ -1483,6 +1512,35 @@ ui.messageInput.addEventListener("keydown", (event) => {
     event.preventDefault();
     ui.composer.requestSubmit();
   }
+});
+
+function syncVisualViewportHeight() {
+  const viewport = window.visualViewport;
+  const height = viewport && Number.isFinite(viewport.height)
+    ? viewport.height
+    : window.innerHeight;
+  document.documentElement.style.setProperty(
+    "--orion-visual-viewport-height",
+    `${Math.max(320, Math.round(height))}px`,
+  );
+}
+
+syncVisualViewportHeight();
+window.addEventListener("resize", syncVisualViewportHeight);
+if (window.visualViewport) {
+  window.visualViewport.addEventListener(
+    "resize",
+    syncVisualViewportHeight,
+  );
+}
+ui.messageInput.addEventListener("focus", () => {
+  syncVisualViewportHeight();
+  window.requestAnimationFrame(() => {
+    ui.composer.scrollIntoView({
+      block: "nearest",
+      behavior: "smooth",
+    });
+  });
 });
 
 formatClock();
