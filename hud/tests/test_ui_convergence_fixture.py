@@ -54,11 +54,21 @@ class UIConvergenceFixtureContractTests(unittest.TestCase):
         self.assertIn('dataset.motion = "reduced"', PROBE)
         self.assertIn("?fixture=offline", PROBE)
         self.assertIn("?fixture=motion", PROBE)
+        self.assertIn("?fixture=core-review", PROBE)
 
     def test_motion_fixture_keeps_live_presence_controller(self):
         self.assertIn('if (__fixtureMode !== "motion")', PROBE)
         self.assertIn('__fixtureMode === "motion"', PROBE)
         self.assertIn('setCore("THINKING"', PROBE)
+
+    def test_core_review_fixture_exposes_actual_renderer_controls(self):
+        self.assertIn('__fixtureMode === "core-review"', PROBE)
+        self.assertIn("window.__orionCoreFixture", PROBE)
+        self.assertIn('corePresence.setGaze("forward")', PROBE)
+        self.assertIn("corePresence.blink()", PROBE)
+        self.assertIn('setCore("WAITING"', PROBE)
+        self.assertIn('setCore("OFFLINE"', PROBE)
+        self.assertIn('id = "coreReviewControls"', PROBE)
 
     def test_fixture_content_is_explicitly_presentation_only(self):
         self.assertIn("presentation-only fixture content", PROBE)
