@@ -50,10 +50,10 @@ STATIC_FILES = {
     "/workspace-state.js": ("workspace-state.js", "text/javascript; charset=utf-8"),
     "/summon-state.js": ("summon-state.js", "text/javascript; charset=utf-8"),
     "/provenance-state.js": ("provenance-state.js", "text/javascript; charset=utf-8"),
+    "/environment-data.js": ("environment-data.js", "text/javascript; charset=utf-8"),
     "/styles.css": ("styles.css", "text/css; charset=utf-8"),
     "/target-layout.css": ("target-layout.css", "text/css; charset=utf-8"),
     "/orion-hero.svg": ("orion-hero.svg", "image/svg+xml"),
-    "/orion-environment.webp": ("orion-environment.webp", "image/webp"),
 }
 
 
