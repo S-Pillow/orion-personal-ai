@@ -47,7 +47,7 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
     def test_conversation_is_foreground_surface(self):
         self.assertIn(".conversation-workspace", TARGET)
         self.assertIn("backdrop-filter: blur(12px);", TARGET)
-        self.assertIn("--workspace-overlap: 72px;", TARGET)
+        self.assertIn("--workspace-overlap: 64px;", TARGET)
         self.assertIn("calc(-1 * var(--workspace-overlap))", TARGET)
         self.assertIn(".composer-actions", INDEX)
         self.assertIn("grid-template-columns: minmax(0, 1fr) auto;", TARGET)
@@ -94,7 +94,7 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
             "approvalCommand",
         ):
             self.assertIn(token, INDEX + APP)
-        self.assertIn("--conversation-max: 1000px;", TARGET)
+        self.assertIn("--conversation-max: 1080px;", TARGET)
         self.assertIn("--left-region: clamp(220px, 15vw, 275px);", TARGET)
         self.assertIn("--right-region: clamp(285px, 20vw, 360px);", TARGET)
 
@@ -105,7 +105,7 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
         )
         self.assertNotIn("grid-template-columns: 1fr 86px 86px;", STYLES + TARGET)
         self.assertIn("--left-region: clamp(220px, 15vw, 275px);", TARGET)
-        self.assertIn("--workspace-overlap: 72px;", TARGET)
+        self.assertIn("--workspace-overlap: 64px;", TARGET)
         self.assertIn(".center-stage {", TARGET)
         self.assertIn("position: absolute;", TARGET)
         self.assertNotIn("grid-template-columns:\n    var(--rail-left-width)", TARGET)
@@ -124,10 +124,10 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
         core_ring = INDEX[INDEX.index('class="core-ring live-core"'):INDEX.index('class="core-presence-label"')]
         self.assertNotIn('id="coreState"', core_ring)
         for token in (
-            'id="coreOcclusion"',
-            'id="coreGlass"',
-            'architectural foreground / pedestal',
-            'foreground atmospheric veil',
+            'id="coreVolume"',
+            'id="coreSheen"',
+            'illuminated platform and foreground architecture',
+            'floor reflection and haze',
         ):
             self.assertIn(token, HERO)
         self.assertIn("recessed eye apertures", HERO)
@@ -144,10 +144,34 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
         self.assertIn("grid-template-columns: 42px minmax(0, 1fr);", TARGET)
 
     def test_core_is_contained_and_conversation_is_denser(self):
-        self.assertIn("--hero-height: clamp(440px, 52vh, 590px);", TARGET)
-        self.assertIn("--workspace-overlap: 72px;", TARGET)
-        self.assertIn("max-height: min(490px,", TARGET)
+        self.assertIn("--hero-height: clamp(380px, 44vh, 500px);", TARGET)
+        self.assertIn("--workspace-overlap: 64px;", TARGET)
+        self.assertIn("max-height: none;", TARGET)
         self.assertIn("object-position: 50% 50%;", TARGET)
+
+    def test_vertical_composition_eliminates_desktop_dead_zone(self):
+        self.assertIn(
+            "grid-template-rows: var(--hero-height) minmax(0, 1fr);",
+            TARGET,
+        )
+        self.assertIn(
+            "height: calc(100% + var(--workspace-overlap) - 18px);",
+            TARGET,
+        )
+        self.assertIn("height: 100%;\n  overflow-y: auto;", TARGET)
+        self.assertIn("align-self: end;", TARGET)
+        self.assertIn('viewBox="0 0 1600 560"', HERO)
+
+    def test_left_atmosphere_is_integrated_background_layer(self):
+        self.assertIn("height: 42%;", TARGET)
+        self.assertIn("mask-image: linear-gradient(180deg", TARGET)
+        self.assertIn("align-items: flex-end;", TARGET)
+        self.assertNotIn("padding: 22px 20px 250px;", TARGET)
+
+    def test_center_axis_drives_hero_identity_and_workspace(self):
+        self.assertIn("--center-shift:", TARGET)
+        self.assertIn("transform: translateX(var(--center-shift));", TARGET)
+        self.assertIn("left: calc(50% + var(--center-shift));", TARGET)
 
     def test_approval_focus_and_summon_are_visually_prioritized(self):
         self.assertIn('document.body.classList.add("approval-active");', APP)
