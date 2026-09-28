@@ -300,8 +300,8 @@ body {
 
 .core-stage {
   --core-accent: #63e5ef;
-  --eye-x: 0px;
-  --eye-y: 0px;
+  --gaze-content-x: 0px;
+  --gaze-content-y: 0px;
   color: var(--core-accent);
 }
 
@@ -312,101 +312,185 @@ body {
   height: 296px;
   transform: translate(-50%, -50%);
   color: var(--core-accent);
-  filter: drop-shadow(0 0 26px rgba(99,229,239,.10));
+  filter: drop-shadow(0 0 24px rgba(99,229,239,.08));
   pointer-events: none;
 }
 
-.core-visual svg { width: 100%; height: 100%; overflow: visible; }
+.core-visual svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
 
 .core-halo {
   fill: none;
   stroke: currentColor;
 }
 
+.core-halo-bloom {
+  stroke-width: 12;
+  opacity: .07;
+  filter: url(#coreRimGlow);
+}
+
 .core-halo-outer {
-  stroke-width: 4.2;
-  opacity: .82;
-  filter:
-    drop-shadow(0 0 5px currentColor)
-    drop-shadow(0 0 15px rgba(99,229,239,.32));
+  stroke-width: 2.7;
+  opacity: .76;
+  filter: drop-shadow(0 0 5px rgba(99,229,239,.35));
 }
 
 .core-halo-mid {
-  stroke-width: 1;
-  opacity: .34;
+  stroke-width: .9;
+  opacity: .30;
 }
 
 .core-halo-inner {
   stroke-width: .55;
-  opacity: .13;
+  opacity: .12;
+}
+
+.core-rim-arc {
+  fill: none;
+  stroke: rgba(222,253,255,.92);
+  stroke-width: 2.1;
+  stroke-linecap: round;
+  opacity: .62;
+  filter: drop-shadow(0 0 4px rgba(99,229,239,.52));
+}
+
+.core-rim-arc-b {
+  stroke-width: 1.5;
+  opacity: .38;
 }
 
 .core-orbit-detail {
   fill: none;
   stroke: currentColor;
-  stroke-width: .8;
-  opacity: .12;
+  stroke-width: .7;
+  opacity: .09;
   transform-origin: 160px 160px;
 }
 
-.core-orbit-c {
-  opacity: .07;
-}
-
 .core-face {
-  stroke: rgba(207,250,252,.18);
-  stroke-width: .9;
-  filter: drop-shadow(0 9px 22px rgba(0,0,0,.58));
+  stroke: rgba(207,250,252,.15);
+  stroke-width: .75;
+  filter: drop-shadow(0 10px 22px rgba(0,0,0,.58));
 }
 
-.core-face-sheen { opacity: .68; }
-
-.core-face-plane {
-  fill: rgba(0, 3, 5, .38);
-  filter: drop-shadow(0 7px 12px rgba(0,0,0,.34));
+.core-face-sheen {
+  opacity: .72;
 }
 
-.core-face-contour {
-  fill:none;
-  stroke:rgba(141,231,237,.085);
-  stroke-width:.8;
-  filter:drop-shadow(0 0 5px rgba(99,229,239,.06));
+.core-surface-highlight {
+  fill: rgba(160,239,244,.028);
+  filter: drop-shadow(0 0 22px rgba(91,205,214,.05));
 }
 
-.core-face-contour-lower {
-  opacity:.55;
+.core-edge-shade {
+  opacity: .78;
 }
 
 .core-inner-rim {
   fill: none;
-  stroke: rgba(177, 240, 245, .10);
-  stroke-width: .7;
+  stroke: rgba(177,240,245,.10);
+  stroke-width: .65;
 }
 
-.core-eye-group {
-  transform-origin: 160px 155px;
-  transform: translate(var(--eye-x), var(--eye-y)) scaleY(1);
-  transition: transform 150ms ease, opacity 180ms ease;
-  color: var(--core-accent);
+.core-eye-aperture {
+  fill: rgba(0,4,6,.96);
+  stroke: rgba(165,242,247,.12);
+  stroke-width: .45;
 }
 
-.core-eye { color: var(--core-accent); }
+.core-eye-bloom {
+  opacity: .30;
+  filter: url(#coreEyeGlow);
+  pointer-events: none;
+}
+
+.core-eye-content {
+  transform: translate(var(--gaze-content-x), var(--gaze-content-y));
+  transform-box: view-box;
+  transform-origin: 160px 157px;
+  transition: transform 120ms ease-out, opacity 120ms ease-out;
+}
+
+.core-eye-luminance {
+  opacity: .96;
+}
+
 .core-eye-highlight {
   fill: none;
-  stroke: #f2feff;
-  stroke-width: 1.15;
-  opacity: .82;
-  filter: drop-shadow(0 0 3px rgba(169,249,252,.8));
+  stroke: #f5ffff;
+  stroke-width: .95;
+  stroke-linecap: round;
+  opacity: .78;
 }
 
-.core-stage[data-gaze="left"] { --eye-x: -5px; --eye-y: 1px; }
-.core-stage[data-gaze="right"] { --eye-x: 5px; --eye-y: 1px; }
-.core-stage[data-gaze="center"] { --eye-x: 0px; --eye-y: 1px; }
-.core-stage.saccade-left { --eye-x: -4px; }
-.core-stage.saccade-right { --eye-x: 4px; }
-.core-stage.saccade-up { --eye-y: -3px; }
-.core-stage.saccade-down { --eye-y: 3px; }
-.core-stage.is-blinking .core-eye-group { transform: translate(var(--eye-x), var(--eye-y)) scaleY(.08); }
+.core-eye-lid {
+  fill: #07171d;
+  opacity: .985;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.core-eye-lid-top {
+  transform: translateY(-11px);
+}
+
+.core-eye-lid-bottom {
+  transform: translateY(11px);
+}
+
+.core-stage.blink-closing .core-eye-lid-top,
+.core-stage.blink-closing .core-eye-lid-bottom {
+  transition: transform 80ms cubic-bezier(.4,0,.8,1);
+  transform: translateY(0);
+}
+
+.core-stage.blink-closed .core-eye-lid-top {
+  transform: translateY(3px);
+}
+
+.core-stage.blink-closed .core-eye-lid-bottom {
+  transform: translateY(-3px);
+}
+
+.core-stage.blink-opening .core-eye-lid-top {
+  transition: transform 140ms cubic-bezier(.2,.65,.25,1);
+  transform: translateY(-11px);
+}
+
+.core-stage.blink-opening .core-eye-lid-bottom {
+  transition: transform 140ms cubic-bezier(.2,.65,.25,1);
+  transform: translateY(11px);
+}
+
+.core-stage[data-gaze="left"] {
+  --gaze-content-x: -2px;
+  --gaze-content-y: 0px;
+}
+
+.core-stage[data-gaze="right"] {
+  --gaze-content-x: 2px;
+  --gaze-content-y: 0px;
+}
+
+.core-stage[data-gaze="up"] {
+  --gaze-content-x: 0px;
+  --gaze-content-y: -1.5px;
+}
+
+.core-stage[data-gaze="down"] {
+  --gaze-content-x: 0px;
+  --gaze-content-y: 1.5px;
+}
+
+.core-stage[data-gaze="forward"],
+.core-stage[data-gaze="center"] {
+  --gaze-content-x: 0px;
+  --gaze-content-y: 0px;
+}
 
 .core-stage[data-core-state="THINKING"],
 .core-stage[data-core-state="FINALIZING"],
