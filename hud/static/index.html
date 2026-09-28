@@ -54,8 +54,8 @@
     </div>
   </header>
 
-  <main class="hud-grid">
-    <aside class="rail left-rail context-sidebar" aria-label="Orion session and context">
+  <main class="hud-grid environment-shell" data-presentation-shell="environment-first">
+    <aside class="rail left-rail context-sidebar environment-region" aria-label="Orion session and context">
       <section class="context-section session-context">
         <div class="context-label"><span>SESSION</span><button id="newSession" class="context-add" type="button" aria-label="Create new Orion session">+</button></div>
         <label class="field-label" for="sessionSelect">Current conversation</label>
@@ -105,12 +105,12 @@
       </div>
     </aside>
 
-    <section class="center-stage" aria-label="Orion adaptive workspace">
+    <section class="center-stage center-experience" aria-label="Orion adaptive workspace">
 
 
       <div
         id="workspaceShell"
-        class="workspace-shell"
+        class="workspace-shell center-experience-shell"
         data-workspace="conversation"
         data-workspace-focus="normal"
       >
@@ -149,7 +149,7 @@
 
         <section
           id="summonPanel"
-          class="summon-panel"
+          class="summon-panel focus-surface"
           role="region"
           aria-labelledby="summonTitle"
           tabindex="-1"
@@ -435,7 +435,7 @@
       </div>
     </section>
 
-    <aside class="rail right-rail activity-sidebar" aria-label="Orion activity, approvals, and memory context">
+    <aside class="rail right-rail activity-sidebar environment-region" aria-label="Orion activity, approvals, and memory context">
       <section class="activity-panel operational-section">
         <div class="operational-title"><span>CURRENT ACTIVITY</span></div>
         <div id="activity" class="activity-list">
