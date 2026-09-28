@@ -46,8 +46,8 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
 
     def test_conversation_is_foreground_surface(self):
         self.assertIn(".conversation-workspace", TARGET)
-        self.assertIn("backdrop-filter: blur(18px);", TARGET)
-        self.assertIn("--workspace-overlap: 42px;", TARGET)
+        self.assertIn("backdrop-filter: blur(12px);", TARGET)
+        self.assertIn("--workspace-overlap: 86px;", TARGET)
         self.assertIn("calc(-1 * var(--workspace-overlap))", TARGET)
         self.assertIn(".composer-actions", INDEX)
         self.assertIn("grid-template-columns: minmax(0, 1fr) auto;", TARGET)
@@ -94,9 +94,9 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
             "approvalCommand",
         ):
             self.assertIn(token, INDEX + APP)
-        self.assertIn("--conversation-max-width: 980px;", TARGET)
-        self.assertIn("--rail-left-width: 250px;", TARGET)
-        self.assertIn("--rail-right-width: 330px;", TARGET)
+        self.assertIn("--conversation-max: 1000px;", TARGET)
+        self.assertIn("--left-region: clamp(220px, 15vw, 275px);", TARGET)
+        self.assertIn("--right-region: clamp(285px, 20vw, 360px);", TARGET)
 
     def test_structural_layout_has_one_authoritative_definition(self):
         self.assertNotIn(
@@ -104,10 +104,11 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
             STYLES,
         )
         self.assertNotIn("grid-template-columns: 1fr 86px 86px;", STYLES + TARGET)
-        self.assertIn("--rail-left-width: 250px;", TARGET)
-        self.assertIn("--workspace-overlap: 42px;", TARGET)
-        self.assertIn("grid-template-columns:\n    var(--rail-left-width)", TARGET)
-        self.assertIn("grid-template-rows: var(--hero-height) minmax(0, 1fr);", TARGET)
+        self.assertIn("--left-region: clamp(220px, 15vw, 275px);", TARGET)
+        self.assertIn("--workspace-overlap: 86px;", TARGET)
+        self.assertIn(".center-stage {", TARGET)
+        self.assertIn("position: absolute;", TARGET)
+        self.assertNotIn("grid-template-columns:\n    var(--rail-left-width)", TARGET)
 
     def test_composer_run_controls_are_state_explicit(self):
         self.assertIn('class="composer-actions"', INDEX)
@@ -136,15 +137,27 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
         self.assertIn('document.body.classList.add("approval-active");', APP)
         self.assertIn('document.body.classList.remove("approval-active");', APP)
         self.assertIn("body.approval-active .approval-panel", TARGET)
-        self.assertIn("width: min(calc(100% - (2 * var(--content-gutter))), 900px);", TARGET)
-        self.assertIn("height: min(58vh, 520px);", TARGET)
+        self.assertIn("width: min(\n    760px,", TARGET)
+        self.assertIn("max-height: 360px;", TARGET)
 
     def test_header_detailed_provenance_is_demoted_not_deleted(self):
         for element_id in ("originStatus", "sourceStatus", "memoryUseStatus", "authorityStatus"):
             self.assertIn(f'id="{element_id}"', INDEX)
         self.assertIn(
-            ".topbar .provenance-status .provenance-chip:not(.authority-chip)",
+            ".provenance-status .provenance-chip:not(.authority-chip)",
             TARGET,
+        )
+
+    def test_environment_first_shell_replaces_three_column_dashboard(self):
+        self.assertIn('data-presentation-shell="environment-first"', INDEX)
+        self.assertIn("environment-region", INDEX)
+        self.assertIn("center-experience", INDEX)
+        self.assertIn("focus-surface", INDEX)
+        self.assertIn(".hud-grid {\n  position: relative;", TARGET)
+        self.assertIn(".rail {\n  position: absolute;", TARGET)
+        self.assertNotIn(
+            "grid-template-columns: 260px minmax(760px, 1fr) 330px;",
+            STYLES + TARGET,
         )
 
     def test_visual_pass_does_not_add_runtime_transport(self):
