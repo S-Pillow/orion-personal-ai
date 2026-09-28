@@ -914,6 +914,29 @@ class ActionProjectionTests(unittest.TestCase):
         self.assertNotIn("tool_calls", rendered)
         self.assertNotIn('"secret"', rendered)
 
+    def test_transcript_projection_preserves_valid_iso_created_at(self):
+        projected = project_transcript_payload({
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "hello",
+                    "created_at": "2026-09-27T05:38:00-04:00",
+                    "timestamp": 1750000000,
+                },
+                {
+                    "role": "assistant",
+                    "content": "reply",
+                    "created_at": "2026-09-27T05:39:00",
+                },
+            ]
+        })
+        self.assertEqual(
+            projected["data"][0]["created_at"],
+            "2026-09-27T05:38:00-04:00",
+        )
+        self.assertNotIn("timestamp", projected["data"][0])
+        self.assertNotIn("created_at", projected["data"][1])
+
     def test_run_status_does_not_export_raw_error(self):
         projected = project_run_status({
             "run_id": "run_1",
