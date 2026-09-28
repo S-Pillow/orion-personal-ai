@@ -8,16 +8,18 @@ INDEX = (HUD_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 STYLES = (HUD_ROOT / "static" / "styles.css").read_text(encoding="utf-8")
 TARGET = (HUD_ROOT / "static" / "target-layout.css").read_text(encoding="utf-8")
 HERO = (HUD_ROOT / "static" / "orion-hero.svg").read_text(encoding="utf-8")
-ENVIRONMENT = HUD_ROOT / "static" / "orion-environment.webp"
+ENVIRONMENT_DATA = (HUD_ROOT / "static" / "environment-data.js").read_text(encoding="utf-8")
 APP = (HUD_ROOT / "static" / "app.js").read_text(encoding="utf-8")
 
 
 class FinalVisualConvergenceContractTests(unittest.TestCase):
     def test_owner_target_assets_are_loaded(self):
         self.assertIn('href="/target-layout.css"', INDEX)
-        self.assertIn('src="/orion-environment.webp"', INDEX)
-        self.assertTrue(ENVIRONMENT.exists())
-        self.assertGreater(ENVIRONMENT.stat().st_size, 10_000)
+        self.assertIn('id="sceneEnvironment"', INDEX)
+        self.assertIn('src="/orion-hero.svg"', INDEX)
+        self.assertIn("ORION_ENVIRONMENT_DATA_URI", APP)
+        self.assertIn("data:image/webp;base64,", ENVIRONMENT_DATA)
+        self.assertGreater(len(ENVIRONMENT_DATA), 10_000)
         self.assertIn("Orion owner-target layout", TARGET)
         self.assertIn("<svg", HERO)
 
