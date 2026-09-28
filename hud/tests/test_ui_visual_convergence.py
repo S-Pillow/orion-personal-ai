@@ -127,12 +127,29 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
         self.assertIn('id="coreState"', INDEX)
         core = INDEX[INDEX.index('class="core-visual live-core"'):INDEX.index('class="core-presence-label"')]
         self.assertNotIn('id="coreState"', core)
-        self.assertIn('class="core-eye core-eye-left"', core)
-        self.assertIn('class="core-eye core-eye-right"', core)
+        self.assertIn('class="core-eye-aperture"', core)
+        self.assertIn('class="core-eye-content core-eye-content-left"', core)
+        self.assertIn('class="core-eye-content core-eye-content-right"', core)
+        self.assertIn('class="core-eye-lid core-eye-lid-top"', core)
         self.assertIn('class="core-halo core-halo-outer"', core)
         self.assertNotIn("core-eye", HERO)
-        self.assertIn(".core-stage.is-blinking .core-eye-group", TARGET)
+        self.assertIn(".core-stage.blink-closing .core-eye-lid-top", TARGET)
         self.assertIn('.core-stage[data-core-state="OFFLINE"] .core-visual', TARGET)
+
+    def test_core_has_no_closed_mask_patch(self):
+        core = INDEX[INDEX.index('class="core-visual live-core"'):INDEX.index('class="core-presence-label"')]
+        self.assertNotIn("core-face-plane", core)
+        self.assertNotIn("core-face-contour", core)
+        self.assertIn("core-surface-highlight", core)
+        self.assertIn("core-edge-shade", core)
+
+    def test_eye_glow_is_separate_from_sharp_eye_art(self):
+        self.assertIn('id="coreEyeGlow"', INDEX)
+        self.assertIn('stdDeviation="1.25"', INDEX)
+        self.assertIn('class="core-eye-bloom"', INDEX)
+        self.assertIn('class="core-eye-content core-eye-content-left"', INDEX)
+        self.assertIn("filter: url(#coreEyeGlow);", TARGET)
+        self.assertNotIn('filter="url(#coreGlow)"', INDEX)
 
     def test_speaker_marks_replace_placeholder_initials(self):
         self.assertIn('avatar.textContent = "";', APP)
