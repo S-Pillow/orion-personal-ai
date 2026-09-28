@@ -860,6 +860,7 @@ function finishActivity(name, failed = false) {
 
 function hideApproval() {
   state.approvalEvent = null;
+  document.body.classList.remove("approval-active");
   syncProvenancePresentation();
   workspaceController.setApprovalFocus(false);
   ui.approvalPanel.classList.add("hidden");
@@ -870,6 +871,7 @@ function hideApproval() {
 
 function showApproval(data) {
   state.approvalEvent = data;
+  document.body.classList.add("approval-active");
   rememberActionProjection(data?.projection);
   syncProvenancePresentation();
   workspaceController.setApprovalFocus(true);
