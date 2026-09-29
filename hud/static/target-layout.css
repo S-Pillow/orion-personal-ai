@@ -320,17 +320,17 @@ body {
 .core-starlight { fill: #bcefff; opacity: .26; }
 .core-inner-rim { fill: none; stroke: #9cdeed; stroke-width: .4; opacity: .16; }
 
-.core-eye-aperture { fill: #16799a; stroke: #8cecff; stroke-width: .55; stroke-opacity: .6; }
-.core-eye-bloom { fill: #6ce5ff; opacity: .38; filter: url(#coreEyeGlow); }
+.core-eye-aperture { fill: #0b405c; stroke: #8cecff; stroke-width: .55; stroke-opacity: .45; }
+.core-eye-bloom { fill: #6ce5ff; opacity: .22; filter: url(#coreEyeGlow); }
 .core-eye-content {
   transform: translate(var(--gaze-content-x), var(--gaze-content-y));
   transform-box: view-box;
   transform-origin: 160px 153px;
-  transition: transform 160ms cubic-bezier(.22,.8,.3,1);
+  transition: transform 200ms cubic-bezier(.22,.8,.3,1);
 }
 .core-eye-luminance { opacity: .95; }
-.core-eye-focus { fill: #f2ffff; opacity: .85; }
-.core-eye-highlight { fill: none; stroke: #dbfcff; stroke-width: .65; opacity: .65; }
+.core-eye-focus { fill: #d0f7ff; opacity: .75; }
+.core-eye-highlight { fill: none; stroke: #81d7e8; stroke-width: .65; opacity: .35; }
 
 /* Black shutters live in stationary luminance masks, never on the face. */
 .core-eye-lid { fill: black; transform-box: view-box; }
@@ -358,23 +358,23 @@ body {
 .core-stage[data-motion="reduced"] .core-eye-lid { transition: none !important; }
 
 .core-stage[data-gaze="left"] {
-  --gaze-content-x: -4px;
+  --gaze-content-x: -7px;
   --gaze-content-y: 0px;
 }
 
 .core-stage[data-gaze="right"] {
-  --gaze-content-x: 4px;
+  --gaze-content-x: 7px;
   --gaze-content-y: 0px;
 }
 
 .core-stage[data-gaze="up"] {
   --gaze-content-x: 0px;
-  --gaze-content-y: -1.5px;
+  --gaze-content-y: -3px;
 }
 
 .core-stage[data-gaze="down"] {
   --gaze-content-x: 0px;
-  --gaze-content-y: 1.5px;
+  --gaze-content-y: 3px;
 }
 
 .core-stage[data-gaze="forward"],

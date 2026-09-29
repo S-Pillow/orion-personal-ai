@@ -68,6 +68,8 @@ if (__fixtureMode === "core-review") {
 
   window.__orionCoreFixture = {
     neutral() {
+      hideApproval();
+      summonController.dismiss();
       corePresence.setGaze("forward");
       setCore("READY", "Simulated fixture // neutral Core review pose");
     },
@@ -80,12 +82,26 @@ if (__fixtureMode === "core-review") {
     state(value) {
       setCore(value, "Simulated fixture // manual Core state review");
     },
+    attention(kind) {
+      if (kind === "reply") {
+        if (!state.approvalEvent) setCore("THINKING", "Simulated fixture // incoming reply");
+        handleStreamEvent("assistant.delta", { delta: "Simulated reply: review the new conversation content below." }, {});
+      }
+      if (kind === "approval") {
+        setCore("WAITING", "Simulated fixture // approval attention only");
+        showApproval({ action_title: "Simulated decision needs your attention", description: "Presentation-only example. No action will execute.", choices: [] });
+      }
+      if (kind === "summon") {
+        summonController.show({ kind: "text", title: "New material to review", content: "Simulated fixture: newly presented content receives a brief glance.", source: "fixture://core-attention" });
+      }
+    },
     snapshot() {
       return {
         state: ui.coreStage.dataset.coreState,
         gaze: ui.coreStage.dataset.gaze,
         blinkPhase: ui.coreStage.dataset.blinkPhase,
         motion: ui.coreStage.dataset.motion,
+        attentionTarget: ui.coreStage.dataset.attentionTarget || null,
       };
     },
   };
@@ -104,7 +120,10 @@ if (__fixtureMode === "core-review") {
     + '<button type="button" data-core-fixture="right">GAZE RIGHT</button>'
     + '<button type="button" data-core-fixture="blink">BLINK</button>'
     + '<button type="button" data-core-fixture="waiting">WAITING</button>'
-    + '<button type="button" data-core-fixture="offline">OFFLINE</button>';
+    + '<button type="button" data-core-fixture="offline">OFFLINE</button>'
+    + '<button type="button" data-core-fixture="reply">NEW REPLY</button>'
+    + '<button type="button" data-core-fixture="approval">ATTENTION: APPROVAL</button>'
+    + '<button type="button" data-core-fixture="summon">NEW CONTENT</button>';
   controls.addEventListener("click", (event) => {
     const action = event.target?.dataset?.coreFixture;
     if (action === "neutral") window.__orionCoreFixture.neutral();
@@ -113,6 +132,7 @@ if (__fixtureMode === "core-review") {
     if (action === "blink") window.__orionCoreFixture.blink();
     if (action === "waiting") window.__orionCoreFixture.state("WAITING");
     if (action === "offline") window.__orionCoreFixture.state("OFFLINE");
+    if (["reply", "approval", "summon"].includes(action)) window.__orionCoreFixture.attention(action);
   });
   document.body.append(controls);
 }

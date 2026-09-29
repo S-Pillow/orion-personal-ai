@@ -29,6 +29,7 @@ function renderer() {
   };
   const context = vm.createContext({
     state: {},
+    corePresence: { lookAt() {} },
     rememberActionProjection() { return null; },
     syncProvenancePresentation() {},
     workspaceController: { setApprovalFocus() {} },

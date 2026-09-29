@@ -309,6 +309,14 @@ def core_renderer_capture(browser, fixture) -> dict:
         ))
         pixels = Image.open(BytesIO(png)).convert("RGB").crop(eye_box)
         state["bright_eye_pixels"] = sum(g > 150 and b > 170 for r, g, b in pixels.getdata())
+        # Measure the light that was actually drawn, not just its SVG transform.
+        # A broad white wash can move in the DOM while the gaze remains unreadable.
+        centers = []
+        for x0, x1 in ((0, pixels.width // 2), (pixels.width // 2, pixels.width)):
+            lit_x = [x for y in range(pixels.height) for x in range(x0, x1)
+                     if pixels.getpixel((x, y))[1] > 150 and pixels.getpixel((x, y))[2] > 170]
+            centers.append(sum(lit_x) / len(lit_x) if lit_x else None)
+        state["eye_light_centers"] = centers
         return state
 
     neutral = snapshot("neutral")
@@ -332,7 +340,11 @@ def core_renderer_capture(browser, fixture) -> dict:
     right_focus = rect(page, ".core-eye-left .core-eye-focus")
     assert right["gaze"] == "right"
     assert aperture_rects() == apertures
-    assert 5 < right_focus["x"] - left_focus["x"] < 9
+    travel = (right_focus["x"] - left_focus["x"]) / apertures[0]["width"]
+    assert .2 < travel < .35, travel
+    for index, aperture in enumerate(apertures):
+        visible_travel = (right["eye_light_centers"][index] - left["eye_light_centers"][index]) / aperture["width"]
+        assert .18 < visible_travel < .35, visible_travel
 
     page.evaluate("() => window.__orionCoreFixture.gaze('left')")
     assert page.evaluate("() => window.__orionCoreFixture.blink()") is True
@@ -403,6 +415,15 @@ def core_renderer_capture(browser, fixture) -> dict:
         page.wait_for_timeout(650)
     page.evaluate("() => window.__orionCoreFixture.state('WAITING')")
     page.wait_for_timeout(800)
+    page.evaluate("() => window.__orionCoreFixture.neutral()")
+    page.evaluate("() => window.__orionCoreFixture.attention('reply')")
+    page.wait_for_timeout(900)
+    page.evaluate("() => window.__orionCoreFixture.attention('approval')")
+    page.wait_for_timeout(2200)
+    page.evaluate("() => window.__orionCoreFixture.neutral()")
+    page.wait_for_timeout(800)
+    page.evaluate("() => window.__orionCoreFixture.attention('summon')")
+    page.wait_for_timeout(1800)
     video = page.video
     page.close()
     video.save_as(str(OUT / "core-motion-review.webm"))
@@ -414,6 +435,49 @@ def core_renderer_capture(browser, fixture) -> dict:
         "after_state_change": after_state_change, "offline": offline,
         "reduced_motion": reduced,
     }
+
+
+def attention_capture(browser, fixture, width=1440, height=900) -> dict:
+    page = browser.new_page(viewport={"width": width, "height": height})
+    page.clock.install(time=datetime(2025, 4, 28, 22, 23, tzinfo=timezone.utc))
+    page.goto(fixture.core_review_url, wait_until="networkidle")
+    page.wait_for_function("() => Boolean(window.__orionCoreFixture)")
+    page.clock.pause_at(datetime(2025, 4, 28, 22, 24, tzinfo=timezone.utc))
+    page.evaluate("() => { window.__orionCoreFixture.state('OFFLINE'); window.__orionCoreFixture.neutral(); }")
+
+    def snapshot(name):
+        page.screenshot(path=str(OUT / f"core-attention-{name}-{width}.png"), animations="disabled")
+        return page.evaluate("() => window.__orionCoreFixture.snapshot()")
+
+    # These exercise the production stream, approval and summon hooks, not a
+    # direct setGaze call. Their payloads are isolated presentation fixtures.
+    page.evaluate("() => window.__orionCoreFixture.attention('reply')")
+    reply = snapshot("reply")
+    assert reply["gaze"] == "down", reply
+    assert reply["attentionTarget"] == "transcript", reply
+    page.evaluate("() => window.__orionCoreFixture.attention('approval')")
+    approval = snapshot("approval")
+    assert approval["gaze"] == ("right" if width > 900 else "down"), approval
+    assert approval["attentionTarget"] == "approvalPanel", approval
+    page.evaluate("() => window.__orionCoreFixture.attention('reply')")
+    assert page.evaluate("() => window.__orionCoreFixture.snapshot().attentionTarget") == "approvalPanel"
+    page.clock.run_for(1800)
+    returned = snapshot("returned")
+    assert returned["gaze"] == "forward"
+    assert returned["attentionTarget"] is None
+    page.evaluate("() => window.__orionCoreFixture.neutral()")
+    page.clock.run_for(1000)
+    page.evaluate("() => window.__orionCoreFixture.attention('summon')")
+    summon = snapshot("summon")
+    assert summon["gaze"] == "down", summon
+    assert summon["attentionTarget"] == "summonPanel", summon
+    page.emulate_media(reduced_motion="reduce")
+    expect(page.locator("#coreStage")).to_have_attribute("data-motion", "reduced")
+    page.evaluate("() => window.__orionCoreFixture.attention('approval')")
+    assert page.evaluate("() => window.__orionCoreFixture.snapshot().gaze") == "forward"
+    assert page.evaluate("() => window.__orionCoreFixture.snapshot().attentionTarget") is None
+    page.close()
+    return {"reply": reply, "approval": approval, "returned": returned, "summon": summon}
 
 
 def main() -> None:
@@ -439,6 +503,8 @@ def main() -> None:
                 "mobile_keyboard": mobile_keyboard_capture(browser, fixture),
                 "motion_preferences": motion_preference_check(browser, fixture),
                 "core_renderer": core_renderer_capture(browser, fixture),
+                "core_attention_desktop": attention_capture(browser, fixture),
+                "core_attention_mobile": attention_capture(browser, fixture, 390, 844),
             }
             browser.close()
         (OUT / "geometry-report.json").write_text(

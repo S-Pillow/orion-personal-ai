@@ -33,7 +33,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          node --test hud/tests/test_approval_rendering.cjs hud/tests/test_summon_rendering.cjs hud/tests/test_action_workspace_semantics.cjs 2>&1 | tee ui-visual-artifacts/node-tests.txt
+          node --test hud/tests/test_approval_rendering.cjs hud/tests/test_summon_rendering.cjs hud/tests/test_action_workspace_semantics.cjs hud/tests/test_core_attention.cjs 2>&1 | tee ui-visual-artifacts/node-tests.txt
           code=${PIPESTATUS[0]}
           echo "$code" > ui-visual-artifacts/node-tests.exit
           exit 0

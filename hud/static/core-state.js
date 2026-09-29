@@ -42,6 +42,16 @@ export function deriveCoreGaze() {
   return "forward";
 }
 
+// Attention follows the visible surface, never an operational-state label.
+export function attentionDirection(source, target) {
+  const dx = target.x + target.width / 2 - source.x - source.width / 2;
+  const dy = target.y + target.height / 2 - source.y - source.height / 2;
+  if (Math.hypot(dx, dy) < 24) return "forward";
+  return Math.abs(dx) > Math.abs(dy)
+    ? (dx < 0 ? "left" : "right")
+    : (dy < 0 ? "up" : "down");
+}
+
 function normalizeGaze(value) {
   const gaze = String(value || "")
     .trim()
@@ -89,6 +99,7 @@ export function installCorePresence(root, stateNode) {
       },
       setGaze() {},
       glance() {},
+      lookAt() {},
       blink() {},
       destroy() {},
     };
@@ -99,6 +110,8 @@ export function installCorePresence(root, stateNode) {
   let blinkPhaseTimer = 0;
   let gazeResetTimer = 0;
   let blinkActive = false;
+  let nextAttentionAt = 0;
+  let attentionPriority = 0;
 
   const motionQuery =
     typeof window.matchMedia === "function"
@@ -130,6 +143,7 @@ export function installCorePresence(root, stateNode) {
   function clearGazeTimer() {
     clearTimer(gazeResetTimer);
     gazeResetTimer = 0;
+    delete root.dataset.attentionTarget;
   }
 
   function resetBlinkPose() {
@@ -157,6 +171,7 @@ export function installCorePresence(root, stateNode) {
       gazeResetTimer = window.setTimeout(() => {
         root.dataset.gaze = "forward";
         gazeResetTimer = 0;
+        delete root.dataset.attentionTarget;
       }, duration);
     }
 
@@ -174,6 +189,34 @@ export function installCorePresence(root, stateNode) {
     }
 
     return setGaze(value, duration);
+  }
+
+  function visibleRect(element) {
+    if (!element?.getClientRects().length) return null;
+    const style = window.getComputedStyle(element);
+    if (style.visibility !== "visible" || Number(style.opacity) === 0) return null;
+    const box = element.getBoundingClientRect();
+    const x = Math.max(0, box.x), y = Math.max(0, box.y);
+    const width = Math.min(window.innerWidth, box.right) - x;
+    const height = Math.min(window.innerHeight, box.bottom) - y;
+    return width > 0 && height > 0 ? { x, y, width, height } : null;
+  }
+
+  function lookAt(target, priority = 1) {
+    if (destroyed || reducedMotion() || !surfaceVisible()
+        || normalizeCoreState(root.dataset.coreState) === "OFFLINE") return false;
+    const source = visibleRect(root.querySelector(".core-visual"));
+    const destination = visibleRect(target);
+    if (!source || !destination) return false;
+    const now = performance.now();
+    if (now < nextAttentionAt && priority <= attentionPriority) return false;
+    const direction = attentionDirection(source, destination);
+    if (direction === "forward") return false;
+    glance(direction, priority > 1 ? 1800 : 1200);
+    root.dataset.attentionTarget = target.id || "surface";
+    attentionPriority = priority;
+    nextAttentionAt = now + 2600;
+    return true;
   }
 
   function beginBlink() {
@@ -240,6 +283,8 @@ export function installCorePresence(root, stateNode) {
     clearGazeTimer();
     resetBlinkPose();
     root.dataset.gaze = "forward";
+    nextAttentionAt = 0;
+    attentionPriority = 0;
   }
 
   function syncMotionMode() {
@@ -335,6 +380,7 @@ export function installCorePresence(root, stateNode) {
     update,
     setGaze,
     glance,
+    lookAt,
     blink: beginBlink,
 
     destroy() {

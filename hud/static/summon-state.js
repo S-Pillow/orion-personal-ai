@@ -85,6 +85,7 @@ export function installSummonController(
     dismissButton = null,
     workspaceController = null,
     coreStage = null,
+    onShow = null,
   } = {},
 ) {
   let active = false;
@@ -152,6 +153,7 @@ export function installSummonController(
     }
 
     setPresentationFocus(true);
+    onShow?.(panel);
     return payload;
   }
 

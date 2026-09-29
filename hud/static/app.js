@@ -139,6 +139,9 @@ const summonController = installSummonController({
   dismissButton: ui.summonDismiss,
   workspaceController,
   coreStage: ui.coreStage,
+  onShow(panel) {
+    if (!state.approvalEvent) corePresence.lookAt(panel);
+  },
 });
 
 // Presentation shell only. No agent/browser transport or new runtime authority
@@ -1049,6 +1052,7 @@ function showApproval(data) {
     button.addEventListener("click", () => decideApproval(choice));
     ui.approvalActions.append(button);
   }
+  corePresence.lookAt(ui.approvalPanel, 2);
 }
 
 async function decideApproval(choice) {
@@ -1240,8 +1244,10 @@ function handleStreamEvent(eventName, data, assistant) {
 
       if (delta) {
         const assistantBody = ensureAssistantBody(assistant);
+        const firstDelta = !assistantBody.textContent;
         assistantBody.textContent += delta;
         ui.transcript.scrollTop = ui.transcript.scrollHeight;
+        if (firstDelta && !state.approvalEvent) corePresence.lookAt(ui.transcript);
       }
 
       break;
@@ -1260,6 +1266,7 @@ function handleStreamEvent(eventName, data, assistant) {
     case "tool.failed":
       finishActivity(String(data?.tool_name || "tool"), true);
       setCore("THINKING", "Tool failed // Hermes is reconciling");
+      if (!state.approvalEvent) corePresence.lookAt(ui.activity);
       break;
     case "approval.request":
       if (
@@ -1296,6 +1303,7 @@ function handleStreamEvent(eventName, data, assistant) {
       }
 
       setCore("FINALIZING", "Reconciling Hermes session...");
+      if (!state.approvalEvent) corePresence.lookAt(ui.transcript);
       break;
     case "run.completed": {
       if (
@@ -1457,6 +1465,7 @@ async function sendMessage(event) {
   appendMessage("user", input);
   ui.messageInput.value = "";
   setCore("THINKING", "Submitting typed turn to Hermes...");
+  corePresence.lookAt(ui.transcript);
 
   try {
     await streamTurn(input);

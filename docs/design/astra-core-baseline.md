@@ -31,6 +31,22 @@ gradient colors, stroke widths, highlight intensity and placement are art parame
 not frozen identity constants. Adjust them through rendered comparison with the
 accepted baseline; preserve the structure above.
 
+## Purposeful attention
+
+Neutral remains the resting pose. Brief glances may acknowledge a submitted turn,
+the first visible reply text or completed response, a newly presented summon, a
+failed tool activity, or an approval needing the operator's decision. Directions
+come from visible screen geometry, not a fixed mapping from operational state.
+Approval takes priority over ordinary conversation cues. Glances return to neutral
+after 1.2 seconds (1.8 seconds for approval), with a 2.6-second cooldown that a new
+higher-priority cue can interrupt. No random scanning or per-token gaze changes.
+Reduced motion, an invisible page/Core, offscreen targets and OFFLINE suppress
+attention. The masked-eye architecture remains unchanged.
+
+Keep the moving light visibly distinct from the aperture: a compact bright center
+against a dimmer cyan opening, with restrained bloom. Review normal conversation
+attention as well as the manual left/right poses when tuning contrast and travel.
+
 ## Verification
 
 `hud/tests/test_astra_core_identity.py` checks the actual SVG structure and reference
