@@ -150,25 +150,6 @@ class ReconnectHermesHandler(BaseHTTPRequestHandler):
             self._send(200, {"data": sessions})
             return
 
-        if path in {
-            "/api/sessions/session_1/messages",
-            "/api/sessions/session_2/messages",
-        }:
-            session_id = path.split("/")[3]
-            self._send(200, {"data": ordinary_messages(session_id)})
-            return
-
-        if path in {
-            "/api/sessions/session_1/messages",
-            "/api/sessions/session_2/messages",
-        }:
-            raise AssertionError("unreachable")
-
-        if path.startswith("/api/sessions/") and path.endswith("/messages"):
-            session_id = path.split("/")[3]
-            self._send(200, {"data": ordinary_messages(session_id)})
-            return
-
         if self.path.startswith("/api/sessions/session_1/messages?"):
             if scenario == "hydration_failure":
                 self._send(500, {"error": "fixture_hydration_failure"})
@@ -187,6 +168,14 @@ class ReconnectHermesHandler(BaseHTTPRequestHandler):
         if self.path.startswith("/api/sessions/session_2/messages?"):
             rows = ordinary_messages("session_2")
             self._send(200, {"data": rows})
+            return
+
+        if path in {
+            "/api/sessions/session_1/messages",
+            "/api/sessions/session_2/messages",
+        }:
+            session_id = path.split("/")[3]
+            self._send(200, {"data": ordinary_messages(session_id)})
             return
 
         if path == "/v1/runs/run_active":
