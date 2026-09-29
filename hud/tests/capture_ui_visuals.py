@@ -451,7 +451,17 @@ def attention_capture(browser, fixture, width=1440, height=900) -> dict:
 
     # These exercise the production stream, approval and summon hooks, not a
     # direct setGaze call. Their payloads are isolated presentation fixtures.
+    welcome = rect(page, ".conversation-workspace")
+    composer = rect(page, ".composer")
+    expect(page.locator(".no-session")).to_be_visible()
     page.evaluate("() => window.__orionCoreFixture.attention('reply')")
+    assert page.locator(".empty-state").count() == 0
+    expanded = rect(page, ".conversation-workspace")
+    assert expanded["height"] > welcome["height"]
+    assert abs(rect(page, ".composer")["y"] - composer["y"]) < 1
+    page.evaluate("() => window.__orionCoreFixture.attention('reply')")
+    assert page.locator("#transcript .message").count() == 2
+    assert abs(rect(page, ".conversation-workspace")["height"] - expanded["height"]) < 1
     reply = snapshot("reply")
     assert reply["gaze"] == "down", reply
     assert reply["attentionTarget"] == "transcript", reply

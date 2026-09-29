@@ -443,6 +443,8 @@ function renderMessageContent(container, value) {
 }
 
 function appendMessage(role, text = "", meta = {}) {
+  // Every message entry path (including an incoming stream) ends the welcome state.
+  ui.transcript.querySelectorAll(".empty-state").forEach((empty) => empty.remove());
   const isUser = role === "user";
   const article = document.createElement("article");
   article.className = `message ${isUser ? "user" : "assistant"}`;
@@ -1461,7 +1463,6 @@ async function sendMessage(event) {
   state.activeRunId = "";
   hideApproval();
   updateRunControls();
-  if (ui.transcript.querySelector(".empty-state")) clearTranscript();
   appendMessage("user", input);
   ui.messageInput.value = "";
   setCore("THINKING", "Submitting typed turn to Hermes...");
