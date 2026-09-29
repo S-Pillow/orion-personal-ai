@@ -1,6 +1,6 @@
 # P5-03C Reconnect / Hydration Qualification Plan
 
-Status: **STAGE A/B/C/D ACCEPTED / DISPOSABLE FIXTURE CLEANUP PENDING**
+Status: **COMPLETE / ACCEPTED / READY TO MERGE**
 
 Date: 2026-09-27  
 Base main: `4fb9e0abe7e534f0aa8fbfa42d52e480681c30d5`
@@ -229,10 +229,64 @@ qualified production executor normally returns.
 This closes the required consequential reconnect proof without a second
 protected action.
 
-One operator housekeeping item remains before final P5-03C closure: remove the
-preserved temporary disposable fixture
-`D:\Orion\orion-p5-03c-stage-d-xu_wj7s1` using the bounded cleanup gate.
-No production content or live SessionDB data is part of that cleanup.
+The preserved temporary disposable fixture
+`D:\Orion\orion-p5-03c-stage-d-xu_wj7s1` was removed through the bounded
+cleanup gate after qualification.
+
+Cleanup evidence:
+
+- real vault/inbox targeted: **false**;
+- disposable fixture cleaned: **true**;
+- cleanup gate: **PASS**.
+
+No production content or live SessionDB data was part of cleanup.
+
+## Final P5-03C closure
+
+P5-03C reconnect/hydration qualification is complete.
+
+Accepted coverage:
+
+- Stage A deterministic fixture: **PASS**;
+- Stage B automated browser-state contract: **PASS**;
+- Stage C installed read-only COMPANION qualification: **PASS**;
+- Stage D retained-evidence discovery: **PASS / none available**;
+- owner-authorized disposable consequential qualification: **PASS**;
+- read-only reconstruction from preserved durable evidence: **PASS**;
+- bounded disposable fixture cleanup: **PASS**.
+
+The final implementation preserves these boundaries:
+
+- browser persistence is locator-only;
+- run status alone never proves protected-action success;
+- completed protected-action success requires the existing P5-03A evidence
+  threshold;
+- incomplete successful-looking evidence remains `unknown`;
+- pending approval is not reconstructed from browser storage;
+- historical recovery IDs do not establish current recovery availability;
+- cross-session and late-hydration evidence cannot bleed into the selected
+  session;
+- no browser action ledger, approval ledger, retry authority, or persistent
+  SSE replay store was introduced;
+- no production vault/inbox mutation was performed for P5-03C;
+- no synthetic action evidence was written into live Hermes SessionDB;
+- no Core artwork/behavior or presentation redesign was introduced.
+
+The Stage D first-attempt `unknown` result is retained as positive evidence
+that the projection fails closed when the private disposable executor omits
+required production completion fields. Closure did not lower that threshold.
+
+Final merge-readiness boundary:
+
+- branch is based directly on accepted main
+  `4fb9e0abe7e534f0aa8fbfa42d52e480681c30d5`;
+- no base drift was present at closure review;
+- changed paths are limited to reconnect/projection/bridge behavior,
+  qualification tests/scripts, workflow gating, and this qualification record;
+- production merge remains a separate repository action and is not performed
+  by this closure record.
+
+P5-03C disposition: **ACCEPTED / READY TO MERGE**.
 
 ## 1. Objective
 
