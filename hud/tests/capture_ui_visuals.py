@@ -541,11 +541,18 @@ def p503b3_truth_matrix_capture(browser, fixture) -> dict:
         assert result["execution"] == execution
         panel = page.locator("#actionEvidencePanel")
         assert panel.is_visible()
+        result["stack_border"] = page.locator(".action-stack").evaluate(
+            "(node) => getComputedStyle(node).borderTopColor"
+        )
         observed[state_name] = result
         page.screenshot(
             path=str(OUT / f"truth-{state_name}-1440x900.png"),
             full_page=False,
         )
+
+    assert observed["succeeded"]["stack_border"] != observed["approval_accepted"]["stack_border"]
+    assert observed["failed"]["stack_border"] != observed["succeeded"]["stack_border"]
+    assert observed["preview_ready"]["stack_border"] != observed["approval_requested"]["stack_border"]
 
     page.close()
     return observed
