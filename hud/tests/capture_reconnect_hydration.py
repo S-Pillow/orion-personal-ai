@@ -18,33 +18,34 @@ def install_storage(page, *, session_id="session_1", run_id="", poison=False):
         "run_id": run_id,
         "poison": poison,
     }
+    serialized = json.dumps(payload)
     page.add_init_script(
-        """
-        ({ session_id, run_id, poison }) => {
+        f"""
+        (() => {{
+          const {{ session_id, run_id, poison }} = {serialized};
           localStorage.setItem("orion.hermesSession", session_id);
-          if (run_id) {
+          if (run_id) {{
             sessionStorage.setItem(
               "orion.hermesRunLocator",
-              JSON.stringify({
+              JSON.stringify({{
                 version: 1,
                 session_id,
                 run_id,
-                ...(poison ? {
+                ...(poison ? {{
                   state: "succeeded",
                   approval: "always",
                   recovery_available: true,
-                } : {}),
-              }),
+                }} : {{}}),
+              }}),
             );
-          }
-          if (poison) {
+          }}
+          if (poison) {{
             localStorage.setItem("orion.actionState", "succeeded");
             localStorage.setItem("orion.approval", "accepted");
             sessionStorage.setItem("orion.fakeSuccess", "true");
-          }
-        }
-        """,
-        payload,
+          }}
+        }})();
+        """
     )
 
 
