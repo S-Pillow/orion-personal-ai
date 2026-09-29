@@ -105,6 +105,52 @@ first search existing persisted sessions for retained non-sensitive completed
 action evidence. A new disposable protected action is not authorized unless
 read-only discovery proves existing evidence is insufficient.
 
+## Stage D retained-evidence discovery
+
+Read-only discovery across the installed COMPANION SessionDB completed after
+Stage C.
+
+Observed:
+
+- persisted sessions enumerated: **17**;
+- qualifying completed protected-action evidence records: **0**;
+- transcript bodies printed: **false**;
+- raw tool results printed: **false**;
+- vault read: **false**;
+- vault mutation: **false**.
+
+Discovery disposition: **PASS / NO RETAINED EVIDENCE AVAILABLE**.
+
+Therefore Stage D cannot use preferred option 2 (retained non-sensitive
+persisted test evidence).
+
+The next candidate is a separately approved **isolated disposable
+protected-action fixture**. It must reuse the already-qualified P5-02I
+disposable-root guardrails and must not place synthetic action records into
+the live Hermes SessionDB.
+
+The proposed Stage D fixture will:
+
+1. create temporary disposable vault/inbox/recovery roots under a neutral
+   operator path;
+2. obtain a fresh real Hermes human **ALLOW ONCE** or **DENY** decision for the
+   exact disposable plan;
+3. execute only the installed plugin's private disposable executor;
+4. preserve the exact structured plugin result as the authoritative action
+   result for the fixture;
+5. present that result through an isolated fake-Hermes persisted session to
+   the real Orion bridge/HUD;
+6. reload the browser and restart the HUD/bridge process;
+7. require the same completed action projection after each reconstruction;
+8. poison browser-local state and require it to have no effect;
+9. require current recovery visibility to remain **unavailable** unless a
+   separate authoritative current inspector exists;
+10. verify real vault/inbox remain untouched and clean up disposable roots on
+    PASS.
+
+This fixture is **not authorized for execution by this document update**.
+Disposable mutation execution still requires explicit owner authorization.
+
 ## 1. Objective
 
 Qualify reload, reconnect, HUD restart, and Hermes restart behavior for consequential presentation state without creating a second source of truth.
