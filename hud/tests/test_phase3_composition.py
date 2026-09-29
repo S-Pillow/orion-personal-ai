@@ -13,6 +13,9 @@ INDEX = (HUD_ROOT / "static" / "index.html").read_text(
 STYLES = (HUD_ROOT / "static" / "styles.css").read_text(
     encoding="utf-8"
 )
+TARGET = (HUD_ROOT / "static" / "target-layout.css").read_text(
+    encoding="utf-8"
+)
 
 
 class Phase3CompositionContractTests(unittest.TestCase):
@@ -69,11 +72,25 @@ class Phase3CompositionContractTests(unittest.TestCase):
         self.assertIn("ORIGIN &#183; UNOBSERVED", INDEX)
 
     def test_center_and_core_are_visually_prioritized(self):
-        self.assertIn("P3-05A composition convergence", STYLES)
-        self.assertIn("minmax(560px, 1fr)", STYLES)
-        self.assertIn("minmax(230px, 38vh)", STYLES)
-        self.assertIn("max-width: min(82%, 760px);", STYLES)
-        self.assertIn("width: 160px;", STYLES)
+        self.assertIn('data-presentation-shell="environment-first"', INDEX)
+        self.assertIn(".center-stage {", TARGET)
+        self.assertIn("position: absolute;", TARGET)
+        self.assertIn("--hero-height: clamp(340px, 42vh, 368px);", TARGET)
+        self.assertIn("--center-width: min(920px", TARGET)
+        self.assertIn(".foreground-workspace {", TARGET)
+        self.assertIn(".conversation-workspace {", TARGET)
+        self.assertIn(
+            "grid-template-rows: var(--hero-height) minmax(0, 1fr);",
+            TARGET,
+        )
+        self.assertIn(
+            "grid-template-rows: minmax(0,1fr) 78px;",
+            TARGET,
+        )
+        self.assertIn(
+            'class="workspace-pane foreground-workspace"',
+            INDEX,
+        )
 
     def test_future_phase_controls_are_not_advertised(self):
         for token in (
@@ -85,14 +102,21 @@ class Phase3CompositionContractTests(unittest.TestCase):
             self.assertNotIn(token, INDEX)
 
     def test_secondary_panels_do_not_dim_interactive_content(self):
-        self.assertNotIn("opacity: 0.72;", STYLES)
+        self.assertNotIn(
+            "body.approval-active .memory-lens {\n  opacity:",
+            TARGET,
+        )
+        self.assertNotIn(
+            "body.approval-active .operational-details {\n  opacity:",
+            TARGET,
+        )
         self.assertNotIn(".peripheral-panel:hover", STYLES)
         self.assertNotIn(".secondary-panel:hover", STYLES)
 
     def test_reduced_motion_contract_remains(self):
         self.assertIn(
             "@media (prefers-reduced-motion: reduce)",
-            STYLES,
+            TARGET,
         )
         self.assertIn(
             "animation-duration: 0.001ms !important;",

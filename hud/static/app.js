@@ -1,6 +1,7 @@
 "use strict";
 
 import { installCorePresence } from "./core-state.js";
+import { ORION_ENVIRONMENT_DATA_URI } from "./environment-data.js";
 import { installWorkspaceController } from "./workspace-state.js";
 import { installSummonController } from "./summon-state.js";
 import {
@@ -14,6 +15,7 @@ import {
 const $ = (id) => document.getElementById(id);
 
 const ui = {
+  sceneEnvironment: $("sceneEnvironment"),
   bridgeStatus: $("bridgeStatus"),
   hermesStatus: $("hermesStatus"),
   originStatus: $("originStatus"),
@@ -80,6 +82,10 @@ const ui = {
   actionTechnical: $("actionTechnical"),
   actionTechnicalList: $("actionTechnicalList"),
   approvalPanel: $("approvalPanel"),
+  approvalTitle: $("approvalTitle"),
+  approvalEffect: $("approvalEffect"),
+  approvalTarget: $("approvalTarget"),
+  approvalCommand: $("approvalCommand"),
   approvalDetail: $("approvalDetail"),
   approvalActions: $("approvalActions"),
   capSessions: $("capSessions"),
@@ -90,6 +96,10 @@ const ui = {
   jobCount: $("jobCount"),
   footerSession: $("footerSession"),
 };
+
+if (ui.sceneEnvironment && ORION_ENVIRONMENT_DATA_URI) {
+  ui.sceneEnvironment.src = ORION_ENVIRONMENT_DATA_URI;
+}
 
 const state = {
   sessionId: localStorage.getItem("orion.hermesSession") || "",
@@ -129,6 +139,9 @@ const summonController = installSummonController({
   dismissButton: ui.summonDismiss,
   workspaceController,
   coreStage: ui.coreStage,
+  onShow(panel) {
+    if (!state.approvalEvent) corePresence.lookAt(panel);
+  },
 });
 
 // Presentation shell only. No agent/browser transport or new runtime authority
@@ -239,19 +252,28 @@ function setHermesOnline(online, degraded = false) {
 }
 
 function updateRunControls() {
-  ui.stopButton.disabled = !state.activeRunId;
+  const running = Boolean(state.activeRunId);
+  ui.composer.dataset.runState = running ? "running" : "idle";
+  ui.stopButton.disabled = !running;
+  ui.stopButton.hidden = !running;
   ui.sendButton.disabled = state.streaming;
+  ui.sendButton.hidden = running;
   ui.newSession.disabled = state.streaming;
   ui.sessionSelect.disabled = state.streaming;
   syncProvenancePresentation();
 }
 
 function formatClock() {
+  const fixtureClock =
+    document.documentElement.dataset.fixtureClock || "";
+  if (fixtureClock) {
+    ui.clock.textContent = fixtureClock;
+    return;
+  }
   ui.clock.textContent = new Date().toLocaleTimeString([], {
     hour12: false,
     hour: "2-digit",
     minute: "2-digit",
-    second: "2-digit",
   });
 }
 
@@ -312,28 +334,151 @@ function clearTranscript() {
   ui.transcript.replaceChildren();
 }
 
-function showTranscriptEmpty(text) {
+function showTranscriptEmpty(text, title = "Your conversation starts here") {
   clearTranscript();
   const wrap = document.createElement("div");
-  wrap.className = "empty-state";
+  wrap.className = state.sessionId ? "empty-state" : "empty-state no-session";
   const strong = document.createElement("strong");
-  strong.textContent = "ORION HUD LINK READY";
+  strong.textContent = state.sessionId ? title : "A place to think things through.";
   const span = document.createElement("span");
   span.textContent = text;
   wrap.append(strong, span);
   ui.transcript.append(wrap);
 }
 
-function appendMessage(role, text = "") {
+function formatMessageTime(value) {
+  if (typeof value !== "string" || !value.trim()) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function appendInlineFormatting(parent, value) {
+  const text = String(value || "");
+  const pattern = /(\*\*[^*\n]+\*\*|\`[^\`\n]+\`)/g;
+  let cursor = 0;
+  let match;
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > cursor) {
+      parent.append(document.createTextNode(text.slice(cursor, match.index)));
+    }
+    const token = match[0];
+    const node = token.startsWith("**")
+      ? document.createElement("strong")
+      : document.createElement("code");
+    node.textContent = token.startsWith("**")
+      ? token.slice(2, -2)
+      : token.slice(1, -1);
+    parent.append(node);
+    cursor = match.index + token.length;
+  }
+  if (cursor < text.length) {
+    parent.append(document.createTextNode(text.slice(cursor)));
+  }
+}
+
+function renderMessageContent(container, value) {
+  container.replaceChildren();
+  const lines = String(value || "").replace(/\r\n?/g, "\n").split("\n");
+  let paragraph = [];
+  let list = null;
+
+  function flushParagraph() {
+    if (!paragraph.length) return;
+    const p = document.createElement("p");
+    p.className = "message-plain-line";
+    appendInlineFormatting(p, paragraph.join("\n"));
+    container.append(p);
+    paragraph = [];
+  }
+
+  function closeList() {
+    list = null;
+  }
+
+  for (const line of lines) {
+    const heading = line.match(/^(#{2,3})\s+(.+)$/);
+    const bullet = line.match(/^[-*]\s+(.+)$/);
+    const numbered = line.match(/^\d+\.\s+(.+)$/);
+
+    if (heading) {
+      flushParagraph();
+      closeList();
+      const h = document.createElement(
+        heading[1].length === 2 ? "h2" : "h3",
+      );
+      appendInlineFormatting(h, heading[2]);
+      container.append(h);
+      continue;
+    }
+
+    if (bullet || numbered) {
+      flushParagraph();
+      const ordered = Boolean(numbered);
+      const tag = ordered ? "ol" : "ul";
+      if (!list || list.tagName.toLowerCase() !== tag) {
+        list = document.createElement(tag);
+        container.append(list);
+      }
+      const item = document.createElement("li");
+      appendInlineFormatting(item, (bullet || numbered)[1]);
+      list.append(item);
+      continue;
+    }
+
+    if (!line.trim()) {
+      flushParagraph();
+      closeList();
+      continue;
+    }
+
+    closeList();
+    paragraph.push(line);
+  }
+
+  flushParagraph();
+}
+
+function appendMessage(role, text = "", meta = {}) {
+  // Every message entry path (including an incoming stream) ends the welcome state.
+  ui.transcript.querySelectorAll(".empty-state").forEach((empty) => empty.remove());
+  const isUser = role === "user";
   const article = document.createElement("article");
-  article.className = `message ${role === "user" ? "user" : "assistant"}`;
+  article.className = `message ${isUser ? "user" : "assistant"}`;
+
+  const avatar = document.createElement("span");
+  avatar.className = "message-avatar";
+  avatar.setAttribute("aria-hidden", "true");
+  avatar.textContent = "";
+  avatar.dataset.speaker = isUser ? "user" : "orion";
+
+  const content = document.createElement("div");
+  content.className = "message-content";
+
+  const header = document.createElement("div");
+  header.className = "message-header";
+
   const label = document.createElement("span");
   label.className = "message-role";
-  label.textContent = role === "user" ? "YOU" : "ORION";
+  label.textContent = isUser ? "You" : "Orion";
+
+  const time = document.createElement("time");
+  time.className = "message-time";
+  const displayTime = formatMessageTime(meta.createdAt);
+  time.textContent = displayTime;
+  if (!displayTime) time.hidden = true;
+
+  header.append(label, time);
+
   const body = document.createElement("div");
   body.className = "message-body";
-  body.textContent = text;
-  article.append(label, body);
+  renderMessageContent(body, text);
+
+  content.append(header, body);
+  article.append(avatar, content);
   ui.transcript.append(article);
   ui.transcript.scrollTop = ui.transcript.scrollHeight;
   return body;
@@ -343,7 +488,14 @@ function renderMessages(payload) {
   const messages = arrayFrom(payload, ["messages", "items", "data"]);
   const visible = messages
     .filter((m) => m && (m.role === "user" || m.role === "assistant"))
-    .map((m) => ({ role: m.role, text: messageText(m) }))
+    .map((m) => ({
+      role: m.role,
+      text: messageText(m),
+      createdAt:
+        m.created_at ||
+        m.createdAt ||
+        "",
+    }))
     .filter((m) => m.text.trim().length > 0);
 
   if (!visible.length) {
@@ -352,7 +504,13 @@ function renderMessages(payload) {
   }
 
   clearTranscript();
-  for (const message of visible) appendMessage(message.role, message.text);
+  for (const message of visible) {
+    appendMessage(
+      message.role,
+      message.text,
+      { createdAt: message.createdAt },
+    );
+  }
 }
 
 function sessionTitle(item) {
@@ -734,7 +892,7 @@ async function refreshActionEvidence() {
 
 async function loadMessages() {
   if (!state.sessionId) {
-    showTranscriptEmpty("Select or create a Hermes session to begin.");
+    showTranscriptEmpty("Choose a conversation in Session, or use + to start a new one.");
     clearActionProjection();
     return;
   }
@@ -742,7 +900,7 @@ async function loadMessages() {
     const payload = await api(`/api/orion/sessions/${encodeURIComponent(state.sessionId)}/messages`);
     renderMessages(payload);
   } catch (error) {
-    showTranscriptEmpty(`Session history unavailable: ${error.message}`);
+    showTranscriptEmpty(`Session history unavailable: ${error.message}`, "Unable to load this conversation");
   }
   await refreshActionEvidence();
 }
@@ -782,6 +940,7 @@ function addActivity(name, preview, event = "running") {
   const item = document.createElement("div");
   item.className = "activity-item";
   item.dataset.tool = name || "tool";
+  item.dataset.event = event;
   const nameEl = document.createElement("div");
   nameEl.className = "activity-name";
   nameEl.textContent = name || "tool";
@@ -802,20 +961,28 @@ function finishActivity(name, failed = false) {
   if (!item) return;
   const status = item.querySelector(".activity-state");
   if (status) status.textContent = failed ? "FAILED" : "COMPLETED";
+  item.dataset.event = failed ? "failed" : "completed";
   item.classList.toggle("failed", failed);
 }
 
 function hideApproval() {
   state.approvalEvent = null;
+  document.body.classList.remove("approval-active");
   syncProvenancePresentation();
   workspaceController.setApprovalFocus(false);
   ui.approvalPanel.classList.add("hidden");
+  ui.approvalTitle.textContent = "Protected action approval";
+  ui.approvalEffect.textContent =
+    "Hermes requires an operator decision before protected execution.";
+  ui.approvalTarget.textContent = "—";
+  ui.approvalCommand.textContent = "";
   ui.approvalDetail.textContent = "";
   ui.approvalActions.replaceChildren();
 }
 
 function showApproval(data) {
   state.approvalEvent = data;
+  document.body.classList.add("approval-active");
   rememberActionProjection(data?.projection);
   syncProvenancePresentation();
   workspaceController.setApprovalFocus(true);
@@ -826,13 +993,45 @@ function showApproval(data) {
       behavior: "smooth",
     });
   }
-  // Hermes sends the tool/command and the exact approval description separately.
-  // Keep both complete and render them as text, including diff lines and markup.
-  const details = [];
-  if (data.command) details.push(`Command / tool:\n${data.command}`);
-  if (data.description) details.push(`Description:\n${data.description}`);
-  if (!details.length) details.push(String(data.reason || data.tool_name || "Hermes requires an operator decision."));
-  ui.approvalDetail.textContent = details.join("\n\n");
+  // Structured display metadata is optional. It may improve hierarchy, but
+  // it never replaces the canonical command or exact approval description.
+  const projection =
+    data?.projection && typeof data.projection === "object"
+      ? data.projection
+      : {};
+
+  const command = String(
+    data.command ||
+    data.tool_name ||
+    projection.command ||
+    data.reason ||
+    "Hermes protected action"
+  );
+  ui.approvalCommand.textContent = command;
+
+  ui.approvalTitle.textContent = String(
+    data.action_title ||
+    projection.action_title ||
+    "Protected action approval"
+  );
+  ui.approvalEffect.textContent = String(
+    data.effect ||
+    projection.effect ||
+    "Hermes requires an operator decision before protected execution."
+  );
+  ui.approvalTarget.textContent = String(
+    data.target ||
+    projection.target ||
+    "—"
+  );
+
+  const description = String(
+    data.description ||
+    data.reason ||
+    projection.description ||
+    "Hermes requires an operator decision."
+  );
+  ui.approvalDetail.textContent = description;
   ui.approvalDetail.scrollTop = 0;
   ui.approvalActions.replaceChildren();
 
@@ -855,6 +1054,7 @@ function showApproval(data) {
     button.addEventListener("click", () => decideApproval(choice));
     ui.approvalActions.append(button);
   }
+  corePresence.lookAt(ui.approvalPanel, 2);
 }
 
 async function decideApproval(choice) {
@@ -1046,8 +1246,10 @@ function handleStreamEvent(eventName, data, assistant) {
 
       if (delta) {
         const assistantBody = ensureAssistantBody(assistant);
+        const firstDelta = !assistantBody.textContent;
         assistantBody.textContent += delta;
         ui.transcript.scrollTop = ui.transcript.scrollHeight;
+        if (firstDelta && !state.approvalEvent) corePresence.lookAt(ui.transcript);
       }
 
       break;
@@ -1066,6 +1268,7 @@ function handleStreamEvent(eventName, data, assistant) {
     case "tool.failed":
       finishActivity(String(data?.tool_name || "tool"), true);
       setCore("THINKING", "Tool failed // Hermes is reconciling");
+      if (!state.approvalEvent) corePresence.lookAt(ui.activity);
       break;
     case "approval.request":
       if (
@@ -1098,10 +1301,11 @@ function handleStreamEvent(eventName, data, assistant) {
       syncProvenancePresentation();
       if (typeof data?.content === "string" && data.content) {
         const assistantBody = ensureAssistantBody(assistant);
-        assistantBody.textContent = data.content;
+        renderMessageContent(assistantBody, data.content);
       }
 
       setCore("FINALIZING", "Reconciling Hermes session...");
+      if (!state.approvalEvent) corePresence.lookAt(ui.transcript);
       break;
     case "run.completed": {
       if (
@@ -1259,10 +1463,10 @@ async function sendMessage(event) {
   state.activeRunId = "";
   hideApproval();
   updateRunControls();
-  if (ui.transcript.querySelector(".empty-state")) clearTranscript();
   appendMessage("user", input);
   ui.messageInput.value = "";
   setCore("THINKING", "Submitting typed turn to Hermes...");
+  corePresence.lookAt(ui.transcript);
 
   try {
     await streamTurn(input);
@@ -1326,6 +1530,35 @@ ui.messageInput.addEventListener("keydown", (event) => {
     event.preventDefault();
     ui.composer.requestSubmit();
   }
+});
+
+function syncVisualViewportHeight() {
+  const viewport = window.visualViewport;
+  const height = viewport && Number.isFinite(viewport.height)
+    ? viewport.height
+    : window.innerHeight;
+  document.documentElement.style.setProperty(
+    "--orion-visual-viewport-height",
+    `${Math.max(320, Math.round(height))}px`,
+  );
+}
+
+syncVisualViewportHeight();
+window.addEventListener("resize", syncVisualViewportHeight);
+if (window.visualViewport) {
+  window.visualViewport.addEventListener(
+    "resize",
+    syncVisualViewportHeight,
+  );
+}
+ui.messageInput.addEventListener("focus", () => {
+  syncVisualViewportHeight();
+  window.requestAnimationFrame(() => {
+    ui.composer.scrollIntoView({
+      block: "nearest",
+      behavior: "smooth",
+    });
+  });
 });
 
 formatClock();

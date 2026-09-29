@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from datetime import datetime
 from typing import Any, Iterable
 
 SCHEMA_VERSION = "orion.action-projection.v1"
@@ -227,6 +228,10 @@ def project_approval_request(data: dict[str, Any]) -> dict[str, Any]:
     description_meaningful = bool(
         isinstance(description, str) and description.strip()
     )
+    action_title = _bounded_text(data.get("action_title") or data.get("title"), 240)
+    action_target = _bounded_text(data.get("target"), 1000)
+    action_effect = _bounded_text(data.get("effect"), 1000)
+    operation = _safe_code(data.get("operation") or data.get("action"))
     choices = _approval_choices(data.get("choices"))
     run_id = raw_run_id if run_id_exact else None
     exact_ready = bool(
@@ -247,6 +252,10 @@ def project_approval_request(data: dict[str, Any]) -> dict[str, Any]:
         common=common,
         command=command,
         description=description,
+        action_title=action_title,
+        target=action_target,
+        effect=action_effect,
+        operation=operation,
         choices=choices if exact_ready else [],
         reason=None if exact_ready else unavailable_reason,
     )
@@ -255,6 +264,10 @@ def project_approval_request(data: dict[str, Any]) -> dict[str, Any]:
         "event": "approval.request",
         **({"command": command} if command else {}),
         **({"description": description} if description else {}),
+        **({"action_title": action_title} if action_title else {}),
+        **({"target": action_target} if action_target else {}),
+        **({"effect": action_effect} if action_effect else {}),
+        **({"operation": operation} if operation else {}),
         "choices": choices if exact_ready else [],
         "projection": projection,
     }
@@ -794,6 +807,21 @@ def _message_list(payload: Any) -> list[dict[str, Any]]:
     return []
 
 
+def _safe_created_at(value: Any) -> str:
+    if not isinstance(value, str):
+        return ""
+    if not value or value != value.strip() or len(value) > 64:
+        return ""
+    candidate = value.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(candidate)
+    except ValueError:
+        return ""
+    if parsed.tzinfo is None:
+        return ""
+    return value
+
+
 def project_transcript_payload(payload: Any) -> dict[str, Any]:
     rows = _message_list(payload)
     safe_rows: list[dict[str, Any]] = []
@@ -809,9 +837,11 @@ def project_transcript_payload(payload: Any) -> dict[str, Any]:
             value = _safe_id(row.get(key))
             if value:
                 item[key] = value
-        timestamp = row.get("timestamp")
-        if isinstance(timestamp, (int, float)) and not isinstance(timestamp, bool):
-            item["timestamp"] = timestamp
+        created_at = _safe_created_at(
+            row.get("created_at") or row.get("createdAt")
+        )
+        if created_at:
+            item["created_at"] = created_at
         safe_rows.append(item)
     out: dict[str, Any] = {"object": "orion.transcript", "data": safe_rows}
     if isinstance(payload, dict):

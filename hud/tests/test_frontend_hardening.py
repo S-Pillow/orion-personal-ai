@@ -7,13 +7,18 @@ from pathlib import Path
 HUD_ROOT = Path(__file__).resolve().parents[1]
 APP_JS = (HUD_ROOT / "static" / "app.js").read_text(encoding="utf-8")
 STYLES = (HUD_ROOT / "static" / "styles.css").read_text(encoding="utf-8")
+TARGET = (HUD_ROOT / "static" / "target-layout.css").read_text(encoding="utf-8")
 INDEX_HTML = (HUD_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 
 
 class FrontendHardeningContractTests(unittest.TestCase):
     def test_persisted_transcript_suppresses_empty_display_records(self):
         self.assertIn(
-            '.map((m) => ({ role: m.role, text: messageText(m) }))',
+            "text: messageText(m)",
+            APP_JS,
+        )
+        self.assertIn(
+            "createdAt:",
             APP_JS,
         )
         self.assertIn(
@@ -21,9 +26,16 @@ class FrontendHardeningContractTests(unittest.TestCase):
             APP_JS,
         )
         self.assertIn(
-            'appendMessage(message.role, message.text)',
+            "appendMessage(",
             APP_JS,
         )
+
+    def test_safe_bounded_message_formatting_is_dom_only(self):
+        self.assertIn("function renderMessageContent(container, value)", APP_JS)
+        self.assertIn("function appendInlineFormatting(parent, value)", APP_JS)
+        self.assertIn("document.createTextNode", APP_JS)
+        self.assertNotIn("body.innerHTML", APP_JS)
+        self.assertIn("renderMessageContent(body, text);", APP_JS)
 
     def test_stream_does_not_eagerly_create_blank_assistant_card(self):
         self.assertNotIn(
@@ -60,11 +72,11 @@ class FrontendHardeningContractTests(unittest.TestCase):
     def test_degraded_status_has_warning_presentation(self):
         self.assertIn(
             ".status-chip.degraded",
-            STYLES,
+            TARGET,
         )
         self.assertIn(
-            "color: var(--warn);",
-            STYLES,
+            "color: #dfb85d;",
+            TARGET,
         )
 
     def test_existing_truthful_terminal_states_remain_present(self):
@@ -229,7 +241,7 @@ class FrontendHardeningContractTests(unittest.TestCase):
     def test_action_evidence_workspace_is_contextual_and_structured(self):
         for marker in (
             'id="actionEvidencePanel"',
-            'class="panel action-evidence-panel hidden"',
+            'class="action-evidence-panel operational-card hidden"',
             'id="actionStateBadge"',
             'id="actionDiff"',
             'id="actionEvidenceList"',

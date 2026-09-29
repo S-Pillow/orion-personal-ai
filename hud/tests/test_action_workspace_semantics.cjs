@@ -74,3 +74,34 @@ test("technical evidence excludes arbitrary unlisted fields", () => {
   assert.doesNotMatch(serialized, /DO-NOT-LEAK/);
   assert.doesNotMatch(serialized, /api_key|stack|raw_args/);
 });
+
+
+test("P5-03B3 visual state matrix preserves truth distinctions", () => {
+  const cases = [
+    ["preview_ready", "PREVIEW READY", "NOT EXECUTED", "ready"],
+    ["approval_requested", "DECISION REQUIRED", "AWAITING DECISION", "attention"],
+    ["approval_accepted", "DECISION ACCEPTED", "UNPROVEN", "attention"],
+    ["approval_denied", "DENIED", "NOT EXECUTED", "neutral"],
+    ["succeeded", "SUCCEEDED", "SUCCEEDED", "success"],
+    ["stale_plan", "STALE", "NOT PERFORMED", "attention"],
+    ["refused", "REFUSED", "NOT PERFORMED", "attention"],
+    ["failed", "FAILED", "FAILED", "failure"],
+    ["unavailable", "UNAVAILABLE", "UNAVAILABLE", "neutral"],
+    ["unknown", "UNKNOWN", "UNKNOWN", "neutral"],
+  ];
+
+  for (const [state, label, execution, tone] of cases) {
+    const view = p5.actionStatePresentation({ state });
+    assert.equal(view.label, label, state);
+    assert.equal(view.execution, execution, state);
+    assert.equal(view.tone, tone, state);
+  }
+});
+
+test("P5-03B3 amber attention states never collapse into success", () => {
+  for (const state of ["approval_requested", "approval_accepted", "stale_plan", "refused"]) {
+    const view = p5.actionStatePresentation({ state });
+    assert.equal(view.tone, "attention", state);
+    assert.notEqual(view.execution, "SUCCEEDED", state);
+  }
+});

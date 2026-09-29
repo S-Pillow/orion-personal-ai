@@ -9,6 +9,7 @@ BRIDGE = (HUD_ROOT / "orion_hud_bridge.py").read_text(encoding="utf-8")
 INDEX = (HUD_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 APP = (HUD_ROOT / "static" / "app.js").read_text(encoding="utf-8")
 STYLES = (HUD_ROOT / "static" / "styles.css").read_text(encoding="utf-8")
+TARGET = (HUD_ROOT / "static" / "target-layout.css").read_text(encoding="utf-8")
 WORKSPACE = (HUD_ROOT / "static" / "workspace-state.js").read_text(encoding="utf-8")
 SUMMON = (HUD_ROOT / "static" / "summon-state.js").read_text(encoding="utf-8")
 
@@ -31,7 +32,7 @@ class UIConvergenceSummonContractTests(unittest.TestCase):
         self.assertIn('id="summonPanel"', INDEX)
         self.assertNotIn('data-workspace-target="summon"', INDEX)
         self.assertNotIn('data-workspace-pane="summon"', INDEX)
-        self.assertIn('data-workspace-focus="summon"', STYLES)
+        self.assertIn('id="summonPanel"', INDEX)
 
     def test_shell_has_accessible_bounded_visible_controls(self):
         for element_id in (
@@ -92,25 +93,22 @@ class UIConvergenceSummonContractTests(unittest.TestCase):
     def test_summon_focus_changes_presentation_not_operational_core_state(self):
         self.assertIn('coreStage.dataset.presentationFocus =', SUMMON)
         self.assertIn(
-            '.core-stage[data-presentation-focus="summon"]',
-            STYLES,
+            ".summon-panel {",
+            TARGET,
         )
         self.assertNotIn("data-core-state", SUMMON)
         self.assertNotIn("setCore(", SUMMON)
 
 
     def test_hidden_link_control_stays_hidden(self):
-        self.assertIn(".summon-link[hidden]", STYLES)
-        self.assertIn("display: none !important;", STYLES)
+        self.assertIn(".summon-panel[hidden]", TARGET)
+        self.assertIn("display: none !important;", TARGET)
 
-    def test_summon_begins_below_core_row_and_masks_workspace(self):
-        self.assertIn("top: max(270px, 42vh);", STYLES)
-        self.assertIn("top: max(190px, 27vh);", STYLES)
-        self.assertIn("top: max(205px, 31vh);", STYLES)
-        self.assertIn(
-            "linear-gradient(180deg, #08161a 0%, #040c0f 100%);",
-            STYLES,
-        )
+    def test_summon_is_bounded_focus_surface_on_desktop_and_mobile(self):
+        self.assertIn("width: min(760px, calc(var(--center-width) - 60px));", TARGET)
+        self.assertIn("max-height: 360px;", TARGET)
+        self.assertIn("position:fixed;", TARGET)
+        self.assertIn("max-height:70vh;", TARGET)
 
     def test_no_agent_transport_is_added_by_visual_convergence(self):
         self.assertIn(

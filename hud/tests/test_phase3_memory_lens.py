@@ -24,6 +24,9 @@ WORKSPACE = (
 STYLES = (HUD_ROOT / "static" / "styles.css").read_text(
     encoding="utf-8"
 )
+TARGET = (HUD_ROOT / "static" / "target-layout.css").read_text(
+    encoding="utf-8"
+)
 
 BRIDGE = (HUD_ROOT / "orion_hud_bridge.py").read_text(
     encoding="utf-8"
@@ -121,13 +124,11 @@ class Phase3MemoryLensContractTests(unittest.TestCase):
         self.assertNotIn("<form", memory_section.group(0))
         self.assertNotIn('method="post"', memory_section.group(0).lower())
 
-    def test_memory_workspace_uses_existing_compact_and_responsive_shell(self):
-        self.assertIn(
-            '.workspace-shell[data-workspace="memory"]',
-            STYLES,
-        )
-        self.assertIn(".memory-workspace", STYLES)
-        self.assertIn(".memory-grid", STYLES)
+    def test_memory_workspace_uses_reference_shell_and_responsive_width(self):
+        self.assertIn(".memory-workspace {", TARGET)
+        self.assertIn("width:var(--center-width);", TARGET)
+        self.assertIn("@media (max-width: 520px)", TARGET)
+        self.assertIn("width:calc(100% - 16px);", TARGET)
 
     def test_existing_typed_and_system_surfaces_remain_present(self):
         for token in (

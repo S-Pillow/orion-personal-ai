@@ -175,6 +175,62 @@ class ActionProjectionTests(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, rendered)
 
+    def test_approval_request_projects_optional_display_metadata_only(self):
+        projected = project_approval_request({
+            "event": "approval.request",
+            "run_id": "run_1",
+            "command": "orion_vault_apply_plan",
+            "description": "Exact approval payload",
+            "choices": ["once", "deny"],
+            "action_title": "Review proposed note update",
+            "target": "C:/vault/note.md",
+            "effect": "Apply the displayed Markdown diff.",
+            "operation": "edit_note",
+            "private_field": "do-not-export",
+        })
+        self.assertEqual(projected["action_title"], "Review proposed note update")
+        self.assertEqual(projected["target"], "C:/vault/note.md")
+        self.assertEqual(projected["effect"], "Apply the displayed Markdown diff.")
+        self.assertEqual(projected["operation"], "edit_note")
+        self.assertEqual(
+            projected["projection"]["action_title"],
+            "Review proposed note update",
+        )
+        self.assertNotIn("private_field", json.dumps(projected))
+
+    def test_approval_display_metadata_is_allowlisted(self):
+        projected = project_approval_request({
+            "event": "approval.request",
+            "run_id": "run_1",
+            "command": "orion_vault_apply_plan",
+            "description": "exact approval detail",
+            "action_title": "Review proposed note update",
+            "target": "C:\\Orion-Disposable-Fixture\\vault\\note.md",
+            "effect": "Apply the displayed Markdown diff.",
+            "operation": "edit_note",
+            "choices": ["once", "session", "always", "deny"],
+            "private_payload": {"secret": "must-not-leak"},
+        })
+        self.assertEqual(
+            projected["action_title"],
+            "Review proposed note update",
+        )
+        self.assertEqual(
+            projected["target"],
+            "C:\\Orion-Disposable-Fixture\\vault\\note.md",
+        )
+        self.assertEqual(
+            projected["effect"],
+            "Apply the displayed Markdown diff.",
+        )
+        self.assertEqual(projected["operation"], "edit_note")
+        self.assertEqual(
+            projected["projection"]["action_title"],
+            "Review proposed note update",
+        )
+        self.assertNotIn("private_payload", json.dumps(projected))
+        self.assertNotIn("must-not-leak", json.dumps(projected))
+
     def test_approval_command_must_survive_exact_validation(self):
         base = {
             "run_id": "run_1",
@@ -913,6 +969,29 @@ class ActionProjectionTests(unittest.TestCase):
         self.assertNotIn("base64-secret", rendered)
         self.assertNotIn("tool_calls", rendered)
         self.assertNotIn('"secret"', rendered)
+
+    def test_transcript_projection_preserves_valid_iso_created_at(self):
+        projected = project_transcript_payload({
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "hello",
+                    "created_at": "2026-09-27T05:38:00-04:00",
+                    "timestamp": 1750000000,
+                },
+                {
+                    "role": "assistant",
+                    "content": "reply",
+                    "created_at": "2026-09-27T05:39:00",
+                },
+            ]
+        })
+        self.assertEqual(
+            projected["data"][0]["created_at"],
+            "2026-09-27T05:38:00-04:00",
+        )
+        self.assertNotIn("timestamp", projected["data"][0])
+        self.assertNotIn("created_at", projected["data"][1])
 
     def test_run_status_does_not_export_raw_error(self):
         projected = project_run_status({

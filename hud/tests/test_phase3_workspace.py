@@ -21,6 +21,9 @@ APP = (HUD_ROOT / "static" / "app.js").read_text(
 STYLES = (HUD_ROOT / "static" / "styles.css").read_text(
     encoding="utf-8"
 )
+TARGET = (HUD_ROOT / "static" / "target-layout.css").read_text(
+    encoding="utf-8"
+)
 
 WORKSPACE = (
     HUD_ROOT / "static" / "workspace-state.js"
@@ -175,21 +178,10 @@ class Phase3AdaptiveWorkspaceContractTests(unittest.TestCase):
             WORKSPACE,
         )
 
-    def test_nonconversation_workspace_compacts_core_area(self):
-        self.assertIn(
-            '.workspace-shell[data-workspace="system"]',
-            STYLES,
-        )
-
-        self.assertIn(
-            '.workspace-shell[data-workspace="memory"]',
-            STYLES,
-        )
-
-        self.assertIn(
-            "minmax(150px, 20vh)",
-            STYLES,
-        )
+    def test_nonconversation_workspaces_use_shared_center_geometry(self):
+        self.assertIn(".system-workspace,", TARGET)
+        self.assertIn(".memory-workspace {", TARGET)
+        self.assertIn("width:var(--center-width);", TARGET)
 
     def test_approval_focus_does_not_duplicate_controls(self):
         self.assertEqual(
@@ -208,8 +200,8 @@ class Phase3AdaptiveWorkspaceContractTests(unittest.TestCase):
         )
 
         self.assertIn(
-            'data-workspace-focus="approval"',
-            STYLES,
+            "body.approval-active .approval-panel",
+            TARGET,
         )
 
     def test_workspace_module_has_no_runtime_or_data_authority(self):
@@ -258,7 +250,7 @@ class Phase3AdaptiveWorkspaceContractTests(unittest.TestCase):
         )
 
         self.assertIn(
-            "OPEN IAI BRAIN",
+            "OPEN NATIVE IAI BRAIN",
             INDEX,
         )
 

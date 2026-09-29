@@ -21,6 +21,9 @@ CORE = (HUD_ROOT / "static" / "core-state.js").read_text(
 STYLES = (HUD_ROOT / "static" / "styles.css").read_text(
     encoding="utf-8"
 )
+TARGET = (HUD_ROOT / "static" / "target-layout.css").read_text(
+    encoding="utf-8"
+)
 
 
 class Phase3CoreStateContractTests(unittest.TestCase):
@@ -65,63 +68,40 @@ class Phase3CoreStateContractTests(unittest.TestCase):
                     APP,
                 )
 
-    def test_gaze_mapping_is_deterministic(self):
-        expected = (
-            'READY: "forward"',
-            'LINKING: "center"',
-            'THINKING: "center"',
-            'FINALIZING: "center"',
-            'ACTING: "right"',
-            'WAITING: "right"',
-            'STOPPING: "center"',
-            'DEGRADED: "left"',
-            'OFFLINE: "left"',
-            'ERROR: "left"',
-        )
-
-        for fragment in expected:
-            with self.subTest(fragment=fragment):
-                self.assertIn(fragment, CORE)
+    def test_operational_state_does_not_force_attention_direction(self):
+        self.assertIn('return "forward";', CORE)
+        self.assertNotIn('WAITING: "right"', CORE)
+        self.assertNotIn('ERROR: "left"', CORE)
+        self.assertIn("function setGaze(value, duration = 0)", CORE)
+        self.assertIn("function glance(value, duration = 520)", CORE)
 
     def test_core_state_and_gaze_are_testable_dom_data(self):
-        self.assertIn(
-            "root.dataset.coreState = state;",
-            CORE,
-        )
-        self.assertIn(
-            "root.dataset.gaze = gaze;",
-            CORE,
-        )
-        self.assertIn(
-            'data-core-state="READY"',
-            INDEX,
-        )
-        self.assertIn(
-            'data-gaze="forward"',
-            INDEX,
-        )
+        self.assertIn("root.dataset.coreState = state;", CORE)
+        self.assertIn('root.dataset.gaze = "forward";', CORE)
+        self.assertIn('data-core-state="READY"', INDEX)
+        self.assertIn('data-gaze="forward"', INDEX)
+        self.assertIn("root.dataset.blinkPhase", CORE)
 
-    def test_presence_motion_is_low_cost_local_presentation(self):
+    def test_presence_motion_uses_independent_lids_and_attention(self):
         for token in (
-            "is-blinking",
-            "saccade-left",
-            "saccade-right",
-            "saccade-up",
-            "saccade-down",
-            "randomDelay(2800, 3200)",
-            "randomDelay(1700, 2100)",
+            "blink-closing",
+            "blink-closed",
+            "blink-opening",
+            "BLINK_TIMING",
+            "closing: 80",
+            "closed: 30",
+            "opening: 140",
+            "randomDelay(3600, 4000)",
         ):
             with self.subTest(token=token):
                 self.assertIn(token, CORE)
 
-        self.assertIn(
-            "@keyframes core-breathe",
-            STYLES,
-        )
-        self.assertIn(
-            "@keyframes core-halo-drift",
-            STYLES,
-        )
+        self.assertIn('class="core-eye-aperture"', INDEX)
+        self.assertIn('class="core-eye-content core-eye-content-left"', INDEX)
+        self.assertIn('class="core-eye-lid core-eye-lid-top"', INDEX)
+        self.assertIn(".core-stage.blink-closing .core-eye-lid-top", TARGET)
+        self.assertNotIn("scaleY(.08)", TARGET)
+        self.assertNotIn("scheduleSaccade", CORE)
 
     def test_reduced_motion_disables_generated_motion(self):
         self.assertIn(
@@ -134,7 +114,7 @@ class Phase3CoreStateContractTests(unittest.TestCase):
         )
         self.assertIn(
             "@media (prefers-reduced-motion: reduce)",
-            STYLES,
+            TARGET,
         )
 
     def test_core_module_has_no_runtime_or_data_authority(self):
@@ -158,7 +138,7 @@ class Phase3CoreStateContractTests(unittest.TestCase):
 
     def test_memory_handoff_is_explicit_vendor_surface(self):
         self.assertIn(
-            "OPEN IAI BRAIN",
+            "OPEN NATIVE IAI BRAIN",
             INDEX,
         )
         self.assertIn(

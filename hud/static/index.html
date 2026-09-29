@@ -5,13 +5,40 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Orion // Personal AI Companion</title>
   <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/target-layout.css">
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
       <span class="brand-mark">ORION</span>
-      <span class="brand-sub">PRIVATE AI COMPANION</span>
+      <span class="brand-sub">YOUR THINKING PARTNER</span>
     </div>
+    <nav class="workspace-switcher" aria-label="Workspace views">
+      <button
+        id="workspaceConversationButton"
+        class="workspace-tab"
+        type="button"
+        data-workspace-target="conversation"
+        aria-pressed="true"
+      >CONVERSATION</button>
+      <button
+        id="workspaceSystemButton"
+        class="workspace-tab"
+        type="button"
+        data-workspace-target="system"
+        aria-pressed="false"
+      >SYSTEM</button>
+      <button
+        id="workspaceMemoryButton"
+        class="workspace-tab"
+        type="button"
+        data-workspace-target="memory"
+        aria-pressed="false"
+      >MEMORY</button>
+      <span class="workspace-context-label">
+        ACTIVE // <b id="workspaceContext">CONVERSATION</b>
+      </span>
+    </nav>
     <div class="top-status">
       <div class="top-status-group infrastructure-status" aria-label="Runtime link status">
         <span id="bridgeStatus" class="status-chip"><i></i> BRIDGE</span>
@@ -27,104 +54,212 @@
     </div>
   </header>
 
-  <main class="hud-grid">
-    <aside class="rail left-rail" aria-label="Orion status and session controls">
-      <section class="panel peripheral-panel system-link-panel">
-        <div class="panel-title"><span>SYSTEM LINK</span><b>01</b></div>
-        <dl class="status-list">
+  <main class="hud-grid environment-shell" data-presentation-shell="environment-first">
+    <aside class="rail left-rail context-sidebar environment-region" aria-label="Orion session and context">
+      <section class="context-section session-context">
+        <div class="context-label"><span>SESSION</span><button id="newSession" class="context-add" type="button" aria-label="Create new Orion session">+</button></div>
+        <label class="field-label" for="sessionSelect">Current conversation</label>
+        <select id="sessionSelect" class="select-control" aria-label="Hermes session">
+          <option value="">No session selected</option>
+        </select>
+        <div id="sessionMeta" class="context-note">Hermes SessionDB is authoritative.</div>
+      </section>
+
+      <section class="context-section memory-authority">
+        <div class="context-label"><span>MEMORY AUTHORITY</span></div>
+        <div class="context-feature">
+          <span class="context-icon" aria-hidden="true">◯</span>
+          <div>
+            <strong>IAI (Native Brain)</strong>
+            <p>I explain. I do not own.</p>
+          </div>
+        </div>
+        <dl class="context-facts">
+          <div><dt>Authority</dt><dd>iai</dd></div>
+          <div><dt>Baseline</dt><dd>iai-pme 3.0.8</dd></div>
+        </dl>
+      </section>
+
+      <section class="context-section companion-context">
+        <div class="context-label"><span>COMPANION CONTEXT</span></div>
+        <dl class="context-facts">
+          <div><dt>Conversation</dt><dd>Hermes</dd></div>
+          <div><dt>Memory</dt><dd>iai</dd></div>
+          <div><dt>Transport</dt><dd>loopback</dd></div>
+          <div><dt>Action authority</dt><dd>human approval</dd></div>
+        </dl>
+      </section>
+
+      <details class="context-section system-context">
+        <summary class="context-label"><span>SYSTEM STATUS</span></summary>
+        <dl class="context-facts">
           <div><dt>Bridge</dt><dd id="bridgeValue">online</dd></div>
           <div><dt>Hermes</dt><dd id="hermesValue">checking</dd></div>
           <div><dt>API credential</dt><dd id="credentialValue">checking</dd></div>
           <div><dt>Lifecycle authority</dt><dd id="lifecycleValue">none</dd></div>
         </dl>
-      </section>
+      </details>
 
-      <section class="panel session-panel">
-        <div class="panel-title"><span>SESSION</span><b>02</b></div>
-        <label class="field-label" for="sessionSelect">Hermes conversation</label>
-        <select id="sessionSelect" class="select-control" aria-label="Hermes session">
-          <option value="">No session selected</option>
-        </select>
-        <button id="newSession" class="outline-button" type="button">+ NEW ORION SESSION</button>
-        <div id="sessionMeta" class="muted-line">Hermes SessionDB is authoritative.</div>
-      </section>
-
-      <section class="panel peripheral-panel memory-link-panel">
-        <div class="panel-title"><span>MEMORY</span><b>03</b></div>
-        <dl class="status-list">
-          <div><dt>Authority</dt><dd>iai</dd></div>
-          <div><dt>Baseline</dt><dd>iai-pme 3.0.8</dd></div>
-          <div><dt>Detail UI</dt><dd>native Brain</dd></div>
-        </dl>
-        <a
-          id="iaiBrainLink"
-          class="outline-button brain-link"
-          href="http://127.0.0.1:4477/"
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Open the native iai Brain loopback surface if it is already running"
-        >OPEN IAI BRAIN</a>
-        <div class="muted-line">Link only // Orion does not start or supervise iai Brain.</div>
-      </section>
+      <div class="context-atmosphere" aria-hidden="true">
+        <blockquote>“A more human future,<br>clearer thinking.”</blockquote>
+      </div>
     </aside>
 
-    <section class="center-stage" aria-label="Orion adaptive workspace">
-      <nav class="workspace-switcher" aria-label="Workspace views">
-        <button
-          id="workspaceConversationButton"
-          class="workspace-tab"
-          type="button"
-          data-workspace-target="conversation"
-          aria-pressed="true"
-        >CONVERSATION</button>
-        <button
-          id="workspaceSystemButton"
-          class="workspace-tab"
-          type="button"
-          data-workspace-target="system"
-          aria-pressed="false"
-        >SYSTEM</button>
-        <button
-          id="workspaceMemoryButton"
-          class="workspace-tab"
-          type="button"
-          data-workspace-target="memory"
-          aria-pressed="false"
-        >MEMORY</button>
-        <span class="workspace-context-label">
-          ACTIVE // <b id="workspaceContext">CONVERSATION</b>
-        </span>
-      </nav>
+    <section class="center-stage center-experience" aria-label="Orion adaptive workspace">
+      <img
+        id="sceneEnvironment"
+        class="scene-environment"
+        src="/orion-hero.svg"
+        alt=""
+        aria-hidden="true"
+      >
 
       <div
         id="workspaceShell"
-        class="workspace-shell"
+        class="workspace-shell center-experience-shell"
         data-workspace="conversation"
         data-workspace-focus="normal"
       >
         <div
           id="coreStage"
-          class="core-stage"
+          class="core-stage hero-scene"
           aria-label="Orion Core"
           data-core-state="READY"
           data-gaze="forward"
           data-motion="full"
         >
-          <div class="core-halo halo-a" aria-hidden="true"></div>
-          <div class="core-halo halo-b" aria-hidden="true"></div>
-          <div class="core-ring">
-            <div class="core-mask" aria-hidden="true">
-              <span class="core-eye core-eye-left"></span>
-              <span class="core-eye core-eye-right"></span>
-            </div>
-            <span id="coreState">READY</span>
+          <div class="hero-thoughts hero-thoughts-left" aria-hidden="true">
+            <span>CLARITY</span>
+            <span>CONTEXT</span>
+            <span>PERSPECTIVE</span>
+            <span>A MORE HUMAN</span>
+            <span>TOMORROW</span>
           </div>
-          <p id="coreDetail">Observed Hermes state // Orion presentation only</p>
+          <div class="hero-thoughts hero-thoughts-right" aria-hidden="true">
+            <span>“SAME SKY.</span>
+            <span>BRIGHTER THINKING.”</span>
+          </div>
+          <div class="core-visual live-core" aria-hidden="true">
+            <svg class="core-orb" viewBox="0 0 320 320" focusable="false" aria-hidden="true">
+              <defs>
+                <!-- Continuous glass: no forehead ellipse or lower-face patch. -->
+                <radialGradient id="coreGlass" cx=".42" cy=".35" r=".66">
+                  <stop offset="0" stop-color="#0c222e"/>
+                  <stop offset=".44" stop-color="#07151e"/>
+                  <stop offset=".78" stop-color="#020a11"/>
+                  <stop offset="1" stop-color="#01050a"/>
+                </radialGradient>
+                <radialGradient id="coreEdgeLight" cx=".5" cy=".5" r=".5">
+                  <stop offset=".80" stop-color="#49cde6" stop-opacity="0"/>
+                  <stop offset=".94" stop-color="#49cde6" stop-opacity=".04"/>
+                  <stop offset="1" stop-color="#8cecff" stop-opacity=".32"/>
+                </radialGradient>
+                <linearGradient id="coreRimSpectrum" x1=".1" y1="0" x2=".85" y2="1">
+                  <stop offset="0" stop-color="#e7fcff"/>
+                  <stop offset=".24" stop-color="#70dcf7"/>
+                  <stop offset=".52" stop-color="#245b76"/>
+                  <stop offset=".75" stop-color="#59cee9"/>
+                  <stop offset="1" stop-color="#d5fbff"/>
+                </linearGradient>
+                <radialGradient id="coreEyeLight">
+                  <stop offset="0" stop-color="#eaffff"/>
+                  <stop offset=".12" stop-color="#c9f6ff"/>
+                  <stop offset=".45" stop-color="#4fcbe7"/>
+                  <stop offset="1" stop-color="#146988" stop-opacity="0"/>
+                </radialGradient>
+                <radialGradient id="coreLightSpill">
+                  <stop offset="0" stop-color="#66dfff" stop-opacity=".14"/>
+                  <stop offset="1" stop-color="#66dfff" stop-opacity="0"/>
+                </radialGradient>
+                <clipPath id="coreSphereClip"><circle cx="160" cy="160" r="121"/></clipPath>
+                <path id="coreEyeLeftShape" d="M86 148 C101 141 123 142 143 154 C125 166 102 165 86 148Z"/>
+                <path id="coreEyeRightShape" d="M234 148 C219 141 197 142 177 154 C195 166 218 165 234 148Z"/>
+                <clipPath id="coreEyeClipLeft"><use href="#coreEyeLeftShape"/></clipPath>
+                <clipPath id="coreEyeClipRight"><use href="#coreEyeRightShape"/></clipPath>
+                <!-- Masks stay fixed; only their black shutters move. -->
+                <mask id="coreLidMaskLeft" maskUnits="userSpaceOnUse" x="76" y="126" width="80" height="58" style="mask-type: luminance">
+                  <rect x="76" y="126" width="80" height="58" fill="white"/>
+                  <rect class="core-eye-lid core-eye-lid-top" x="76" y="110" width="80" height="44"/>
+                  <rect class="core-eye-lid core-eye-lid-bottom" x="76" y="154" width="80" height="44"/>
+                </mask>
+                <mask id="coreLidMaskRight" maskUnits="userSpaceOnUse" x="164" y="126" width="80" height="58" style="mask-type: luminance">
+                  <rect x="164" y="126" width="80" height="58" fill="white"/>
+                  <rect class="core-eye-lid core-eye-lid-top" x="164" y="110" width="80" height="44"/>
+                  <rect class="core-eye-lid core-eye-lid-bottom" x="164" y="154" width="80" height="44"/>
+                </mask>
+                <filter id="coreEyeGlow" x="-30%" y="-100%" width="160%" height="300%"><feGaussianBlur stdDeviation="1.25"/></filter>
+                <filter id="coreRimGlow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="3"/></filter>
+              </defs>
+
+              <!-- A quiet instrument-like orbit around the illuminated glass edge. -->
+              <g class="core-halo-group">
+                <circle class="core-orbit-track" cx="160" cy="160" r="148"/>
+                <path class="core-orbit-detail" d="M27 111 A142 142 0 0 1 196 23 M293 209 A142 142 0 0 1 124 297"/>
+                <path class="core-orbit-tick" d="M160 9V16 M311 160H304 M160 311V304 M9 160H16"/>
+                <circle class="core-halo core-halo-bloom" cx="160" cy="160" r="127"/>
+                <circle class="core-halo core-halo-outer" cx="160" cy="160" r="127"/>
+                <path class="core-rim-arc" d="M44 109 A127 127 0 0 1 161 33 M276 211 A127 127 0 0 1 159 287"/>
+              </g>
+              <g class="core-face-group">
+                <circle class="core-face" cx="160" cy="160" r="121" fill="url(#coreGlass)"/>
+                <circle class="core-surface-edge" cx="160" cy="160" r="121" fill="url(#coreEdgeLight)"/>
+                <g class="core-surface-depth" clip-path="url(#coreSphereClip)">
+                  <ellipse cx="113" cy="154" rx="55" ry="34" fill="url(#coreLightSpill)"/>
+                  <ellipse cx="207" cy="154" rx="55" ry="34" fill="url(#coreLightSpill)"/>
+                  <path class="core-glass-reflection" d="M58 123 A109 109 0 0 1 124 55 M196 265 A111 111 0 0 0 261 196"/>
+                  <g class="core-starlight">
+                    <circle cx="119" cy="82" r=".65"/><circle cx="188" cy="73" r=".45"/>
+                    <circle cx="220" cy="110" r=".55"/><circle cx="82" cy="187" r=".4"/>
+                    <circle cx="134" cy="231" r=".65"/><circle cx="198" cy="217" r=".4"/>
+                  </g>
+                </g>
+                <circle class="core-inner-rim" cx="160" cy="160" r="119"/>
+
+                <g class="core-eye-system core-eye-left">
+                  <g class="core-eye-shutter" mask="url(#coreLidMaskLeft)">
+                    <use class="core-eye-bloom" href="#coreEyeLeftShape"/>
+                    <use class="core-eye-aperture" href="#coreEyeLeftShape"/>
+                    <g class="core-eye-window" clip-path="url(#coreEyeClipLeft)">
+                      <g class="core-eye-content core-eye-content-left">
+                        <ellipse class="core-eye-luminance" cx="116" cy="153" rx="18" ry="12" fill="url(#coreEyeLight)"/>
+                        <ellipse class="core-eye-focus" cx="118" cy="153" rx="2.6" ry="5.5"/>
+                        <path class="core-eye-highlight" d="M95 148 Q117 144 136 153"/>
+                      </g>
+                    </g>
+                  </g>
+                  <path class="core-eye-seam" d="M91 153 Q115 158 139 154"/>
+                </g>
+                <g class="core-eye-system core-eye-right">
+                  <g class="core-eye-shutter" mask="url(#coreLidMaskRight)">
+                    <use class="core-eye-bloom" href="#coreEyeRightShape"/>
+                    <use class="core-eye-aperture" href="#coreEyeRightShape"/>
+                    <g class="core-eye-window" clip-path="url(#coreEyeClipRight)">
+                      <g class="core-eye-content core-eye-content-right">
+                        <ellipse class="core-eye-luminance" cx="204" cy="153" rx="18" ry="12" fill="url(#coreEyeLight)"/>
+                        <ellipse class="core-eye-focus" cx="202" cy="153" rx="2.6" ry="5.5"/>
+                        <path class="core-eye-highlight" d="M225 148 Q203 144 184 153"/>
+                      </g>
+                    </g>
+                  </g>
+                  <path class="core-eye-seam" d="M229 153 Q205 158 181 154"/>
+                </g>
+              </g>
+            </svg>
+          </div>
+          <div class="core-presence-label">
+            <span class="core-name">ORION</span>
+            <div class="core-presence-status">
+              <strong id="coreState">READY</strong>
+              <i aria-hidden="true">•</i>
+              <span>LISTENING. THINKING. WITH YOU.</span>
+            </div>
+            <p id="coreDetail">Observed Hermes state // Orion presentation only</p>
+          </div>
         </div>
 
         <section
           id="summonPanel"
-          class="summon-panel"
+          class="summon-panel focus-surface"
           role="region"
           aria-labelledby="summonTitle"
           tabindex="-1"
@@ -155,45 +290,50 @@
           ></a>
         </section>
 
-        <section
-          class="workspace-pane conversation-workspace"
+        <div
+          class="workspace-pane foreground-workspace"
           data-workspace-pane="conversation"
           aria-labelledby="workspaceConversationButton"
         >
-          <div
-            id="transcript"
-            class="transcript"
-            role="log"
-            aria-live="polite"
-            aria-label="Conversation transcript"
-          >
-            <div class="empty-state">
-              <strong>ORION HUD LINK READY</strong>
-              <span>Select or create a Hermes session to begin.</span>
+          <section class="conversation-workspace" aria-label="Conversation">
+            <div
+              id="transcript"
+              class="transcript"
+              role="log"
+              aria-live="polite"
+              aria-label="Conversation transcript"
+            >
+              <div class="empty-state no-session">
+                <strong>A place to think things through.</strong>
+                <span>Choose a conversation in Session, or use + to start a new one.</span>
+              </div>
             </div>
-          </div>
+          </section>
 
           <form id="composer" class="composer">
             <label class="sr-only" for="messageInput">Message Orion</label>
             <textarea
               id="messageInput"
               rows="1"
-              placeholder="Message Orion..."
+              placeholder="Ask anything, plan, create, analyze..."
               maxlength="65536"
             ></textarea>
-            <button
-              id="sendButton"
-              class="primary-button"
-              type="submit"
-            >SEND</button>
-            <button
-              id="stopButton"
-              class="stop-button"
-              type="button"
-              disabled
-            >STOP</button>
+            <div class="composer-actions" aria-label="Message actions">
+              <button
+                id="sendButton"
+                class="primary-button"
+                type="submit"
+              >SEND <span aria-hidden="true">→</span></button>
+              <button
+                id="stopButton"
+                class="stop-button"
+                type="button"
+                disabled
+                hidden
+              >STOP</button>
+            </div>
           </form>
-        </section>
+        </div>
 
         <section
           class="workspace-pane system-workspace"
@@ -381,6 +521,7 @@
                 target="_blank"
                 rel="noopener noreferrer"
               >OPEN NATIVE IAI BRAIN</a>
+              <p class="memory-note">Link only // Orion does not start or supervise iai Brain.</p>
             </article>
 
             <article class="workspace-card memory-card memory-boundary-card">
@@ -407,85 +548,99 @@
       </div>
     </section>
 
-    <aside class="rail right-rail" aria-label="Hermes activity and capabilities">
-      <section class="panel activity-panel">
-        <div class="panel-title"><span>AGENT ACTIVITY</span><b>04</b></div>
+    <aside class="rail right-rail activity-sidebar environment-region" aria-label="Orion activity, approvals, and memory context">
+      <section class="activity-panel operational-section">
+        <div class="operational-title"><span>CURRENT ACTIVITY</span></div>
         <div id="activity" class="activity-list">
           <div class="muted-line">No active tool use.</div>
         </div>
       </section>
 
-      <section id="approvalPanel" class="panel approval-panel hidden">
-        <div class="panel-title"><span>APPROVAL REQUIRED</span><b>!</b></div>
-        <div class="approval-truth">
-          <strong>DECISION PENDING</strong>
-          <span>Hermes approval is not execution evidence.</span>
-        </div>
-        <div id="approvalDetail" class="approval-detail" tabindex="0" role="region" aria-label="Complete approval details"></div>
-        <div id="approvalActions" class="approval-actions"></div>
-      </section>
+      <div class="action-stack" aria-label="Action and evidence">
+        <section id="approvalPanel" class="approval-panel operational-card hidden">
+          <div class="approval-heading">
+            <span>PENDING APPROVAL</span>
+            <b>!</b>
+          </div>
+          <p class="approval-semantics-note">Hermes approval is not execution evidence.</p>
+          <div class="approval-overview">
+            <h2 id="approvalTitle">Protected action approval</h2>
+            <p id="approvalEffect" class="approval-effect">Hermes requires an operator decision before protected execution.</p>
+            <dl class="approval-overview-facts">
+              <div><dt>TARGET</dt><dd id="approvalTarget">—</dd></div>
+              <div><dt>AUTHORITY</dt><dd>Human approval required</dd></div>
+            </dl>
+          </div>
+          <div class="approval-subhead">TECHNICAL OPERATION</div>
+          <div id="approvalCommand" class="approval-command"></div>
+          <div class="approval-subhead approval-detail-label">EXACT APPROVAL DETAIL</div>
+          <div id="approvalDetail" class="approval-detail" tabindex="0" role="region" aria-label="Complete approval details"></div>
+          <div id="approvalActions" class="approval-actions"></div>
+        </section>
 
-      <section
-        id="actionEvidencePanel"
-        class="panel action-evidence-panel hidden"
-        aria-label="Protected action evidence"
-      >
-        <div class="panel-title"><span>ACTION EVIDENCE</span><b>05</b></div>
-        <div class="action-headline">
-          <span
-            id="actionStateBadge"
-            class="action-state-badge"
-            data-action-state="unknown"
-          >UNKNOWN</span>
-          <p id="actionSummary" class="action-summary">
-            No protected action evidence selected.
-          </p>
-        </div>
-        <dl class="action-facts">
-          <div><dt>Operation</dt><dd id="actionOperation">—</dd></div>
-          <div><dt>Target</dt><dd id="actionTarget">—</dd></div>
-          <div><dt>Execution</dt><dd id="actionExecution">UNKNOWN</dd></div>
-          <div><dt>Recovery</dt><dd id="actionRecovery">UNOBSERVED</dd></div>
+        <section
+          id="actionEvidencePanel"
+          class="action-evidence-panel operational-card hidden"
+          aria-label="Protected action evidence"
+        >
+          <div class="operational-title"><span>ACTION EVIDENCE</span></div>
+          <div class="action-headline">
+            <span id="actionStateBadge" class="action-state-badge" data-action-state="unknown">UNKNOWN</span>
+            <p id="actionSummary" class="action-summary">No protected action evidence selected.</p>
+          </div>
+          <dl class="action-facts">
+            <div><dt>Operation</dt><dd id="actionOperation">—</dd></div>
+            <div><dt>Target</dt><dd id="actionTarget">—</dd></div>
+            <div><dt>Execution</dt><dd id="actionExecution">UNKNOWN</dd></div>
+            <div><dt>Recovery</dt><dd id="actionRecovery">UNOBSERVED</dd></div>
+          </dl>
+          <div id="actionDiffWrap" class="action-diff-wrap hidden">
+            <div class="mini-title">EXACT DIFF</div>
+            <pre id="actionDiff" class="action-diff" tabindex="0" aria-label="Exact proposed diff"></pre>
+          </div>
+          <div class="action-history">
+            <div class="mini-title">RECENT EVIDENCE</div>
+            <div id="actionEvidenceList" class="action-evidence-list"></div>
+          </div>
+          <details id="actionTechnical" class="action-technical">
+            <summary>TECHNICAL EVIDENCE</summary>
+            <dl id="actionTechnicalList" class="action-technical-list"></dl>
+          </details>
+        </section>
+      </div>
+
+
+      <section class="memory-lens operational-card">
+        <div class="operational-title"><span>MEMORY LENS</span></div>
+        <p>Orion is the explanation layer. Detailed memory administration belongs to native IAI Brain.</p>
+        <dl class="memory-lens-facts">
+          <div><dt>Memory</dt><dd>iai</dd></div>
+          <div><dt>Authority</dt><dd>Observe / handoff</dd></div>
         </dl>
-        <div id="actionDiffWrap" class="action-diff-wrap hidden">
-          <div class="mini-title">EXACT DIFF</div>
-          <pre id="actionDiff" class="action-diff" tabindex="0" aria-label="Exact proposed diff"></pre>
-        </div>
-        <div class="action-history">
-          <div class="mini-title">RECENT EVIDENCE</div>
-          <div id="actionEvidenceList" class="action-evidence-list"></div>
-        </div>
-        <details id="actionTechnical" class="action-technical">
-          <summary>TECHNICAL EVIDENCE</summary>
-          <dl id="actionTechnicalList" class="action-technical-list"></dl>
-        </details>
+        <a
+          id="iaiBrainLink"
+          class="memory-lens-link"
+          href="http://127.0.0.1:4477/"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Open the native iai Brain loopback surface if it is already running"
+        >OPEN NATIVE IAI BRAIN →</a>
       </section>
 
-      <section class="panel secondary-panel">
-        <div class="panel-title"><span>CAPABILITIES</span><b>06</b></div>
+      <details class="operational-details">
+        <summary>SYSTEM DETAILS</summary>
         <dl class="status-list">
           <div><dt>Sessions</dt><dd id="capSessions">—</dd></div>
           <div><dt>Run stop</dt><dd id="capStop">—</dd></div>
           <div><dt>Approvals</dt><dd id="capApproval">—</dd></div>
           <div><dt>Streaming</dt><dd id="capStream">—</dd></div>
         </dl>
-      </section>
-
-      <section class="panel split-panel secondary-panel">
-        <div>
-          <div class="mini-title">SKILLS</div>
-          <div id="skillCount" class="big-number">—</div>
+        <div class="compact-inventory">
+          <span>SKILLS <b id="skillCount">—</b></span>
+          <span>JOBS <b id="jobCount">—</b></span>
         </div>
-        <div>
-          <div class="mini-title">JOBS</div>
-          <div id="jobCount" class="big-number">—</div>
-        </div>
-      </section>
-
-      <section class="panel boundary-panel secondary-panel">
-        <div class="panel-title"><span>BOUNDARY</span><b>07</b></div>
-        <p>HUD is a client only. It cannot start, stop, supervise, install, or update Hermes, Ollama, or iai.</p>
-      </section>
+        <p class="boundary-copy">HUD is a client only. It cannot start, stop, supervise, install, or update Hermes, Ollama, or iai.</p>
+      </details>
     </aside>
   </main>
 

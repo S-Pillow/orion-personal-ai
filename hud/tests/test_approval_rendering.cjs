@@ -15,7 +15,12 @@ const source = app.slice(start, end);
 function renderer() {
   const clicked = [];
   let scrolled = 0;
+  const title = { textContent: "" };
+  const effect = { textContent: "" };
+  const target = { textContent: "" };
+  const command = { textContent: "" };
   const detail = { textContent: "", scrollTop: 99 };
+  Object.defineProperty(command, "innerHTML", { set() { throw Error("Unsafe HTML rendering"); } });
   Object.defineProperty(detail, "innerHTML", { set() { throw Error("Unsafe HTML rendering"); } });
   const actions = {
     children: [],
@@ -24,6 +29,7 @@ function renderer() {
   };
   const context = vm.createContext({
     state: {},
+    corePresence: { lookAt() {} },
     rememberActionProjection() { return null; },
     syncProvenancePresentation() {},
     workspaceController: { setApprovalFocus() {} },
@@ -32,18 +38,29 @@ function renderer() {
         classList: { remove() {} },
         scrollIntoView() { scrolled += 1; },
       },
+      approvalTitle: title,
+      approvalEffect: effect,
+      approvalTarget: target,
+      approvalCommand: command,
       approvalDetail: detail,
       approvalActions: actions,
     },
-    document: { createElement() { return {
-      classList: { add() {} },
-      addEventListener(_event, callback) { this.click = callback; },
-    }; } },
+    document: {
+      body: { classList: { add() {}, remove() {} } },
+      createElement() { return {
+        classList: { add() {} },
+        addEventListener(_event, callback) { this.click = callback; },
+      }; },
+    },
     decideApproval(choice) { clicked.push(choice); },
   });
   vm.runInContext(source, context);
   return {
     show: (data) => context.showApproval(data),
+    title,
+    effect,
+    target,
+    command,
     detail,
     actions,
     clicked,
@@ -58,7 +75,8 @@ test("command does not hide a long exact description, CRLF, Unicode or literal m
     "+END-OF-DIFF\r\n\\ No newline at end of file\n";
   assert.ok(description.length > 1000);
   r.show({ command: "orion_vault_apply_plan", description, choices: ["once", "deny"] });
-  assert.equal(r.detail.textContent, "Command / tool:\norion_vault_apply_plan\n\nDescription:\n" + description);
+  assert.equal(r.command.textContent, "orion_vault_apply_plan");
+  assert.equal(r.detail.textContent, description);
   assert.equal(r.detail.scrollTop, 0);
   assert.equal(r.scrolled(), 1);
   assert.deepEqual(r.actions.children.map(b => b.textContent), ["ALLOW ONCE", "DENY"]);
@@ -68,10 +86,20 @@ test("command does not hide a long exact description, CRLF, Unicode or literal m
 
 test("legacy command-only and description-only requests remain complete", () => {
   const r = renderer();
-  for (const key of ["command", "description"]) {
+  {
     const value = "a".repeat(18000) + "TAIL";
-    r.show({ [key]: value });
-    assert.ok(r.detail.textContent.endsWith(value));
+    r.show({ command: value });
+    assert.equal(r.command.textContent, value);
+    assert.equal(
+      r.detail.textContent,
+      "Hermes requires an operator decision.",
+    );
+  }
+  {
+    const value = "a".repeat(18000) + "TAIL";
+    r.show({ description: value });
+    assert.equal(r.command.textContent, "Hermes protected action");
+    assert.equal(r.detail.textContent, value);
   }
   assert.deepEqual(r.actions.children.map(b => b.textContent), ["ALLOW ONCE", "ALLOW SESSION", "ALWAYS ALLOW", "DENY"]);
 });
@@ -80,9 +108,28 @@ test("unknown choices are not granted and new requests replace old details/actio
   const r = renderer();
   r.show({ description: "previous", choices: ["once", "deny"] });
   r.show({ description: "current", choices: ["approve_all", "deny"] });
-  assert.equal(r.detail.textContent, "Description:\ncurrent");
+  assert.equal(r.command.textContent, "Hermes protected action");
+  assert.equal(r.detail.textContent, "current");
   assert.deepEqual(r.actions.children.map(b => b.textContent), ["DENY"]);
   r.show({ reason: "fallback reason", choices: [] });
   assert.equal(r.detail.textContent, "fallback reason");
   assert.equal(r.actions.children.length, 0);
+});
+
+
+test("structured display metadata improves hierarchy without replacing exact detail", () => {
+  const r = renderer();
+  r.show({
+    command: "orion_vault_apply_plan",
+    description: "EXACT DETAIL",
+    action_title: "Review proposed note update",
+    target: "C:/vault/note.md",
+    effect: "Apply the displayed diff.",
+    choices: ["once", "deny"],
+  });
+  assert.equal(r.title.textContent, "Review proposed note update");
+  assert.equal(r.target.textContent, "C:/vault/note.md");
+  assert.equal(r.effect.textContent, "Apply the displayed diff.");
+  assert.equal(r.command.textContent, "orion_vault_apply_plan");
+  assert.equal(r.detail.textContent, "EXACT DETAIL");
 });
