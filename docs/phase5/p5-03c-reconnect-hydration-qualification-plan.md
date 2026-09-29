@@ -151,6 +151,48 @@ The proposed Stage D fixture will:
 This fixture is **not authorized for execution by this document update**.
 Disposable mutation execution still requires explicit owner authorization.
 
+## Stage D first execution finding
+
+The owner-authorized disposable edit executed successfully far enough to create
+and preserve a committed disposable fixture, but the first reconnect assertion
+stopped at:
+
+`generation_1_state:unknown`
+
+This was **not** a reconnect regression and must not be fixed by weakening the
+HUD projection threshold.
+
+Root cause:
+
+- the private disposable executor is older test-oriented machinery;
+- its successful edit return includes
+  `success=true`, `mutation_performed=true`,
+  `recovery_required=false`, target-relative path, post-write hash, and the
+  private recovery directory;
+- unlike the production executor, that private return does **not** include the
+  projection-required `action` and 64-hex `recovery_id`;
+- P5-03A therefore correctly classified the incomplete result as
+  `unknown / success_evidence_incomplete`.
+
+The disposable fixture was intentionally preserved at:
+
+`D:\Orion\orion-p5-03c-stage-d-xu_wj7s1`
+
+No second mutation is required. The read-only resume verifier:
+
+`scripts/phase5/p5-03c-stage-d-resume-reconstruction.py`
+
+must validate the preserved committed manifest, receipt, recovery
+classification, approval correlation, and current disposable target
+postcondition. Only if all independent durable checks agree does it compose the
+same bounded completion fields returned by the qualified production executor
+(`action`, `recovery_id`, target, and completion flags) for an isolated
+persisted-Hermes reconstruction test.
+
+This composition is fixture-only, performs no new approval or mutation, does
+not touch live SessionDB, and does not change the production HUD/projection
+contract.
+
 ## 1. Objective
 
 Qualify reload, reconnect, HUD restart, and Hermes restart behavior for consequential presentation state without creating a second source of truth.
