@@ -45,6 +45,7 @@ EXPECTED_BRANCH = "feature/orion-phase5-p5-03c-reconnect-hydration"
 EXPECTED_TOOLS = {
     "orion_vault_preview_edit",
     "orion_vault_preview_move_draft",
+    "orion_vault_preview_delete",
     "orion_vault_recommend_destination",
     "orion_vault_apply_plan",
 }
@@ -620,6 +621,7 @@ def main() -> int:
             if first != second:
                 raise RuntimeError("reconstruction_changed_across_hud_restart")
 
+            approval_attempts_before = len(plugin._APPROVAL_ATTEMPTS)
             public_apply = ctx.tools[plugin.APPLY_TOOL]["handler"]({
                 "plan_token": preview["plan_token"]
             })
@@ -627,9 +629,15 @@ def main() -> int:
                 public_apply = json.loads(public_apply)
             if (
                 not isinstance(public_apply, dict)
+                or public_apply.get("success") is not False
+                or public_apply.get("error") != "production_mutation_not_enabled"
                 or public_apply.get("mutation_performed") is not False
             ):
                 raise RuntimeError("registered_apply_not_fail_closed")
+            if len(plugin._APPROVAL_ATTEMPTS) != approval_attempts_before:
+                raise RuntimeError(
+                    "disabled_registered_apply_created_approval_attempt"
+                )
 
             print(
                 "P5_03C_STAGE_D_DISPOSABLE_MUTATION_PERFORMED=true",
@@ -677,6 +685,14 @@ def main() -> int:
             )
             print(
                 "P5_03C_STAGE_D_PRODUCTION_MUTATION_MODE_PRESENT=false",
+                flush=True,
+            )
+            print(
+                "P5_03C_STAGE_D_REGISTERED_APPLY_FAIL_CLOSED=true",
+                flush=True,
+            )
+            print(
+                "P5_03C_STAGE_D_DISABLED_APPLY_APPROVAL_CREATED=false",
                 flush=True,
             )
             print(
