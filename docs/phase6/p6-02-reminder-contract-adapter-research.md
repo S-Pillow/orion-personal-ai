@@ -347,3 +347,40 @@ P6-02 may define the semantic contract before these are implemented, but P6-05 p
 7. Does a narrow compatibility patch offer a cleaner P6-03/P6-04 result than an Orion sidecar?
 
 These are P6-02/P6-04 discovery questions, not excuses to expand scope.
+
+
+## 15. Additional pinned-source research: monitoring and dashboard runtime
+
+### Monitoring telemetry is not the missing durable audit ledger
+
+The accepted Hermes pin's `agent/monitoring/cron_health.py` confirms that terminal execution state can be projected with a delivery outcome. The known outcomes are:
+
+- `delivered`
+- `failed`
+- `suppressed`
+- `suppressed_acked`
+- `not_configured`
+
+However, the monitoring projection deliberately hashes the Hermes job ID into a content-free key and emits telemetry rather than extending the durable `executions.db` row.
+
+Implication for P6-04:
+
+- the monitoring seam is valuable proof that exact delivery outcome is available at terminal execution time;
+- it is **not sufficient by itself** for OR-REM-009 because Orion needs durable, exact per-run correlation to the actual Hermes job/execution;
+- P6-04 should inspect the terminal execution call site and favor a narrow durable Hermes ledger extension or equally authoritative structured persistence over treating telemetry as the audit record;
+- an Orion sidecar remains a fallback only if it cannot fire, retry, suppress, advance, or otherwise influence scheduling.
+
+### Hermes dashboard REST is a separate runtime surface
+
+The accepted Hermes `hermes_cli/web_server.py` is a separate FastAPI dashboard process (documented as `python -m hermes_cli.main web`, normally on port 9119).
+
+The dashboard also contains Desktop-specific cron ticking behavior: when `HERMES_DESKTOP=1`, the dashboard backend can start a cron ticker because the Desktop topology may not have a gateway doing it.
+
+Implication for P6-02:
+
+- do **not** add/start the Hermes dashboard merely to obtain its structured cron CRUD endpoints;
+- doing so would add a new runtime dependency and, in some topologies, another scheduler-capable process;
+- Candidate C remains acceptable only if the already-accepted Orion runtime is proven to expose/reuse those routes without adding a second service or scheduler owner;
+- otherwise prefer the bounded structured native cron/tool seam in the existing COMPANION environment.
+
+This strengthens Candidate A as the first surface to qualify tomorrow, while still leaving the decision contingent on local proof.
