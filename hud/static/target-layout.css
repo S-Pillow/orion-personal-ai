@@ -207,29 +207,6 @@ body {
   pointer-events: none;
 }
 
-.hero-scene::before {
-  content:"";
-  position:absolute;
-  z-index:2;
-  left:calc(50% + var(--center-shift) + var(--core-shift));
-  top:-28px;
-  bottom:-116px;
-  width:3px;
-  transform:translateX(-50%);
-  background:linear-gradient(
-    180deg,
-    rgba(217,253,255,0),
-    rgba(185,249,252,.28) 18%,
-    rgba(99,229,239,.78) 46%,
-    rgba(184,249,252,.34) 66%,
-    rgba(99,229,239,0)
-  );
-  box-shadow:
-    0 0 10px rgba(99,229,239,.22),
-    0 0 28px rgba(99,229,239,.10);
-  pointer-events:none;
-}
-
 .hero-scene::after {
   content:"";
   position:absolute;
