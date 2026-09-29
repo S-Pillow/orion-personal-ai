@@ -1,9 +1,9 @@
 # P5-03B3 — Visual + Truth Acceptance
 
-Status: **IMPLEMENTED / EXACT-HEAD ACCEPTANCE IN PROGRESS**
+Status: **ACCEPTED / CURRENT**
 
-Current candidate head:
-`e0c62716332eaaf8c09f73e3fff9f3a9d3e8cd75`
+Accepted verification head:
+`0406d6d5f9f417f841f3e7798ee5900693e70d75`
 
 Dependencies:
 
@@ -147,9 +147,29 @@ qualification after visual convergence is accepted.
 It also does not add unsupported Research/Create, project, artifact,
 attachment, voice, or richer Memory Lens functionality.
 
+## Acceptance result
+
+P5-03B3 acceptance passed on verification head
+`0406d6d5f9f417f841f3e7798ee5900693e70d75` using GitHub Actions run
+`36528393702`.
+
+Observed gates:
+
+- Python HUD suite: **198 tests, OK**;
+- Node renderer suites: **20 tests, 20 passed**;
+- Playwright desktop/mobile visual capture: **passed**;
+- P5-03B3 truth-matrix browser fixture rendered successfully;
+- aggregate gate: `python=0 node=0 visual=0`;
+- no protected mutation, live approval resolution, vault read/write, or new
+  browser authority was introduced by the acceptance fixture.
+
+The acceptance result covers the bounded P5-03B action/evidence visual and
+truth contract. It does not declare the broader PR #51 visual-design work
+owner-accepted, and it does not close P5-03C reconnect/hydration.
+
 ## Completion gate
 
-P5-03B3 may be marked **ACCEPTED** only when the exact candidate head passes:
+P5-03B3 is **ACCEPTED** because the verification head passed:
 
 1. full HUD Python test discovery;
 2. Node approval/summon/action-workspace/Core renderer suites;
