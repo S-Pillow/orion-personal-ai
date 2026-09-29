@@ -1,0 +1,73 @@
+name: Phase 6 prep verification
+
+on:
+  push:
+    branches:
+      - prep/phase6-p6-02-p6-07
+  pull_request:
+    paths:
+      - "docs/phase6/**"
+      - "scripts/phase6/**"
+      - ".github/workflows/phase6-prep-verify.yml"
+
+jobs:
+  verify-prep:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse Phase 6 PowerShell scripts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $scripts = Get-ChildItem scripts/phase6 -Filter *.ps1 -File
+          if (-not $scripts) {
+            throw 'No Phase 6 PowerShell scripts found.'
+          }
+
+          foreach ($script in $scripts) {
+            $tokens = $null
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              $script.FullName,
+              [ref]$tokens,
+              [ref]$errors
+            )
+            if ($errors.Count -gt 0) {
+              $errors | Format-List
+              throw "PowerShell parse failure: $($script.Name)"
+            }
+            Write-Host "PARSE_PASS=$($script.Name)"
+          }
+
+      - name: Guard prep-only scope
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $allowed = @(
+            '^docs/phase6/',
+            '^scripts/phase6/',
+            '^\.github/workflows/phase6-prep-verify\.yml$'
+          )
+
+          $base = '${{ github.event.pull_request.base.sha }}'
+          if (-not $base) {
+            $base = 'HEAD~1'
+          }
+
+          $changed = git diff --name-only "$base...HEAD"
+          foreach ($path in $changed) {
+            $ok = $false
+            foreach ($pattern in $allowed) {
+              if ($path -match $pattern) {
+                $ok = $true
+                break
+              }
+            }
+            if (-not $ok) {
+              throw "Unexpected Phase 6 prep path: $path"
+            }
+          }
+
+          Write-Host 'PHASE6_PREP_SCOPE=PASS'
