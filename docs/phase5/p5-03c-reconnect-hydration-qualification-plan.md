@@ -1,9 +1,67 @@
 # P5-03C Reconnect / Hydration Qualification Plan
 
-Status: **PLANNING / READY FOR QUALIFICATION AFTER HARDWARE STABILIZATION**
+Status: **STAGE A/B COMPLETE / STAGE C READ-ONLY OPERATOR QUALIFICATION PENDING**
 
 Date: 2026-09-27  
-Base main: `e55517bfc33b93a0983026a3a494d6df86c9532f`
+Base main: `4fb9e0abe7e534f0aa8fbfa42d52e480681c30d5`
+
+## Stage A/B implementation checkpoint
+
+Source branch:
+
+`feature/orion-phase5-p5-03c-reconnect-hydration`
+
+Qualified Stage A/B implementation ancestor:
+
+`e214d152460ede4790488343c01998ccc1b7d53d`
+
+Automated qualification run:
+
+`36533575723`
+
+Result:
+
+- Python HUD suite: **203 tests, PASS**;
+- Node renderer/reconnect suite: **25/25 PASS**;
+- existing desktop/mobile Playwright capture: **PASS**;
+- deterministic P5-03C reconnect/hydration browser matrix: **PASS**;
+- aggregate gate: `python=0 node=0 visual=0 reconnect=0`.
+
+The deterministic fixture is read-only and synthetic. It uses the real Orion
+bridge/HUD against a fake Hermes authority and performs no vault read, vault
+mutation, real approval resolution, or protected action execution.
+
+Implemented reconnect boundary:
+
+- browser persistence contains only exact `session_id` + `run_id` as a
+  `sessionStorage` locator hint;
+- the locator carries no approval, success, recovery-availability, or action
+  state;
+- reload/reconnect re-queries authoritative Orion/Hermes run status;
+- matching active run status may restore run lifecycle controls, but protected
+  action state remains explicit **UNAVAILABLE** unless separate authoritative
+  action evidence exists;
+- terminal/expired run status falls back to persisted SessionDB action evidence;
+- terminal run status alone never proves protected-action success;
+- malformed, mismatched, poisoned, expired, or cross-session locators fail
+  closed;
+- late hydration from a previously selected session is discarded;
+- selected-session disappearance clears locator and consequential presentation;
+- historical recovery IDs remain historical; current recovery availability is
+  still **UNAVAILABLE** without authoritative current inspection.
+
+Stage A/B covers RC-01 through RC-10, including a fresh Orion HUD/bridge process
+for RC-06. Installed-runtime qualification remains Stage C.
+
+The Stage C read-only installed verifier is:
+
+`scripts/phase5/p5-03c-installed-readonly-qualification.py`
+
+It requires Hermes to be started manually, starts only a temporary loopback
+Orion bridge, performs GET/read-only hydration, verifies the accepted installed
+Hermes compatibility-patch identity, then stops only the temporary Orion bridge.
+It records before/after source/worktree identity and refuses to run if
+mutation-enabling environment state is present.
 
 ## 1. Objective
 
