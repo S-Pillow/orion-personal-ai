@@ -137,6 +137,38 @@ if (__fixtureMode === "core-review") {
   document.body.append(controls);
 }
 
+if (__fixtureMode === "truth-matrix") {
+  window.__orionTruthFixture = {
+    render(stateName) {
+      hideApproval();
+      const projection = {
+        schema_version: "orion.action-projection.v1",
+        state: stateName,
+        source: "fixture_truth_matrix",
+        durability: "completed_record",
+        action: "edit_note",
+        target_relative_path: "Projects/Orion/next-phase-proposal.md",
+        run_id: "run_truth_matrix",
+        recovery_required: stateName === "failed",
+        recovery_id: stateName === "failed" ? "f".repeat(64) : undefined,
+        diff:
+          stateName === "preview_ready"
+            ? "--- old\n+++ new\n-old line\n+new line"
+            : "",
+      };
+      state.actionEvidence = [projection];
+      presentActionProjection(projection);
+      return {
+        state: ui.actionEvidencePanel.dataset.actionState,
+        label: ui.actionStateBadge.textContent,
+        execution: ui.actionExecution.textContent,
+        recovery: ui.actionRecovery.textContent,
+        coreState: ui.coreStage.dataset.coreState,
+      };
+    },
+  };
+}
+
 if (__fixtureMode === "review") {
   (async () => {
     await __fixtureSelectSession();
@@ -286,6 +318,10 @@ class UIConvergenceFixture:
     def core_review_url(self):
         return self.origin + "/?fixture=core-review"
 
+    @property
+    def truth_matrix_url(self):
+        return self.origin + "/?fixture=truth-matrix"
+
     def close(self):
         with self.lock:
             if self.pending:
@@ -314,6 +350,7 @@ if __name__ == "__main__":
         print(f"OFFLINE HUD: {fixture.offline_url}", flush=True)
         print(f"MOTION HUD: {fixture.motion_url}", flush=True)
         print(f"CORE REVIEW HUD: {fixture.core_review_url}", flush=True)
+        print(f"TRUTH MATRIX HUD: {fixture.truth_matrix_url}", flush=True)
         print(
             "Base: select orion-hud-main and send 'probe' for simulated approval.",
             flush=True,
