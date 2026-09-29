@@ -235,6 +235,25 @@ class FinalVisualConvergenceContractTests(unittest.TestCase):
             STYLES + TARGET,
         )
 
+    def test_action_stack_uses_state_specific_semantic_framing(self):
+        self.assertIn(
+            ".action-stack:has(> .operational-card:not(.hidden))",
+            TARGET,
+        )
+        self.assertIn(
+            '.action-evidence-panel[data-action-state="succeeded"]',
+            TARGET,
+        )
+        self.assertIn(
+            '.action-evidence-panel[data-action-state="failed"]',
+            TARGET,
+        )
+        self.assertIn("body.approval-active .action-stack", TARGET)
+        self.assertNotIn(
+            "border: 1px solid rgba(225,178,87,.36);",
+            TARGET.split(".action-stack {", 1)[1].split("}", 1)[0],
+        )
+
     def test_unsupported_composer_controls_are_not_advertised(self):
         self.assertNotIn("composer-plus", INDEX)
         self.assertNotIn('aria-label="Attach', INDEX)
