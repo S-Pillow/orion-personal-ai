@@ -1013,11 +1013,35 @@ body {
 }
 
 .action-stack {
-  margin: 0 0 12px;
-  border: 1px solid rgba(225,178,87,.36);
-  border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, rgba(36,28,13,.54), rgba(7,16,20,.91));
-  overflow: hidden;
+  display:none;
+  margin:0 0 12px;
+  border:1px solid rgba(99,229,239,.22);
+  border-radius:var(--radius-lg);
+  background:linear-gradient(180deg, rgba(8,25,30,.82), rgba(7,16,20,.91));
+  overflow:hidden;
+}
+
+.action-stack:has(> .operational-card:not(.hidden)) {
+  display:block;
+}
+
+.action-stack:has(> .action-evidence-panel[data-action-state="succeeded"]:not(.hidden)) {
+  border-color:rgba(128,221,193,.38);
+  background:linear-gradient(180deg, rgba(12,31,29,.80), rgba(7,16,20,.91));
+}
+
+.action-stack:has(> .action-evidence-panel[data-action-state="failed"]:not(.hidden)) {
+  border-color:rgba(223,127,138,.42);
+  background:linear-gradient(180deg, rgba(35,17,22,.72), rgba(7,16,20,.91));
+}
+
+.action-stack:has(> .action-evidence-panel[data-action-state="approval_requested"]:not(.hidden)),
+.action-stack:has(> .action-evidence-panel[data-action-state="approval_accepted"]:not(.hidden)),
+.action-stack:has(> .action-evidence-panel[data-action-state="stale_plan"]:not(.hidden)),
+.action-stack:has(> .action-evidence-panel[data-action-state="refused"]:not(.hidden)),
+body.approval-active .action-stack {
+  border-color:rgba(225,178,87,.36);
+  background:linear-gradient(180deg, rgba(36,28,13,.54), rgba(7,16,20,.91));
 }
 
 .action-stack > .operational-card {
