@@ -521,9 +521,9 @@ body {
   gap: 8px;
   margin-bottom: 10px;
   color: #9fc4cc;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: .12em;
+  letter-spacing: .09em;
 }
 
 .context-add {
@@ -557,9 +557,9 @@ body {
 .context-note,
 .muted-line {
   margin-top: 7px;
-  color: var(--text-3);
-  font-size: 10px;
-  line-height: 1.45;
+  color: #91a7af;
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .context-feature {
@@ -611,8 +611,8 @@ body {
 .memory-lens-facts dt,
 .action-facts dt,
 .status-list dt {
-  color: var(--text-3);
-  font-size: 10px;
+  color: #91a7af;
+  font-size: 11px;
 }
 
 .context-facts dd,
@@ -622,7 +622,7 @@ body {
   margin: 0;
   color: var(--text-2);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   text-align: right;
   overflow-wrap: anywhere;
 }
@@ -704,15 +704,23 @@ body {
   text-align: center;
 }
 
+/* Keep the welcome compact without moving the composer or shrinking real conversations. */
+.conversation-workspace:has(.no-session) {
+  align-self: end;
+  height: min(100%, 160px);
+}
+
 .empty-state strong {
   color: #dce9eb;
-  font-size: 13px;
+  font-size: 18px;
   font-weight: 500;
+  line-height: 1.3;
 }
 
 .empty-state span {
-  color: var(--text-3);
-  font-size: 12px;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .message {
@@ -844,12 +852,16 @@ body {
   gap: 10px;
   min-height: 78px;
   padding: 10px 12px;
-  border: 1px solid rgba(126,200,213,.36);
+  border: 1px solid rgba(126,200,213,.23);
   border-radius: var(--radius-lg);
   background: linear-gradient(180deg, rgba(11,29,36,.92), rgba(5,15,20,.97));
   box-shadow: 0 16px 44px rgba(0,0,0,.28), 0 0 20px rgba(99,229,239,.025);
 }
 
+
+.composer:focus-within {
+  border-color: rgba(99,229,239,.58);
+}
 
 .composer textarea {
   resize: none;

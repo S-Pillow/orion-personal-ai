@@ -334,12 +334,12 @@ function clearTranscript() {
   ui.transcript.replaceChildren();
 }
 
-function showTranscriptEmpty(text) {
+function showTranscriptEmpty(text, title = "Your conversation starts here") {
   clearTranscript();
   const wrap = document.createElement("div");
-  wrap.className = "empty-state";
+  wrap.className = state.sessionId ? "empty-state" : "empty-state no-session";
   const strong = document.createElement("strong");
-  strong.textContent = "ORION HUD LINK READY";
+  strong.textContent = state.sessionId ? title : "A place to think things through.";
   const span = document.createElement("span");
   span.textContent = text;
   wrap.append(strong, span);
@@ -890,7 +890,7 @@ async function refreshActionEvidence() {
 
 async function loadMessages() {
   if (!state.sessionId) {
-    showTranscriptEmpty("Select or create a Hermes session to begin.");
+    showTranscriptEmpty("Choose a conversation in Session, or use + to start a new one.");
     clearActionProjection();
     return;
   }
@@ -898,7 +898,7 @@ async function loadMessages() {
     const payload = await api(`/api/orion/sessions/${encodeURIComponent(state.sessionId)}/messages`);
     renderMessages(payload);
   } catch (error) {
-    showTranscriptEmpty(`Session history unavailable: ${error.message}`);
+    showTranscriptEmpty(`Session history unavailable: ${error.message}`, "Unable to load this conversation");
   }
   await refreshActionEvidence();
 }

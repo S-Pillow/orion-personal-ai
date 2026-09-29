@@ -484,12 +484,33 @@ def attention_capture(browser, fixture, width=1440, height=900) -> dict:
     return {"reply": reply, "approval": approval, "returned": returned, "summon": summon}
 
 
+def welcome_capture(browser, fixture, width, height) -> dict:
+    page = browser.new_page(viewport={"width": width, "height": height})
+    page.goto(fixture.origin, wait_until="networkidle")
+    expect(page.locator(".no-session")).to_be_visible()
+    welcome = rect(page, ".conversation-workspace")
+    composer = rect(page, ".composer")
+    assert welcome["height"] <= 161
+    assert composer["y"] + composer["height"] <= height
+    page.screenshot(path=str(OUT / f"welcome-{width}.png"))
+    page.locator("#sessionSelect").select_option("session_1")
+    page.wait_for_function("() => document.querySelectorAll('.message').length > 0")
+    assert page.locator(".no-session").count() == 0
+    populated = rect(page, ".conversation-workspace")
+    assert populated["height"] > welcome["height"]
+    assert abs(rect(page, ".composer")["y"] - composer["y"]) < 1
+    page.close()
+    return {"welcome": welcome, "composer": composer, "populated": populated}
+
+
 def main() -> None:
     fixture = UIConvergenceFixture()
     try:
         with sync_playwright() as pw:
             browser = pw.chromium.launch(headless=True)
             report = {
+                "welcome_desktop": welcome_capture(browser, fixture, 1672, 941),
+                "welcome_mobile": welcome_capture(browser, fixture, 390, 844),
                 "desktop_1672x941": review_capture(
                     browser, fixture, 1672, 941, "desktop-review-1672x941"
                 ),
