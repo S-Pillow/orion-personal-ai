@@ -106,12 +106,12 @@ def run_matrix() -> dict:
             completed = snapshot(page)
             assert completed["actionState"] == "succeeded"
             assert completed["execution"] == "SUCCEEDED"
-            assert completed["recovery"] == "LINKED // STATUS UNAVAILABLE"
+            assert completed["recovery"] == "UNAVAILABLE"
             page.reload(wait_until="networkidle")
             wait_ready(page)
             completed_reload = snapshot(page)
             assert completed_reload["actionState"] == "succeeded"
-            assert completed_reload["recovery"] == "LINKED // STATUS UNAVAILABLE"
+            assert completed_reload["recovery"] == "UNAVAILABLE"
             results["rc02_completed"] = completed_reload
             page.close()
 
