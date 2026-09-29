@@ -207,7 +207,12 @@ export function installCorePresence(root, stateNode) {
         || normalizeCoreState(root.dataset.coreState) === "OFFLINE") return false;
     const source = visibleRect(root.querySelector(".core-visual"));
     const destination = visibleRect(target);
-    if (!source || !destination) return false;
+    if (!source || !destination) {
+      // Mobile approval may scroll the Core offscreen. Do not leave it
+      // attending to the old conversation while a decision takes priority.
+      if (priority > attentionPriority) setGaze("forward");
+      return false;
+    }
     const now = performance.now();
     if (now < nextAttentionAt && priority <= attentionPriority) return false;
     const direction = attentionDirection(source, destination);

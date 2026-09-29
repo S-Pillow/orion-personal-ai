@@ -82,6 +82,14 @@ test('mobile position changes attention direction instead of hardcoding right', 
   assert.equal(f.root.dataset.gaze, 'down');
 });
 
+test('offscreen approval cancels a lower-priority conversation glance', () => {
+  const f = fixture();
+  f.core.lookAt(f.reply);
+  assert.equal(f.core.lookAt(f.element('mobileDecision', 0, 1200, 390, 500), 2), false);
+  assert.equal(f.root.dataset.gaze, 'forward');
+  assert.equal(f.root.dataset.attentionTarget, undefined);
+});
+
 test('offline, reduced motion, hidden page and destruction cancel attention', () => {
   for (const mode of ['offline', 'reduced', 'hidden', 'destroyed']) {
     const f = fixture();

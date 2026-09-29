@@ -457,15 +457,19 @@ def attention_capture(browser, fixture, width=1440, height=900) -> dict:
     assert reply["attentionTarget"] == "transcript", reply
     page.evaluate("() => window.__orionCoreFixture.attention('approval')")
     approval = snapshot("approval")
-    assert approval["gaze"] == ("right" if width > 900 else "down"), approval
-    assert approval["attentionTarget"] == "approvalPanel", approval
+    # On mobile the decision lives below the hero and scrolls the orb away.
+    # There is no visible source/target pair; suppress attention in that case.
+    expected_target = "approvalPanel" if width > 900 else None
+    assert approval["gaze"] == ("right" if width > 900 else "forward"), approval
+    assert approval["attentionTarget"] == expected_target, approval
     page.evaluate("() => window.__orionCoreFixture.attention('reply')")
-    assert page.evaluate("() => window.__orionCoreFixture.snapshot().attentionTarget") == "approvalPanel"
+    assert page.evaluate("() => window.__orionCoreFixture.snapshot().attentionTarget") == expected_target
     page.clock.run_for(1800)
     returned = snapshot("returned")
     assert returned["gaze"] == "forward"
     assert returned["attentionTarget"] is None
     page.evaluate("() => window.__orionCoreFixture.neutral()")
+    page.evaluate("() => window.scrollTo({ top: 0, behavior: 'instant' })")
     page.clock.run_for(1000)
     page.evaluate("() => window.__orionCoreFixture.attention('summon')")
     summon = snapshot("summon")
