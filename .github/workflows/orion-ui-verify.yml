@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/orion-ui-visual-convergence-pass
+      - feature/orion-phase5-p5-03c-reconnect-hydration
 
 jobs:
   verify:
@@ -33,7 +34,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          node --test hud/tests/test_approval_rendering.cjs hud/tests/test_summon_rendering.cjs hud/tests/test_action_workspace_semantics.cjs hud/tests/test_core_attention.cjs 2>&1 | tee ui-visual-artifacts/node-tests.txt
+          node --test hud/tests/test_approval_rendering.cjs hud/tests/test_summon_rendering.cjs hud/tests/test_action_workspace_semantics.cjs hud/tests/test_core_attention.cjs hud/tests/test_reconnect_state.cjs 2>&1 | tee ui-visual-artifacts/node-tests.txt
           code=${PIPESTATUS[0]}
           echo "$code" > ui-visual-artifacts/node-tests.exit
           exit 0
@@ -50,6 +51,16 @@ jobs:
           code=${PIPESTATUS[0]}
           echo "$code" > ui-visual-artifacts/visual-capture.exit
           exit 0
+      - name: Qualify reconnect and hydration
+        id: reconnect_qualification
+        shell: bash
+        run: |
+          set +e
+          python hud/tests/capture_reconnect_hydration.py 2>&1 | tee ui-visual-artifacts/reconnect-qualification.txt
+          code=${PIPESTATUS[0]}
+          echo "$code" > ui-visual-artifacts/reconnect-qualification.exit
+          cp -r p5-03c-artifacts ui-visual-artifacts/p5-03c-artifacts 2>/dev/null || true
+          exit 0
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -63,7 +74,9 @@ jobs:
           py=$(cat ui-visual-artifacts/python-tests.exit 2>/dev/null || echo 1)
           node=$(cat ui-visual-artifacts/node-tests.exit 2>/dev/null || echo 1)
           visual=$(cat ui-visual-artifacts/visual-capture.exit 2>/dev/null || echo 1)
-          echo "python=$py node=$node visual=$visual"
+          reconnect=$(cat ui-visual-artifacts/reconnect-qualification.exit 2>/dev/null || echo 1)
+          echo "python=$py node=$node visual=$visual reconnect=$reconnect"
           test "$py" -eq 0
           test "$node" -eq 0
           test "$visual" -eq 0
+          test "$reconnect" -eq 0
