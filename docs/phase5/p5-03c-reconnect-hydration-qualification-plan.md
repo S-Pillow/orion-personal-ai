@@ -1,6 +1,6 @@
 # P5-03C Reconnect / Hydration Qualification Plan
 
-Status: **STAGE A/B COMPLETE / STAGE C READ-ONLY OPERATOR QUALIFICATION PENDING**
+Status: **STAGE A/B/C COMPLETE / STAGE D CONSEQUENTIAL RECONNECT QUALIFICATION PENDING**
 
 Date: 2026-09-27  
 Base main: `4fb9e0abe7e534f0aa8fbfa42d52e480681c30d5`
@@ -62,6 +62,48 @@ Orion bridge, performs GET/read-only hydration, verifies the accepted installed
 Hermes compatibility-patch identity, then stops only the temporary Orion bridge.
 It records before/after source/worktree identity and refuses to run if
 mutation-enabling environment state is present.
+
+## Stage C installed read-only acceptance
+
+Operator qualification passed against the installed COMPANION runtime.
+
+Accepted Orion head:
+
+`f6721ffbcb87805b1d827d5ca6463e2037939310`
+
+Observed installed runtime:
+
+- Hermes source head: `5fc308a70719a83cccdbba4c0e39c23f5a8239d5`;
+- installed P5-03A2 Hermes API SHA-256:
+  `7a206396aac7abe7e50fd5d346733fea85bb57160cb0a5d8a2e7feda29167c84`;
+- Hermes listener: online on accepted loopback transport;
+- persisted Hermes sessions observed: **17**;
+- selected persisted session:
+  `api_1789034057_7eeae131`;
+- projected transcript rows: **25**;
+- projected action-evidence rows in the selected session: **0**;
+- current recovery visibility: **unavailable**.
+
+Safety/truth results:
+
+- mutation mode absent;
+- no approval requested;
+- no protected action executed;
+- no vault read;
+- no vault mutation;
+- Orion worktree unchanged;
+- Hermes worktree unchanged;
+- installed Hermes source unchanged;
+- temporary Orion bridge used the established in-process
+  `OrionHTTPServer` pattern and was shut down deterministically.
+
+Stage C disposition: **PASS**.
+
+Because the selected live persisted session contained no completed protected
+action evidence, Stage D must next follow the plan's least-risk evidence order:
+first search existing persisted sessions for retained non-sensitive completed
+action evidence. A new disposable protected action is not authorized unless
+read-only discovery proves existing evidence is insufficient.
 
 ## 1. Objective
 
