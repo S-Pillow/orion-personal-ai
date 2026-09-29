@@ -47,6 +47,7 @@ STATIC_FILES = {
     "/index.html": ("index.html", "text/html; charset=utf-8"),
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
     "/core-state.js": ("core-state.js", "text/javascript; charset=utf-8"),
+    "/reconnect-state.js": ("reconnect-state.js", "text/javascript; charset=utf-8"),
     "/workspace-state.js": ("workspace-state.js", "text/javascript; charset=utf-8"),
     "/summon-state.js": ("summon-state.js", "text/javascript; charset=utf-8"),
     "/provenance-state.js": ("provenance-state.js", "text/javascript; charset=utf-8"),
