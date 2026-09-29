@@ -130,7 +130,7 @@ Tracking:
 - draft PR #16 — Phase 4 P4-04 push-to-talk voice foundation
 - issue #19 — P4-04B resume native TTS/live voice acceptance after Edge connectivity stabilizes
 
-### Phase 5 - canary closure accepted through P5-02Y audited recovery cleanup
+### Phase 5 — PASS / CLOSED through P5-03C reconnect/hydration qualification
 
 Phase 5 has advanced through source qualification, preview-only COMPANION installation, installed-runtime disposable mutation qualification, production recovery-root acceptance, recovery-root persistence, and live runtime-ingestion verification.
 
@@ -154,7 +154,8 @@ Accepted checkpoints:
 - P5-02V: protected-delete source candidate `0.3.0` accepted after compile, full Phase 5 tests, source plugin doctor, and unchanged P5-02U production-state verification;
 - P5-02W: exact P5-02V-qualified `0.3.0` plugin installed and runtime-qualified with rollback captured, protected-delete preview live in a five-tool `orion_vault` toolset, guarded apply/private-executor invariants intact, mutation disabled, recovery still 4/0, protected files/config unchanged, and Hermes restored to manual-off;
 - P5-02X: protected retained-target deletion accepted — the exact vault target was deleted through registered `preview_delete` + guarded apply with fresh human `once`; restored inbox source remained unchanged, target became absent, delete recovery `e48123ceecc2be50afb2902511f64397f5dcfa35338ab9fd785cbf7278658b36` was committed, recovery became 5/0, mutation returned to disabled, and Hermes remained manual-off;
-- P5-02Y: exact audited Phase 5 recovery cleanup accepted — all five approved canary recovery directories were removed individually under the owner-approved exact-count/exact-ID retention policy, each removal was durably journaled, the external audit was committed at SHA-256 `9aff3bff771ee8745642510c5f4561de3f8395c490e0d24fc22563cc85650537`, production recovery is now 0/0 with the root retained empty, source remains valid, target remains absent, mutation remains disabled, and Hermes remains manual-off.
+- P5-02Y: exact audited Phase 5 recovery cleanup accepted — all five approved canary recovery directories were removed individually under the owner-approved exact-count/exact-ID retention policy, each removal was durably journaled, the external audit was committed at SHA-256 `9aff3bff771ee8745642510c5f4561de3f8395c490e0d24fc22563cc85650537`, production recovery is now 0/0 with the root retained empty, source remains valid, target remains absent, mutation remains disabled, and Hermes remains manual-off;
+- P5-03C: reconnect/hydration qualification accepted and merged in PR #52. Browser persistence is limited to session/run locator hints; reconnect re-queries durable run evidence; stale, cross-session, malformed, poisoned, or incomplete locators fail closed; durable SessionDB/plugin evidence remains authoritative; no browser-side approval, retry, recovery, or mutation authority was added.
 
 Current installed/runtime boundary:
 
@@ -186,6 +187,29 @@ P5-02O rollback capture:
 `C:\Users\spill\AppData\Local\hermes\profiles\companion\orion\backups\p5-02o-installed-disabled-20260923-040536`
 
 The P5-02Q edit, P5-02R restore, P5-02T first production move, P5-02U move-source restore, P5-02V protected-delete source qualification, P5-02W installed-disabled qualification, P5-02X protected target deletion, and P5-02Y exact audited recovery cleanup are accepted. The controlled Phase 5 canary transaction/recovery chain is closed; no further Phase 5 mutation is authorized by that closure.
+
+
+### Phase 6 — reminder architecture discovery accepted; implementation not started
+
+P6-01 Reminder Scheduler Ownership & Installed Hermes Capability Discovery is complete.
+
+Architecture decision:
+
+- native Hermes is the authoritative reminder scheduler;
+- Orion must not introduce a second general scheduler, timer daemon, or scheduler-owning service;
+- the accepted Hermes scheduler is gateway-owned and already provides one-shot/recurring jobs, persistent `jobs.json`, duplicate-suppression claims/fences, durable execution history, restart recovery, Discord/local delivery, and script/no-agent scheduling;
+- Orion work should be a bounded adapter/projection/evidence layer around supported Hermes surfaces.
+
+P6-01 also identified the remaining Orion-specific gaps that must drive P6-02 through P6-07:
+
+- corrupt-but-repairable `jobs.json` shapes may be auto-rewritten without preserving the exact pre-repair artifact;
+- missed one-shots outside Hermes' 120-second grace window are retired with an operator-visible diagnostic rather than fired late;
+- the durable execution ledger does not persist scheduled fire time or delivery outcome as execution columns;
+- HUD reminder state still needs a truthful read-only projection from durable Hermes evidence;
+- local-trigger work should reuse Hermes script/no-agent/monitor mechanisms rather than create a second watcher/scheduler;
+- live reminder acceptance, restart/manual-off behavior, delivery failure, duplicate suppression, and recovery remain unimplemented and must be proven separately.
+
+Phase 6 preparation proceeds ticket-by-ticket. P6-02 is design/contract work first; no reminder implementation is authorized by P6-01 alone.
 
 ## Accepted manual-off lifecycle
 
@@ -288,20 +312,16 @@ Reference/code-donor fork. Reuse only proven patterns that still close a current
 
 ## Resume point
 
-P5-02M remains the integration/design-freeze review surface in PR #27. P5-02N source wiring is accepted at qualified code head `faf8b4787d8e6fb668eb5e9d754104910b4b401a`, and P5-02O installed-but-disabled qualification is accepted on `feature/orion-phase5-p5-02o-installed-disabled-qualification`.
+Current accepted repository/runtime checkpoint:
 
-The installed COMPANION runtime now carries the P5-02N-qualified `0.2.0` guarded wrapper while production mutation remains disabled and Hermes remains manual-off.
-
-P5-02P production-canary readiness is accepted. The deterministic registered-dispatch proof passed with a real fresh human `once` approval and no production executor call; the controlled canary `C:\Personal\Me\_Orion-P5-Canary.md` was created under separate authorization; and read-only readiness froze pre-edit Windows file identity `5e1aeb8a1aeb5d91:cba20a00000012000000000000000000`, before SHA-256 `ddb08a8ca9ab5d06185a692182a742210817cba1d5523c841d6a371dfdb57b4c`, after SHA-256 `86e94184ef6ff2a80f5cdfa04749c42328079e029d153d3a23d42eab05059e19`, and exact diff SHA-256 `6642d44372449d01e1ec3f5d325bd2b372f52cc58610293bcccf0e4e4ec996e8`.
-
-P5-02Q is accepted as the first real Orion production mutation. Exactly one `edit_note` changed the controlled canary to the frozen after-hash through the registered guarded wrapper and a fresh human `once` approval. Recovery ID `33d3dc72984b872778680106dabfc2260eab9a91be130b9e9d6dd1351483de3f` remains valid historical evidence.
-
-P5-02R is accepted as the first production restore qualification. The exact P5-02Q canary edit was restored to the original before-hash through the registered guarded wrapper and a fresh human `once`. New restore recovery ID `1b1e26014063b3156adb2152c703371bf5c78234af9dfe9ab51e045e652d7b27` is valid/committed; the origin P5-02Q record reads `committed_then_changed`; recovery count is 2 with zero attention. Mutation mode is disabled and Hermes is manual-off.
-
-P5-02S production-move readiness is accepted. P5-02T completed the first bounded production `move_draft`, and P5-02U subsequently restored the removed inbox source from the committed move recovery through the guarded registered apply path and a fresh human `once`. The inbox source and vault target are now both present at SHA-256 `132ff51d62fd7fd8827d7222e233617e92c55dc21d40ff68164f2238ba0fd132`; move recovery `8f79ba8396c2c5877bc9c28c8a5cdbfa55dda850c70ce18c324524d8a5e461a6` reads `committed_then_changed`; restore recovery `5c9b264a465f468c2f172f880fc89878e63368480c3eecfd0fb37212b159e175` is committed; recovery is 4 records / 0 attention; mutation mode is disabled; and Hermes is manual-off.
-
-Any fixture creation, production move, move-source restore, delete, or recovery cleanup requires a new explicit authorization.
+- `main` includes merged PR #52 / P5-03C reconnect-hydration qualification;
+- Phase 5 is effectively closed for the vault-action/reconnect track;
+- Phase 4 remains intentionally parked by owner decision at the bounded live voice acceptance gate; no speech-stack redesign is authorized;
+- P6-01 reminder discovery is complete and selected native Hermes as scheduler owner;
+- Phase 6 implementation has not started;
+- the next planned work unit is P6-02 Reminder Contract & Hermes Adapter Design, followed by bounded P6-03 through P6-07 work only after ticket-specific authorization;
+- Persistent Goal Mode remains deferred/discussion-only and must not be implemented as a second autonomous runtime, scheduler, memory system, or approval path.
 
 The safe project-status shorthand is:
 
-> Phase 3 presentation foundation accepted; Phase 4 voice work partially accepted with final live TTS/barge-in and wake disposition deferred; Phase 5 source/runtime safety is accepted through P5-02U, including the first bounded production edit, first production restore qualification, first bounded production move, and move-source restore; mutation mode is disabled and Hermes remains manual-off.
+> Phase 3 presentation foundation accepted; Phase 4 voice acceptance parked; Phase 5 vault-action/reconnect track closed through P5-03C; Phase 6 reminder discovery complete with native Hermes selected as scheduler owner; next work is P6-02 design/contract preparation, not reminder implementation.
