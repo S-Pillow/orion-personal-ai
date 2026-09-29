@@ -1,6 +1,6 @@
 # P5-03C Reconnect / Hydration Qualification Plan
 
-Status: **STAGE A/B/C COMPLETE / STAGE D CONSEQUENTIAL RECONNECT QUALIFICATION PENDING**
+Status: **STAGE A/B/C/D ACCEPTED / DISPOSABLE FIXTURE CLEANUP PENDING**
 
 Date: 2026-09-27  
 Base main: `4fb9e0abe7e534f0aa8fbfa42d52e480681c30d5`
@@ -192,6 +192,47 @@ persisted-Hermes reconstruction test.
 This composition is fixture-only, performs no new approval or mutation, does
 not touch live SessionDB, and does not change the production HUD/projection
 contract.
+
+## Stage D accepted consequential reconnect result
+
+The preserved owner-authorized disposable action was resumed read-only and
+qualified successfully.
+
+Accepted evidence:
+
+- existing disposable mutation reused: **true**;
+- new approval requested: **false**;
+- new mutation performed: **false**;
+- durable recovery classification: **committed**;
+- durable receipt state: **committed**;
+- durable receipt/recovery correlation: **valid**;
+- current disposable target postcondition: **matches committed result**;
+- composite evidence threshold preserved: **true**;
+- projected action state: **succeeded**;
+- projected durability: **completed_record**;
+- current recovery visibility after reconstruction: **unavailable**;
+- fresh-HUD-process reconstruction match: **true**;
+- private recovery path egress: **false**;
+- live Hermes SessionDB written: **false**;
+- real vault/inbox touched: **false**.
+
+Stage D disposition: **PASS**.
+
+The first Stage D attempt's `unknown` projection remains an accepted
+truth-boundary observation: the private disposable executor's incomplete
+success return was insufficient for protected success. The production
+projection threshold was not weakened. The resume gate instead required the
+durable manifest, receipt, recovery inspection, approval correlation, and
+current target postcondition to independently establish the fields that the
+qualified production executor normally returns.
+
+This closes the required consequential reconnect proof without a second
+protected action.
+
+One operator housekeeping item remains before final P5-03C closure: remove the
+preserved temporary disposable fixture
+`D:\Orion\orion-p5-03c-stage-d-xu_wj7s1` using the bounded cleanup gate.
+No production content or live SessionDB data is part of that cleanup.
 
 ## 1. Objective
 
