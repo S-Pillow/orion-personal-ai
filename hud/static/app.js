@@ -572,6 +572,7 @@ async function refreshSessions({ loadCurrent = true } = {}) {
       ui.sessionSelect.value = previous;
     } else if (previous) {
       state.sessionId = "";
+      clearRunLocator();
       clearActionProjection();
       hideApproval();
       state.provenance = createProvenanceState();
