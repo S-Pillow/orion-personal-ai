@@ -289,6 +289,18 @@ def core_renderer_capture(browser, fixture) -> dict:
         # letting the controller advance to another blink phase.
         png = page.screenshot(path=str(OUT / f"core-{name}.png"), animations="disabled")
         assert page.evaluate("() => window.__orionCoreFixture.snapshot()") == state
+        # CSS can break the fixed-aperture architecture even when SVG references
+        # are intact. Check both eyes' stationary layers in every captured pose.
+        fixed_transforms = page.locator(
+            ".core-eye-system, .core-eye-shutter, .core-eye-aperture, "
+            ".core-eye-window, clipPath[id^='coreEyeClip']"
+        ).evaluate_all("nodes => nodes.map(node => getComputedStyle(node).transform)")
+        assert len(fixed_transforms) == 10
+        assert all(transform == "none" for transform in fixed_transforms), fixed_transforms
+        reflection_fills = page.locator(".core-glass-reflection").evaluate_all(
+            "nodes => nodes.map(node => getComputedStyle(node).fill)"
+        )
+        assert reflection_fills and all(fill == "none" for fill in reflection_fills)
         orb = rect(page, ".core-orb")
         scale = orb["width"] / 320
         eye_box = tuple(round(v) for v in (
@@ -304,19 +316,22 @@ def core_renderer_capture(browser, fixture) -> dict:
     assert neutral["gaze"] == "forward"
     assert neutral["blinkPhase"] == "open"
     assert neutral["bright_eye_pixels"] > 50, neutral
-    aperture = rect(page, ".core-eye-left .core-eye-aperture")
+    def aperture_rects():
+        return [rect(page, f".core-eye-{side} .core-eye-aperture") for side in ("left", "right")]
+
+    apertures = aperture_rects()
 
     page.evaluate("() => window.__orionCoreFixture.gaze('left')")
     left = snapshot("gaze-left")
     left_focus = rect(page, ".core-eye-left .core-eye-focus")
     assert left["gaze"] == "left"
-    assert rect(page, ".core-eye-left .core-eye-aperture") == aperture
+    assert aperture_rects() == apertures
 
     page.evaluate("() => window.__orionCoreFixture.gaze('right')")
     right = snapshot("gaze-right")
     right_focus = rect(page, ".core-eye-left .core-eye-focus")
     assert right["gaze"] == "right"
-    assert rect(page, ".core-eye-left .core-eye-aperture") == aperture
+    assert aperture_rects() == apertures
     assert 5 < right_focus["x"] - left_focus["x"] < 9
 
     page.evaluate("() => window.__orionCoreFixture.gaze('left')")
@@ -325,6 +340,7 @@ def core_renderer_capture(browser, fixture) -> dict:
     closed = snapshot("blink-closed")
     assert closed["blinkPhase"] == "closed"
     assert closed["gaze"] == "left"
+    assert aperture_rects() == apertures
     # Tests the rendered output, including glow: checking a class alone missed
     # the previous bright-eye leak in the purported closed frame.
     assert closed["bright_eye_pixels"] < neutral["bright_eye_pixels"] * .12, closed

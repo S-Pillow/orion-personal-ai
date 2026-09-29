@@ -1,5 +1,8 @@
 # Orion HUD — Phase 2A Typed-Control Proof
 
+The accepted Core identity is the [Astra glass-orb baseline](../docs/design/astra-core-baseline.md).
+Read that contract before changing Core artwork or eye rendering.
+
 This directory contains the first Orion HUD implementation proof.
 
 It is deliberately smaller than the planned Phase 2B/2C product UI. Its job is to prove the security and interaction boundary before the cinematic Orion Core, adaptive workspaces, iai Brain, and voice are layered on top.
