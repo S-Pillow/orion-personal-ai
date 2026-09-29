@@ -55,6 +55,7 @@ class UIConvergenceFixtureContractTests(unittest.TestCase):
         self.assertIn("?fixture=offline", PROBE)
         self.assertIn("?fixture=motion", PROBE)
         self.assertIn("?fixture=core-review", PROBE)
+        self.assertIn("?fixture=truth-matrix", PROBE)
 
     def test_motion_fixture_keeps_live_presence_controller(self):
         self.assertIn('if (__fixtureMode !== "motion" && __fixtureMode !== "core-review")', PROBE)
@@ -69,6 +70,12 @@ class UIConvergenceFixtureContractTests(unittest.TestCase):
         self.assertIn('window.__orionCoreFixture.state("WAITING")', PROBE)
         self.assertIn('window.__orionCoreFixture.state("OFFLINE")', PROBE)
         self.assertIn('id = "coreReviewControls"', PROBE)
+
+    def test_truth_matrix_fixture_exposes_state_renderer(self):
+        self.assertIn('__fixtureMode === "truth-matrix"', PROBE)
+        self.assertIn("window.__orionTruthFixture", PROBE)
+        self.assertIn("presentActionProjection(projection);", PROBE)
+        self.assertIn('stateName === "failed"', PROBE)
 
     def test_fixture_content_is_explicitly_presentation_only(self):
         self.assertIn("presentation-only fixture content", PROBE)
