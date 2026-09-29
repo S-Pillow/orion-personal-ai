@@ -161,6 +161,21 @@ def run_matrix() -> dict:
             results["rc05_approval_gap"] = accepted_gap
             page.close()
 
+            # RC-06 a fresh HUD/bridge process has no authority-bearing memory.
+            restart_fixture = ReconnectFixture()
+            try:
+                restart_fixture.set_scenario("completed")
+                page = new_page(browser, restart_fixture)
+                restarted = snapshot(page)
+                assert restarted["sessionId"] == "session_1"
+                assert restarted["actionState"] == "succeeded"
+                assert restarted["execution"] == "SUCCEEDED"
+                assert restarted["approvalVisible"] is False
+                results["rc06_hud_restart"] = restarted
+                page.close()
+            finally:
+                restart_fixture.close()
+
             # RC-07 expired run falls back to persisted result.
             fixture.set_scenario("completed")
             page = new_page(browser, fixture, run_id="run_expired")
