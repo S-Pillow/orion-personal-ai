@@ -70,6 +70,12 @@ def port_listening(port: int) -> bool:
         return sock.connect_ex(("127.0.0.1", port)) == 0
 
 
+def choose_free_loopback_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
 def wait_port(port: int, expected: bool, timeout: float) -> bool:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -134,7 +140,12 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo", type=Path, default=Path(__file__).resolve().parents[2])
     parser.add_argument("--session-id", default="")
-    parser.add_argument("--orion-port", type=int, default=8765)
+    parser.add_argument(
+        "--orion-port",
+        type=int,
+        default=0,
+        help="Temporary Orion bridge port. Default 0 selects a free loopback port.",
+    )
     args = parser.parse_args()
 
     repo = args.repo.resolve()
@@ -195,9 +206,10 @@ def main() -> int:
         raise RuntimeError(
             "hermes_not_listening: start COMPANION Hermes manually before Stage C"
         )
-    if port_listening(args.orion_port):
+    orion_port = args.orion_port or choose_free_loopback_port()
+    if port_listening(orion_port):
         raise RuntimeError(
-            f"orion_port_{args.orion_port}_already_in_use:"
+            f"orion_port_{orion_port}_already_in_use:"
             "Stage C requires a verifier-owned temporary Orion bridge"
         )
 
@@ -206,7 +218,7 @@ def main() -> int:
             sys.executable,
             str(bridge),
             "--host", "127.0.0.1",
-            "--port", str(args.orion_port),
+            "--port", str(orion_port),
         ],
         cwd=str(repo),
         stdout=subprocess.PIPE,
@@ -216,10 +228,18 @@ def main() -> int:
 
     observed: dict[str, Any] = {}
     try:
-        if not wait_port(args.orion_port, True, 8):
-            raise RuntimeError("temporary_orion_bridge_did_not_start")
+        if not wait_port(orion_port, True, 8):
+            exit_code = bridge_proc.poll()
+            stderr = ""
+            if exit_code is not None and bridge_proc.stderr is not None:
+                stderr = bridge_proc.stderr.read().strip().replace("\r", " ").replace("\n", " ")
+            detail = stderr[:600] if stderr else f"process_exit={exit_code}"
+            raise RuntimeError(
+                "temporary_orion_bridge_did_not_start:"
+                + detail
+            )
 
-        client = OrionClient(f"http://127.0.0.1:{args.orion_port}")
+        client = OrionClient(f"http://127.0.0.1:{orion_port}")
         client.establish_ui_session()
 
         status = client.get_json("/api/orion/status")
@@ -299,7 +319,7 @@ def main() -> int:
             bridge_proc.kill()
             bridge_proc.wait(timeout=5)
 
-    if port_listening(args.orion_port):
+    if port_listening(orion_port):
         raise RuntimeError("temporary_orion_bridge_still_listening_after_stop")
     if not port_listening(8642):
         raise RuntimeError("hermes_listener_changed_during_stage_c")
