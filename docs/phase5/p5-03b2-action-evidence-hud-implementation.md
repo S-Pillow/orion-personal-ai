@@ -33,6 +33,24 @@ No new bridge endpoint, persistent browser store, action ledger, approval
 authority, vault mutation path, recovery executor, Hermes patch, or external
 service is introduced.
 
+## Current carry-forward contract
+
+Later visual-convergence work may replace presentation geometry and styling,
+but it must preserve the accepted P5-03B2 authority model:
+
+- browser-local state remains presentation-only;
+- consequential action state is rendered only from the accepted P5-03A
+  projection or authoritative approval transport;
+- generic tool lifecycle is descriptive and cannot prove protected success;
+- approval acknowledgement is decision evidence only;
+- exact approval/diff content remains inspectable;
+- recent evidence cannot become an action control;
+- technical evidence remains allowlisted;
+- current recovery availability is never inferred from historical identifiers.
+
+P5-03B3 is the explicit regression/acceptance gate for these guarantees on the
+current HUD.
+
 ## Acceptance record
 
 Exact-head source acceptance passed on
