@@ -13,9 +13,11 @@ import hashlib
 import http.cookiejar
 import json
 import os
+import secrets
 import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -68,12 +70,6 @@ def port_listening(port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.settimeout(0.35)
         return sock.connect_ex(("127.0.0.1", port)) == 0
-
-
-def choose_free_loopback_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind(("127.0.0.1", 0))
-        return int(sock.getsockname()[1])
 
 
 def wait_port(port: int, expected: bool, timeout: float) -> bool:
@@ -144,11 +140,16 @@ def main() -> int:
         "--orion-port",
         type=int,
         default=0,
-        help="Temporary Orion bridge port. Default 0 selects a free loopback port.",
+        help="Temporary in-process Orion bridge port. Default 0 lets the OS choose.",
     )
     args = parser.parse_args()
 
     repo = args.repo.resolve()
+    hud_root = repo / "hud"
+    if str(hud_root) not in sys.path:
+        sys.path.insert(0, str(hud_root))
+    import orion_hud_bridge as bridge
+
     local = os.environ.get("LOCALAPPDATA")
     if not local:
         raise RuntimeError("LOCALAPPDATA_unavailable")
@@ -159,9 +160,9 @@ def main() -> int:
     compat_manifest = api_source.with_name(
         api_source.name + ".orion-p5-03a2-approval-compat.json"
     )
-    bridge = repo / "hud" / "orion_hud_bridge.py"
+    bridge_source = repo / "hud" / "orion_hud_bridge.py"
 
-    if not bridge.is_file() or not api_source.is_file():
+    if not bridge_source.is_file() or not api_source.is_file():
         raise RuntimeError("required_runtime_source_missing")
 
     branch = git(repo, "branch", "--show-current")
@@ -206,38 +207,38 @@ def main() -> int:
         raise RuntimeError(
             "hermes_not_listening: start COMPANION Hermes manually before Stage C"
         )
-    orion_port = args.orion_port or choose_free_loopback_port()
-    if port_listening(orion_port):
+    if args.orion_port and port_listening(args.orion_port):
         raise RuntimeError(
-            f"orion_port_{orion_port}_already_in_use:"
+            f"orion_port_{args.orion_port}_already_in_use:"
             "Stage C requires a verifier-owned temporary Orion bridge"
         )
 
-    bridge_proc = subprocess.Popen(
-        [
-            sys.executable,
-            str(bridge),
-            "--host", "127.0.0.1",
-            "--port", str(orion_port),
-        ],
-        cwd=str(repo),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
+    api_key = bridge.load_hermes_api_key(dotenv)
+    if not api_key:
+        raise RuntimeError("companion_api_server_key_unavailable")
+
+    state = bridge.BridgeState(
+        target=bridge.HermesTarget("127.0.0.1", 8642),
+        api_key=api_key,
+        ui_cookie=secrets.token_urlsafe(32),
+        static_root=repo / "hud" / "static",
     )
+    orion_server = bridge.OrionHTTPServer(
+        ("127.0.0.1", args.orion_port),
+        state,
+    )
+    orion_port = int(orion_server.server_port)
+    orion_thread = threading.Thread(
+        target=orion_server.serve_forever,
+        kwargs={"poll_interval": 0.1},
+        daemon=True,
+    )
+    orion_thread.start()
 
     observed: dict[str, Any] = {}
     try:
-        if not wait_port(orion_port, True, 8):
-            exit_code = bridge_proc.poll()
-            stderr = ""
-            if exit_code is not None and bridge_proc.stderr is not None:
-                stderr = bridge_proc.stderr.read().strip().replace("\r", " ").replace("\n", " ")
-            detail = stderr[:600] if stderr else f"process_exit={exit_code}"
-            raise RuntimeError(
-                "temporary_orion_bridge_did_not_start:"
-                + detail
-            )
+        if not wait_port(orion_port, True, 3):
+            raise RuntimeError("temporary_orion_bridge_did_not_bind")
 
         client = OrionClient(f"http://127.0.0.1:{orion_port}")
         client.establish_ui_session()
@@ -312,13 +313,12 @@ def main() -> int:
             "vault_mutation": False,
         }
     finally:
-        bridge_proc.terminate()
-        try:
-            bridge_proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            bridge_proc.kill()
-            bridge_proc.wait(timeout=5)
+        orion_server.shutdown()
+        orion_server.server_close()
+        orion_thread.join(timeout=3)
 
+    if orion_thread.is_alive():
+        raise RuntimeError("temporary_orion_bridge_thread_did_not_stop")
     if port_listening(orion_port):
         raise RuntimeError("temporary_orion_bridge_still_listening_after_stop")
     if not port_listening(8642):
