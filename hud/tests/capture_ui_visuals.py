@@ -503,6 +503,44 @@ def welcome_capture(browser, fixture, width, height) -> dict:
     return {"welcome": welcome, "composer": composer, "populated": populated}
 
 
+def p503b3_truth_matrix_capture(browser, fixture) -> dict:
+    page = browser.new_page(viewport={"width": 1440, "height": 900})
+    page.goto(fixture.truth_matrix_url, wait_until="networkidle")
+    page.wait_for_function("() => Boolean(window.__orionTruthFixture)")
+
+    expectations = {
+        "preview_ready": ("PREVIEW READY", "NOT EXECUTED"),
+        "approval_requested": ("DECISION REQUIRED", "AWAITING DECISION"),
+        "approval_accepted": ("DECISION ACCEPTED", "UNPROVEN"),
+        "approval_denied": ("DENIED", "NOT EXECUTED"),
+        "succeeded": ("SUCCEEDED", "SUCCEEDED"),
+        "stale_plan": ("STALE", "NOT PERFORMED"),
+        "refused": ("REFUSED", "NOT PERFORMED"),
+        "failed": ("FAILED", "FAILED"),
+        "unavailable": ("UNAVAILABLE", "UNAVAILABLE"),
+        "unknown": ("UNKNOWN", "UNKNOWN"),
+    }
+    observed = {}
+    for state_name, (label, execution) in expectations.items():
+        result = page.evaluate(
+            "(stateName) => window.__orionTruthFixture.render(stateName)",
+            state_name,
+        )
+        assert result["state"] == state_name
+        assert result["label"] == label
+        assert result["execution"] == execution
+        panel = page.locator("#actionEvidencePanel")
+        assert panel.is_visible()
+        observed[state_name] = result
+        page.screenshot(
+            path=str(OUT / f"truth-{state_name}-1440x900.png"),
+            full_page=False,
+        )
+
+    page.close()
+    return observed
+
+
 def main() -> None:
     fixture = UIConvergenceFixture()
     try:
@@ -528,6 +566,7 @@ def main() -> None:
                 "mobile_keyboard": mobile_keyboard_capture(browser, fixture),
                 "motion_preferences": motion_preference_check(browser, fixture),
                 "core_renderer": core_renderer_capture(browser, fixture),
+                "p5_03b3_truth_matrix": p503b3_truth_matrix_capture(browser, fixture),
                 "core_attention_desktop": attention_capture(browser, fixture),
                 "core_attention_mobile": attention_capture(browser, fixture, 390, 844),
             }
