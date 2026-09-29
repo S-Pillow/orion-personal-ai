@@ -19,6 +19,34 @@ The HUD may explain projected facts. It may not infer a protected success,
 recreate a missing approval, promote historical preview evidence back into an
 actionable plan, or use browser-local state as recovery/action truth.
 
+## Visual / UX baseline
+
+P5-03B1 is the formal Phase 5B visual/UX contract for consequential
+action/evidence presentation. It is implemented inside Orion's broader
+owner-approved visual direction documented by
+`docs/hud/orion-final-interface-visual-contract.md` and
+`docs/phase3/ui-convergence-visual-contract.md`.
+
+The required presentation grammar is:
+
+- cinematic dark graphite/charcoal HUD rather than a generic web dashboard;
+- restrained cyan/teal for normal companion/system illumination;
+- a contextual right-side action/evidence region rather than a permanent
+  telemetry wall;
+- exact approval/diff content kept literal and readable;
+- recent evidence kept secondary and informational;
+- technical evidence collapsed/expandable instead of dominating the primary
+  decision surface;
+- amber reserved for consequential attention states such as approval,
+  stale-plan, or refusal presentation;
+- green reserved for authoritative protected-action success;
+- red reserved for authoritative failure/error treatment;
+- no visual state, copy, color, or animation may imply that approval
+  acknowledgement equals protected execution success.
+
+These visual rules do not change the P5-03A evidence threshold. Presentation
+may clarify evidence; it may not strengthen it.
+
 ## Layout
 
 The right rail becomes a contextual action/evidence region.
