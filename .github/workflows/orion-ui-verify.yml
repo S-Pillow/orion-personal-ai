@@ -27,6 +27,7 @@ jobs:
           python -m py_compile scripts/phase5/p5-03c-stage-d-disposable-preflight.py
           python -m py_compile scripts/phase5/p5-03c-stage-d-disposable-reconnect.py
           python -m py_compile scripts/phase5/p5-03c-stage-d-resume-reconstruction.py
+          python -m py_compile scripts/phase5/p5-03c-stage-d-cleanup.py
       - name: Python HUD tests
         id: python_tests
         shell: bash
