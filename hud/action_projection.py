@@ -874,7 +874,14 @@ def project_action_evidence_payload(
 def project_run_status(payload: Any) -> dict[str, Any] | None:
     if not isinstance(payload, dict):
         return None
-    run_id = _safe_id(payload.get("run_id"))
+    raw_run_id = payload.get("run_id")
+    run_id = (
+        raw_run_id
+        if isinstance(raw_run_id, str)
+        and raw_run_id
+        and _safe_id(raw_run_id) == raw_run_id
+        else ""
+    )
     status = _safe_code(payload.get("status"))
     if not run_id or not status:
         return None
@@ -885,7 +892,14 @@ def project_run_status(payload: Any) -> dict[str, Any] | None:
         "action_state": "unobserved",
         "source": "hermes_run_status",
     }
-    session_id = _safe_id(payload.get("session_id"))
+    raw_session_id = payload.get("session_id")
+    session_id = (
+        raw_session_id
+        if isinstance(raw_session_id, str)
+        and raw_session_id
+        and _safe_id(raw_session_id) == raw_session_id
+        else ""
+    )
     if session_id:
         out["session_id"] = session_id
     last_event = _safe_code(payload.get("last_event"))
