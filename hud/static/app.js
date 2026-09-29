@@ -975,9 +975,9 @@ async function reconcileReconnectState() {
   updateRunControls();
 
   if (observed.kind === "terminal") {
-    clearRunLocator(locator.runId);
     await refreshActionEvidence();
     if (state.actionProjection?.durability === "completed_record") {
+      clearRunLocator(locator.runId);
       return true;
     }
     renderReconnectUnavailable(
@@ -1540,7 +1540,6 @@ function handleStreamEvent(eventName, data, assistant) {
       }
       if (runId && runId === state.activeRunId) {
         state.activeRunId = "";
-        clearRunLocator(runId);
         hideApproval();
         if (state.actionProjection?.durability !== "completed_record") {
           state.actionProjection = null;
