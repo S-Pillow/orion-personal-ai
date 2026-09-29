@@ -313,6 +313,34 @@ class FrontendHardeningContractTests(unittest.TestCase):
         )
         self.assertIn("ui.approvalPanel.scrollIntoView({", APP_JS)
 
+    def test_reconnect_uses_browser_run_id_as_locator_only(self):
+        self.assertIn("RUN_LOCATOR_KEY", APP_JS)
+        self.assertIn("sessionStorage.setItem(RUN_LOCATOR_KEY", APP_JS)
+        self.assertIn("classifyReconnectRunStatus(", APP_JS)
+        self.assertIn("/api/orion/runs/", APP_JS)
+        self.assertIn("active_run_action_state_unobserved", APP_JS)
+        self.assertNotIn('localStorage.setItem("orion.actionState"', APP_JS)
+        self.assertNotIn('sessionStorage.setItem("orion.actionState"', APP_JS)
+
+    def test_reconnect_explicitly_falls_back_to_persisted_evidence(self):
+        self.assertIn("await refreshActionEvidence();", APP_JS)
+        self.assertIn(
+            "run_locator_expired_without_persisted_action_result",
+            APP_JS,
+        )
+        self.assertIn(
+            "terminal_run_without_persisted_action_result",
+            APP_JS,
+        )
+        self.assertIn("renderReconnectUnavailable(", APP_JS)
+
+    def test_session_switch_and_disappearance_clear_run_locator(self):
+        self.assertGreaterEqual(APP_JS.count("clearRunLocator();"), 3)
+        self.assertIn(
+            'localStorage.removeItem("orion.hermesSession")',
+            APP_JS,
+        )
+
     def test_startup_loads_persisted_session_history_once(self):
         self.assertIn(
             "async function refreshStatus(loadCurrentSession = false)",

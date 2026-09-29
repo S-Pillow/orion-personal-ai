@@ -57,6 +57,31 @@ class ActionProjectionTests(unittest.TestCase):
         )
         self.assertIsNotNone(omitted)
 
+    def test_run_status_requires_raw_exact_identities(self):
+        self.assertIsNone(project_run_status({
+            "object": "hermes.run",
+            "run_id": " run_1 ",
+            "session_id": "session_1",
+            "status": "running",
+        }))
+        projected = project_run_status({
+            "object": "hermes.run",
+            "run_id": "run_1",
+            "session_id": " session_1 ",
+            "status": "running",
+        })
+        self.assertIsNotNone(projected)
+        self.assertNotIn("session_id", projected)
+
+        exact = project_run_status({
+            "object": "hermes.run",
+            "run_id": "run_1",
+            "session_id": "session_1",
+            "status": "running",
+        })
+        self.assertEqual(exact["run_id"], "run_1")
+        self.assertEqual(exact["session_id"], "session_1")
+
     def test_run_started_requires_raw_exact_run_id(self):
         for bad_run_id in (" run_1 ", 7, {"id": "run_1"}, ""):
             with self.subTest(run_id=bad_run_id):

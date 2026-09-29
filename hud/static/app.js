@@ -5,6 +5,12 @@ import { ORION_ENVIRONMENT_DATA_URI } from "./environment-data.js";
 import { installWorkspaceController } from "./workspace-state.js";
 import { installSummonController } from "./summon-state.js";
 import {
+  RUN_LOCATOR_KEY,
+  classifyReconnectRunStatus,
+  encodeRunLocator,
+  parseRunLocator,
+} from "./reconnect-state.js";
+import {
   ACCEPTED_BASELINE,
   classifyAuthority,
   createProvenanceState,
@@ -110,6 +116,31 @@ const state = {
   actionEvidence: [],
   provenance: createProvenanceState(),
 };
+
+function readRunLocator(sessionId = state.sessionId) {
+  const raw = sessionStorage.getItem(RUN_LOCATOR_KEY) || "";
+  return parseRunLocator(raw, sessionId);
+}
+
+function rememberRunLocator(sessionId, runId) {
+  const encoded = encodeRunLocator(sessionId, runId);
+  if (!encoded) return false;
+  sessionStorage.setItem(RUN_LOCATOR_KEY, encoded);
+  return true;
+}
+
+function clearRunLocator(expectedRunId = "") {
+  if (!expectedRunId) {
+    sessionStorage.removeItem(RUN_LOCATOR_KEY);
+    return;
+  }
+  const current = parseRunLocator(
+    sessionStorage.getItem(RUN_LOCATOR_KEY) || "",
+  );
+  if (current?.runId === expectedRunId) {
+    sessionStorage.removeItem(RUN_LOCATOR_KEY);
+  }
+}
 
 const corePresence = installCorePresence(
   ui.coreStage,
@@ -541,6 +572,7 @@ async function refreshSessions({ loadCurrent = true } = {}) {
       ui.sessionSelect.value = previous;
     } else if (previous) {
       state.sessionId = "";
+      clearRunLocator();
       clearActionProjection();
       hideApproval();
       state.provenance = createProvenanceState();
@@ -864,6 +896,118 @@ function clearActionProjection(detail = "") {
   }
 }
 
+function renderReconnectUnavailable(reason, runId = "") {
+  state.actionProjection = null;
+  renderActionWorkspace({
+    schema_version: "orion.action-projection.v1",
+    state: "unavailable",
+    source: "hermes_run_status",
+    durability: "presentation_only",
+    ...(runId ? { run_id: runId } : {}),
+    reason,
+  });
+}
+
+async function reconcileReconnectState() {
+  if (!state.sessionId || state.streaming || state.approvalEvent) {
+    return false;
+  }
+
+  const locator = readRunLocator();
+  if (!locator) {
+    return false;
+  }
+
+  let payload;
+  try {
+    payload = await api(
+      `/api/orion/runs/${encodeURIComponent(locator.runId)}`,
+    );
+  } catch (error) {
+    const expired = error?.status === 404 || error?.status === 410;
+    if (expired) {
+      clearRunLocator(locator.runId);
+    }
+    await refreshActionEvidence();
+    if (state.actionProjection?.durability === "completed_record") {
+      return true;
+    }
+    renderReconnectUnavailable(
+      expired
+        ? "run_locator_expired_without_persisted_action_result"
+        : "run_status_unavailable",
+      locator.runId,
+    );
+    setCore(
+      "READY",
+      expired
+        ? "Reconnect: run expired // protected action outcome unavailable"
+        : "Reconnect: run status unavailable // protected action outcome unavailable",
+    );
+    return true;
+  }
+
+  if (state.sessionId !== locator.sessionId) {
+    return false;
+  }
+
+  const observed = classifyReconnectRunStatus(
+    payload,
+    locator.sessionId,
+    locator.runId,
+  );
+
+  if (observed.kind === "active") {
+    state.activeRunId = locator.runId;
+    hideApproval();
+    renderReconnectUnavailable(
+      "active_run_action_state_unobserved",
+      locator.runId,
+    );
+    updateRunControls();
+    setCore(
+      "THINKING",
+      `Reconnect observed Hermes run ${locator.runId} active // protected action state unobserved`,
+    );
+    return true;
+  }
+
+  state.activeRunId = "";
+  updateRunControls();
+
+  if (observed.kind === "terminal") {
+    await refreshActionEvidence();
+    if (state.actionProjection?.durability === "completed_record") {
+      clearRunLocator(locator.runId);
+      return true;
+    }
+    renderReconnectUnavailable(
+      "terminal_run_without_persisted_action_result",
+      locator.runId,
+    );
+    setCore(
+      "READY",
+      "Reconnect observed terminal Hermes run // protected action outcome unavailable",
+    );
+    return true;
+  }
+
+  clearRunLocator(locator.runId);
+  await refreshActionEvidence();
+  if (state.actionProjection?.durability === "completed_record") {
+    return true;
+  }
+  renderReconnectUnavailable(
+    observed.reason || "run_status_unavailable",
+    locator.runId,
+  );
+  setCore(
+    "READY",
+    "Reconnect could not establish protected action outcome",
+  );
+  return true;
+}
+
 async function refreshActionEvidence() {
   if (!state.sessionId) {
     clearActionProjection("No protected action evidence selected");
@@ -915,6 +1059,7 @@ async function createSession() {
     const id = extractId(payload);
     if (!id) throw new Error("Hermes created a session without an id");
     state.sessionId = id;
+    clearRunLocator();
     state.provenance = createProvenanceState();
     syncProvenancePresentation();
     localStorage.setItem("orion.hermesSession", id);
@@ -1163,6 +1308,10 @@ async function refreshStatus(loadCurrentSession = false) {
       ]);
 
       if (!state.streaming && !state.approvalEvent) {
+        const reconnected = await reconcileReconnectState();
+        if (reconnected) {
+          return;
+        }
         if (
           state.sessionId &&
           state.actionProjection?.durability === "completed_record"
@@ -1235,6 +1384,7 @@ function handleStreamEvent(eventName, data, assistant) {
       state.provenance = createProvenanceState();
       clearActionProjection();
       state.activeRunId = runId;
+      rememberRunLocator(state.sessionId, runId);
       setCore("THINKING", runId ? `Hermes run ${runId}` : "Hermes run started");
       updateRunControls();
       break;
@@ -1321,6 +1471,7 @@ function handleStreamEvent(eventName, data, assistant) {
       );
       syncProvenancePresentation();
       state.activeRunId = "";
+      clearRunLocator(runId);
       hideApproval();
       const evidence = Array.isArray(data?.action_evidence)
         ? data.action_evidence
@@ -1351,6 +1502,7 @@ function handleStreamEvent(eventName, data, assistant) {
         break;
       }
       state.activeRunId = "";
+      clearRunLocator(runId);
       hideApproval();
       if (state.actionProjection?.durability !== "completed_record") {
         state.actionProjection = null;
@@ -1368,6 +1520,7 @@ function handleStreamEvent(eventName, data, assistant) {
         break;
       }
       state.activeRunId = "";
+      clearRunLocator(runId);
       hideApproval();
       if (state.actionProjection?.durability !== "completed_record") {
         state.actionProjection = null;
@@ -1489,6 +1642,7 @@ async function sendMessage(event) {
     }
     updateRunControls();
     await loadMessages();
+    await reconcileReconnectState();
   }
 }
 
@@ -1517,6 +1671,7 @@ ui.composer.addEventListener("submit", sendMessage);
 ui.stopButton.addEventListener("click", stopRun);
 ui.sessionSelect.addEventListener("change", async () => {
   state.sessionId = ui.sessionSelect.value;
+  clearRunLocator();
   clearActionProjection();
   state.provenance = createProvenanceState();
   syncProvenancePresentation();

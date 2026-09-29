@@ -1,9 +1,292 @@
 # P5-03C Reconnect / Hydration Qualification Plan
 
-Status: **PLANNING / READY FOR QUALIFICATION AFTER HARDWARE STABILIZATION**
+Status: **COMPLETE / ACCEPTED / READY TO MERGE**
 
 Date: 2026-09-27  
-Base main: `e55517bfc33b93a0983026a3a494d6df86c9532f`
+Base main: `4fb9e0abe7e534f0aa8fbfa42d52e480681c30d5`
+
+## Stage A/B implementation checkpoint
+
+Source branch:
+
+`feature/orion-phase5-p5-03c-reconnect-hydration`
+
+Qualified Stage A/B implementation ancestor:
+
+`e214d152460ede4790488343c01998ccc1b7d53d`
+
+Automated qualification run:
+
+`36533575723`
+
+Result:
+
+- Python HUD suite: **203 tests, PASS**;
+- Node renderer/reconnect suite: **25/25 PASS**;
+- existing desktop/mobile Playwright capture: **PASS**;
+- deterministic P5-03C reconnect/hydration browser matrix: **PASS**;
+- aggregate gate: `python=0 node=0 visual=0 reconnect=0`.
+
+The deterministic fixture is read-only and synthetic. It uses the real Orion
+bridge/HUD against a fake Hermes authority and performs no vault read, vault
+mutation, real approval resolution, or protected action execution.
+
+Implemented reconnect boundary:
+
+- browser persistence contains only exact `session_id` + `run_id` as a
+  `sessionStorage` locator hint;
+- the locator carries no approval, success, recovery-availability, or action
+  state;
+- reload/reconnect re-queries authoritative Orion/Hermes run status;
+- matching active run status may restore run lifecycle controls, but protected
+  action state remains explicit **UNAVAILABLE** unless separate authoritative
+  action evidence exists;
+- terminal/expired run status falls back to persisted SessionDB action evidence;
+- terminal run status alone never proves protected-action success;
+- malformed, mismatched, poisoned, expired, or cross-session locators fail
+  closed;
+- late hydration from a previously selected session is discarded;
+- selected-session disappearance clears locator and consequential presentation;
+- historical recovery IDs remain historical; current recovery availability is
+  still **UNAVAILABLE** without authoritative current inspection.
+
+Stage A/B covers RC-01 through RC-10, including a fresh Orion HUD/bridge process
+for RC-06. Installed-runtime qualification remains Stage C.
+
+The Stage C read-only installed verifier is:
+
+`scripts/phase5/p5-03c-installed-readonly-qualification.py`
+
+It requires Hermes to be started manually, starts only a temporary loopback
+Orion bridge, performs GET/read-only hydration, verifies the accepted installed
+Hermes compatibility-patch identity, then stops only the temporary Orion bridge.
+It records before/after source/worktree identity and refuses to run if
+mutation-enabling environment state is present.
+
+## Stage C installed read-only acceptance
+
+Operator qualification passed against the installed COMPANION runtime.
+
+Accepted Orion head:
+
+`f6721ffbcb87805b1d827d5ca6463e2037939310`
+
+Observed installed runtime:
+
+- Hermes source head: `5fc308a70719a83cccdbba4c0e39c23f5a8239d5`;
+- installed P5-03A2 Hermes API SHA-256:
+  `7a206396aac7abe7e50fd5d346733fea85bb57160cb0a5d8a2e7feda29167c84`;
+- Hermes listener: online on accepted loopback transport;
+- persisted Hermes sessions observed: **17**;
+- selected persisted session:
+  `api_1789034057_7eeae131`;
+- projected transcript rows: **25**;
+- projected action-evidence rows in the selected session: **0**;
+- current recovery visibility: **unavailable**.
+
+Safety/truth results:
+
+- mutation mode absent;
+- no approval requested;
+- no protected action executed;
+- no vault read;
+- no vault mutation;
+- Orion worktree unchanged;
+- Hermes worktree unchanged;
+- installed Hermes source unchanged;
+- temporary Orion bridge used the established in-process
+  `OrionHTTPServer` pattern and was shut down deterministically.
+
+Stage C disposition: **PASS**.
+
+Because the selected live persisted session contained no completed protected
+action evidence, Stage D must next follow the plan's least-risk evidence order:
+first search existing persisted sessions for retained non-sensitive completed
+action evidence. A new disposable protected action is not authorized unless
+read-only discovery proves existing evidence is insufficient.
+
+## Stage D retained-evidence discovery
+
+Read-only discovery across the installed COMPANION SessionDB completed after
+Stage C.
+
+Observed:
+
+- persisted sessions enumerated: **17**;
+- qualifying completed protected-action evidence records: **0**;
+- transcript bodies printed: **false**;
+- raw tool results printed: **false**;
+- vault read: **false**;
+- vault mutation: **false**.
+
+Discovery disposition: **PASS / NO RETAINED EVIDENCE AVAILABLE**.
+
+Therefore Stage D cannot use preferred option 2 (retained non-sensitive
+persisted test evidence).
+
+The next candidate is a separately approved **isolated disposable
+protected-action fixture**. It must reuse the already-qualified P5-02I
+disposable-root guardrails and must not place synthetic action records into
+the live Hermes SessionDB.
+
+The proposed Stage D fixture will:
+
+1. create temporary disposable vault/inbox/recovery roots under a neutral
+   operator path;
+2. obtain a fresh real Hermes human **ALLOW ONCE** or **DENY** decision for the
+   exact disposable plan;
+3. execute only the installed plugin's private disposable executor;
+4. preserve the exact structured plugin result as the authoritative action
+   result for the fixture;
+5. present that result through an isolated fake-Hermes persisted session to
+   the real Orion bridge/HUD;
+6. reload the browser and restart the HUD/bridge process;
+7. require the same completed action projection after each reconstruction;
+8. poison browser-local state and require it to have no effect;
+9. require current recovery visibility to remain **unavailable** unless a
+   separate authoritative current inspector exists;
+10. verify real vault/inbox remain untouched and clean up disposable roots on
+    PASS.
+
+This fixture is **not authorized for execution by this document update**.
+Disposable mutation execution still requires explicit owner authorization.
+
+## Stage D first execution finding
+
+The owner-authorized disposable edit executed successfully far enough to create
+and preserve a committed disposable fixture, but the first reconnect assertion
+stopped at:
+
+`generation_1_state:unknown`
+
+This was **not** a reconnect regression and must not be fixed by weakening the
+HUD projection threshold.
+
+Root cause:
+
+- the private disposable executor is older test-oriented machinery;
+- its successful edit return includes
+  `success=true`, `mutation_performed=true`,
+  `recovery_required=false`, target-relative path, post-write hash, and the
+  private recovery directory;
+- unlike the production executor, that private return does **not** include the
+  projection-required `action` and 64-hex `recovery_id`;
+- P5-03A therefore correctly classified the incomplete result as
+  `unknown / success_evidence_incomplete`.
+
+The disposable fixture was intentionally preserved at:
+
+`D:\Orion\orion-p5-03c-stage-d-xu_wj7s1`
+
+No second mutation is required. The read-only resume verifier:
+
+`scripts/phase5/p5-03c-stage-d-resume-reconstruction.py`
+
+must validate the preserved committed manifest, receipt, recovery
+classification, approval correlation, and current disposable target
+postcondition. Only if all independent durable checks agree does it compose the
+same bounded completion fields returned by the qualified production executor
+(`action`, `recovery_id`, target, and completion flags) for an isolated
+persisted-Hermes reconstruction test.
+
+This composition is fixture-only, performs no new approval or mutation, does
+not touch live SessionDB, and does not change the production HUD/projection
+contract.
+
+## Stage D accepted consequential reconnect result
+
+The preserved owner-authorized disposable action was resumed read-only and
+qualified successfully.
+
+Accepted evidence:
+
+- existing disposable mutation reused: **true**;
+- new approval requested: **false**;
+- new mutation performed: **false**;
+- durable recovery classification: **committed**;
+- durable receipt state: **committed**;
+- durable receipt/recovery correlation: **valid**;
+- current disposable target postcondition: **matches committed result**;
+- composite evidence threshold preserved: **true**;
+- projected action state: **succeeded**;
+- projected durability: **completed_record**;
+- current recovery visibility after reconstruction: **unavailable**;
+- fresh-HUD-process reconstruction match: **true**;
+- private recovery path egress: **false**;
+- live Hermes SessionDB written: **false**;
+- real vault/inbox touched: **false**.
+
+Stage D disposition: **PASS**.
+
+The first Stage D attempt's `unknown` projection remains an accepted
+truth-boundary observation: the private disposable executor's incomplete
+success return was insufficient for protected success. The production
+projection threshold was not weakened. The resume gate instead required the
+durable manifest, receipt, recovery inspection, approval correlation, and
+current target postcondition to independently establish the fields that the
+qualified production executor normally returns.
+
+This closes the required consequential reconnect proof without a second
+protected action.
+
+The preserved temporary disposable fixture
+`D:\Orion\orion-p5-03c-stage-d-xu_wj7s1` was removed through the bounded
+cleanup gate after qualification.
+
+Cleanup evidence:
+
+- real vault/inbox targeted: **false**;
+- disposable fixture cleaned: **true**;
+- cleanup gate: **PASS**.
+
+No production content or live SessionDB data was part of cleanup.
+
+## Final P5-03C closure
+
+P5-03C reconnect/hydration qualification is complete.
+
+Accepted coverage:
+
+- Stage A deterministic fixture: **PASS**;
+- Stage B automated browser-state contract: **PASS**;
+- Stage C installed read-only COMPANION qualification: **PASS**;
+- Stage D retained-evidence discovery: **PASS / none available**;
+- owner-authorized disposable consequential qualification: **PASS**;
+- read-only reconstruction from preserved durable evidence: **PASS**;
+- bounded disposable fixture cleanup: **PASS**.
+
+The final implementation preserves these boundaries:
+
+- browser persistence is locator-only;
+- run status alone never proves protected-action success;
+- completed protected-action success requires the existing P5-03A evidence
+  threshold;
+- incomplete successful-looking evidence remains `unknown`;
+- pending approval is not reconstructed from browser storage;
+- historical recovery IDs do not establish current recovery availability;
+- cross-session and late-hydration evidence cannot bleed into the selected
+  session;
+- no browser action ledger, approval ledger, retry authority, or persistent
+  SSE replay store was introduced;
+- no production vault/inbox mutation was performed for P5-03C;
+- no synthetic action evidence was written into live Hermes SessionDB;
+- no Core artwork/behavior or presentation redesign was introduced.
+
+The Stage D first-attempt `unknown` result is retained as positive evidence
+that the projection fails closed when the private disposable executor omits
+required production completion fields. Closure did not lower that threshold.
+
+Final merge-readiness boundary:
+
+- branch is based directly on accepted main
+  `4fb9e0abe7e534f0aa8fbfa42d52e480681c30d5`;
+- no base drift was present at closure review;
+- changed paths are limited to reconnect/projection/bridge behavior,
+  qualification tests/scripts, workflow gating, and this qualification record;
+- production merge remains a separate repository action and is not performed
+  by this closure record.
+
+P5-03C disposition: **ACCEPTED / READY TO MERGE**.
 
 ## 1. Objective
 
