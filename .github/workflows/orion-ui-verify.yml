@@ -20,6 +20,8 @@ jobs:
           node-version: "22"
       - name: Prepare evidence directory
         run: mkdir -p ui-visual-artifacts
+      - name: Compile P5-03C installed verifier
+        run: python -m py_compile scripts/phase5/p5-03c-installed-readonly-qualification.py
       - name: Python HUD tests
         id: python_tests
         shell: bash
