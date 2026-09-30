@@ -1,129 +1,10 @@
 diff --git a/cron/jobs.py b/cron/jobs.py
 --- a/cron/jobs.py
 +++ b/cron/jobs.py
-@@ -1336,101 +1336,33 @@
--# Job CRUD Operations
--# =============================================================================
--
--def _parse_jobs_file(jobs_file: Path) -> Tuple[Any, bool]:
--    """Tolerantly parse jobs.json; shared by load_jobs and the save-path peek.
--
--    Returns ``(data, used_strict_fallback)``. utf-8-sig absorbs a Windows
--    BOM; a strict parse failure is retried with ``strict=False`` to survive
--    bare control characters in string values. IO errors from the open and
--    parse errors from the fallback propagate to the caller, which decides
--    between repair (load_jobs) and bail-out (peek).
--    """
--    with open(jobs_file, "r", encoding="utf-8-sig") as f:
--        raw = f.read()
--    try:
--        return json.loads(raw), False
--    except json.JSONDecodeError:
--        return json.loads(raw, strict=False), True
--
--
--def load_jobs() -> List[Dict[str, Any]]:
--    """Load all jobs from storage."""
--    jobs_file = _current_cron_store().jobs_file
--    ensure_dirs()
--    # Stamp BEFORE reading (fail-safe direction — see _record_load_stamp):
--    # a sibling write racing this load leaves the stamp older than disk, so
--    # the save-path merge runs instead of being wrongly skipped.
--    pre_read_stamp = _jobs_file_stamp(jobs_file)
--    if not jobs_file.exists():
--        _record_load_stamp(None)
--        return []
--
--    try:
--        data, _strict_retry = _parse_jobs_file(jobs_file)
--    except IOError as e:
--        logger.error("IOError reading jobs.json: %s", e)
--        raise RuntimeError(f"Failed to read cron database: {e}") from e
--    except Exception as e:
--        logger.error("Failed to auto-repair jobs.json: %s", e)
--        raise RuntimeError(f"Cron database corrupted and unrepairable: {e}") from e
--
--    # Validate the top-level JSON shape: accept a dict (expected) or a bare
--    # list (auto-repair). Anything else (str/number/null) is corruption that
--    # would otherwise raise an uncaught AttributeError on ``.get()`` and take
--    # down the whole cron subsystem.
--    if isinstance(data, dict):
--        jobs = data.get("jobs", [])
--        needs_shape_repair = False
--        if isinstance(jobs, dict):
--            # ID-keyed map ({"jobs": {"<job_id>": {...}, ...}}) — written by
--            # external tools or hand edits, never by save_jobs(). The public
--            # load_jobs() contract and every CRUD/scheduler consumer expect a
--            # list; iterating the dict would yield bare id strings and blow up
--            # downstream (e.g. _normalize_job_record -> dict(<str>)). Flatten
--            # with an id-preserving merge: an inline "id" on the value wins,
--            # otherwise the map key is adopted as the id (external tools often
--            # key by id and omit the inline copy). Non-dict values are junk
--            # (a flattened record would not be a job) — skip them with a
--            # warning instead of crashing downstream.
--            # (_peek_jobs_unlocked() deliberately does NOT flatten —
--            # it returns None on a dict-shaped store so the save path never
--            # merges against an unrepaired baseline; the flatten lives only
--            # here at the load boundary.)
--            skipped = [k for k, v in jobs.items() if not isinstance(v, dict)]
--            if skipped:
--                logger.warning(
--                    "Skipping %d non-dict entr%s in id-keyed jobs map: %s",
--                    len(skipped),
--                    "y" if len(skipped) == 1 else "ies",
--                    ", ".join(map(repr, skipped)),
--                )
--            jobs = [
--                {**v, "id": v.get("id") or k}
--                for k, v in jobs.items()
--                if isinstance(v, dict)
--            ]
--            needs_shape_repair = True
--        if jobs and (_strict_retry or needs_shape_repair):
--            # Rewrite into the canonical {"jobs": [...]} form: either the parse
--            # hit control-character corruption (_strict_retry) or the store was
--            # an id-keyed map. save_jobs() re-emits the list shape every reader
--            # expects.
--            save_jobs(jobs)
--            if needs_shape_repair:
--                logger.warning("Auto-repaired jobs.json (id-keyed jobs map flattened to list)")
--            else:
--                logger.warning("Auto-repaired jobs.json (had invalid control characters)")
--        _record_load_stamp(pre_read_stamp)
--        return jobs
--    if isinstance(data, list):
--        # Bare array — likely saved/edited outside save_jobs(). Wrap it back
--        # into the expected {"jobs": [...]} structure.
--        if data:
--            save_jobs(data)
--            logger.warning("Auto-repaired jobs.json (bare list wrapped as dict)")
--        _record_load_stamp(pre_read_stamp)
--        return data
--
--    raise RuntimeError(
--        f"Cron database corrupted: expected {{'jobs': [...]}}, got {type(data).__name__}"
--    )
-+# Job CRUD Operations
-+# =============================================================================
-+
-+def _parse_jobs_file(jobs_file: Path) -> Tuple[Any, bool]:
-+    """Tolerantly parse jobs.json; shared by load_jobs and the save-path peek.
-+
-+    Returns ``(data, used_strict_fallback)``. utf-8-sig absorbs a Windows
-+    BOM; a strict parse failure is retried with ``strict=False`` to survive
-+    bare control characters in string values. IO errors from the open and
-+    parse errors from the fallback propagate to the caller, which decides
-+    between repair (load_jobs) and bail-out (peek).
-+    """
-+    with open(jobs_file, "r", encoding="utf-8-sig") as f:
-+        raw = f.read()
-+    try:
-+        return json.loads(raw), False
-+    except json.JSONDecodeError:
-+        return json.loads(raw, strict=False), True
-+
-+
-+
+@@ -1353,6 +1353,60 @@
+         return json.loads(raw, strict=False), True
+ 
+ 
 +def _preserve_jobs_file_before_repair(jobs_file: Path, reason: str) -> Path:
 +    """Preserve exact on-disk jobs.json bytes before an automatic repair rewrite."""
 +    recovery_dir = jobs_file.parent / "recovery"
@@ -136,3 +17,80 @@ diff --git a/cron/jobs.py b/cron/jobs.py
 +    final_path = recovery_dir / (
 +        f"jobs.json.{time.time_ns()}.{os.getpid()}.{safe_reason}.original"
 +    )
++    fd, tmp_name = tempfile.mkstemp(
++        prefix=f".{final_path.name}.",
++        suffix=".tmp",
++        dir=str(recovery_dir),
++    )
++    try:
++        with open(jobs_file, "rb") as src, os.fdopen(fd, "wb") as dst:
++            while True:
++                chunk = src.read(1024 * 1024)
++                if not chunk:
++                    break
++                dst.write(chunk)
++            dst.flush()
++            os.fsync(dst.fileno())
++
++        os.replace(tmp_name, final_path)
++
++        # The accepted Hermes pin has no shared fsync_directory helper.
++        # On POSIX, fsync the directory entry after publication. Windows does
++        # not support opening directories this way; the artifact file itself
++        # has already been flushed and fsynced before os.replace().
++        if os.name != "nt":
++            dir_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
++            dir_fd = os.open(str(recovery_dir), dir_flags)
++            try:
++                os.fsync(dir_fd)
++            finally:
++                os.close(dir_fd)
++    except Exception:
++        try:
++            os.close(fd)
++        except OSError:
++            pass
++        try:
++            os.unlink(tmp_name)
++        except OSError:
++            pass
++        raise
++
++    return final_path
++
++
+ def load_jobs() -> List[Dict[str, Any]]:
+     """Load all jobs from storage."""
+     jobs_file = _current_cron_store().jobs_file
+@@ -1415,8 +1469,15 @@
+             # hit control-character corruption (_strict_retry) or the store was
+             # an id-keyed map. save_jobs() re-emits the list shape every reader
+             # expects.
+-            save_jobs(jobs)
+-            if needs_shape_repair:
++            if needs_shape_repair and _strict_retry:
++                _repair_reason = "id-keyed-map-control-character-fallback"
++            elif needs_shape_repair:
++                _repair_reason = "id-keyed-map"
++            else:
++                _repair_reason = "control-character-fallback"
++            _preserve_jobs_file_before_repair(jobs_file, _repair_reason)
++            save_jobs(jobs)
++            if needs_shape_repair:
+                 logger.warning("Auto-repaired jobs.json (id-keyed jobs map flattened to list)")
+             else:
+                 logger.warning("Auto-repaired jobs.json (had invalid control characters)")
+@@ -1425,9 +1486,10 @@
+     if isinstance(data, list):
+         # Bare array — likely saved/edited outside save_jobs(). Wrap it back
+         # into the expected {"jobs": [...]} structure.
+-        if data:
+-            save_jobs(data)
+-            logger.warning("Auto-repaired jobs.json (bare list wrapped as dict)")
++        if data:
++            _preserve_jobs_file_before_repair(jobs_file, "bare-list")
++            save_jobs(data)
++            logger.warning("Auto-repaired jobs.json (bare list wrapped as dict)")
+         _record_load_stamp(pre_read_stamp)
+         return data
+ 
