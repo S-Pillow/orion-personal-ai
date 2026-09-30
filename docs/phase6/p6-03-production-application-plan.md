@@ -160,3 +160,39 @@ The production source-application unit is accepted only when all of the followin
 - external rollback backup and manifest exist.
 
 This acceptance does not itself prove live gateway activation. That is a later explicit gate.
+
+## 9. Production source-application result
+
+Status: **SOURCE APPLIED AND QUALIFIED / LIVE ACTIVATION NOT YET AUTHORIZED**
+
+Accepted operator run: 2026-09-30.
+
+Verified production evidence:
+
+- Orion head at execution: `2dab3f664253bb516eba40c9401efb380c028bf6`;
+- installed Hermes HEAD remained `5fc308a70719a83cccdbba4c0e39c23f5a8239d5`;
+- qualified patch blob remained `539651113098298e3f45241636701bd25d7893ef`;
+- original installed `cron/jobs.py` SHA-256 was `dd5c7c601e23e5058e93d824b17ff426ed2cc5113c20d431ea4937274be59923`;
+- patched installed `cron/jobs.py` SHA-256 is `3766fe600b48d28130c4261ec9402bad1969bcc9218ef566610530bd2bdbcfa5`;
+- external rollback backup: `C:\Users\spill\AppData\Local\hermes\orion-compat-backups\p6-03-20260930-074533\cron-jobs.py.original`;
+- manifest: `C:\Users\spill\AppData\Local\hermes\orion-compat-backups\p6-03-20260930-074533\manifest.json`;
+- changed production source scope was exactly `cron/jobs.py`;
+- installed patched module compile passed;
+- the full revised P6-03 fixture suite passed against the installed patched source using a disposable `HERMES_HOME`;
+- healthy, bare-list, ID-map, control-character, combined-repair, race-recheck, invalid JSON, scalar, unreadable, preservation-failure, and repair-write-failure fixtures all passed;
+- external network attempts: 0;
+- scheduler started: false;
+- job run invoked: false;
+- COMPANION mutation: false;
+- Orion repository unchanged during application;
+- Hermes HEAD unchanged during application;
+- COMPANION cron metadata unchanged;
+- gateway restarted: false;
+- live activation: false;
+- temporary disposable qualification artifacts were removed after success.
+
+P6-03 production source application is therefore accepted. The remaining boundary is
+**live activation**: a running Hermes gateway may still have the pre-patch `cron.jobs`
+module loaded in memory. Activation requires a separate read-only supervisor/process
+reconciliation followed by separately authorized bounded restart/activation. No reminder
+creation or corrupt-store test against COMPANION is required for activation.
