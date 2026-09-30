@@ -71,6 +71,20 @@ jobs:
             Write-Host "WINPS_PARSE_PASS=$($script.Name)"
           }
 
+      - name: Enforce ASCII-only Windows PowerShell wrappers
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $scripts = Get-ChildItem scripts/phase6 -Filter *.ps1 -File
+          foreach ($script in $scripts) {
+            $bytes = [System.IO.File]::ReadAllBytes($script.FullName)
+            $bad = $bytes | Where-Object { $_ -gt 127 }
+            if ($bad) {
+              throw "Non-ASCII byte found in Windows PowerShell wrapper: $($script.Name)"
+            }
+            Write-Host "ASCII_ONLY_PASS=$($script.Name)"
+          }
+
       - name: Compile and smoke Phase 6 Python helpers
         shell: pwsh
         run: |
