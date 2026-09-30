@@ -130,32 +130,7 @@ jobs:
             '^docs/phase6/',
             '^scripts/phase6/',
             '^compat/hermes/',
-            '^\.github/workflows/phase6-prep-verify\.yml          )
-
-          $base = '${{ github.event.pull_request.base.sha }}'
-          if (-not $base) {
-            $base = 'HEAD~1'
-          }
-
-          $changed = git diff --name-only "$base...HEAD"
-          if ($LASTEXITCODE -ne 0) {
-            throw "git diff failed for Phase 6 prep scope check"
-          }
-          foreach ($path in $changed) {
-            $ok = $false
-            foreach ($pattern in $allowed) {
-              if ($path -match $pattern) {
-                $ok = $true
-                break
-              }
-            }
-            if (-not $ok) {
-              throw "Unexpected Phase 6 prep path: $path"
-            }
-          }
-
-          Write-Host 'PHASE6_PREP_SCOPE=PASS'
-
+            '^\.github/workflows/phase6-prep-verify\.yml$'
           )
 
           $base = '${{ github.event.pull_request.base.sha }}'
