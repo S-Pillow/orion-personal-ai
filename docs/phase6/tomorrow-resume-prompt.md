@@ -1,6 +1,6 @@
-# Tomorrow Resume Prompt — Orion Phase 6
+# Resume Prompt - Orion Phase 6
 
-Use the following prompt to resume work cleanly:
+Use this prompt to resume the Orion Personal AI project cleanly.
 
 ---
 
@@ -8,77 +8,151 @@ We are resuming the Orion Personal AI project.
 
 Repository: `S-Pillow/orion-personal-ai`
 
-Start by reconciling GitHub, not by guessing from memory.
+Start by reconciling GitHub and the installed Hermes state. Do not guess from memory.
 
-Current durable checkpoint:
+## Current durable checkpoint
 
-- `main` was updated through PR #53 after PR #52/P5-03C merged.
-- Phase 5 vault-action/reconnect work is closed through P5-03C.
-- Phase 4 live voice acceptance remains parked by owner decision. Do not resume or redesign voice unless I explicitly ask.
-- Persistent Goal Mode remains deferred/discussion-only. Do not implement it.
-- P6-01 reminder discovery is complete.
+- Phase 5 is closed through P5-03C.
+- Phase 4 live voice acceptance remains parked by owner decision. Do not resume or redesign voice unless explicitly requested.
+- Persistent Goal Mode remains deferred/discussion-only.
 - Accepted Hermes pin remains:
   - tag `v2026.8.27`
   - package `0.20.6`
   - commit `5fc308a70719a83cccdbba4c0e39c23f5a8239d5`
-- P6-01 architecture decision: **native Hermes owns reminder scheduling**. Do not add a second scheduler, daemon, timer service, or scheduler-owning plugin.
-- P6-01 demonstrated gaps:
-  1. corrupt-but-repairable jobs.json can be auto-rewritten without proven exact pre-repair preservation;
-  2. one-shots more than 120 seconds late are retired with a diagnostic rather than fired;
-  3. live executions.db has no scheduled-time column;
-  4. live executions.db has no durable delivery-outcome column;
-  5. Orion HUD reminder projection is not implemented;
-  6. local triggers must reuse Hermes script/no-agent/monitor mechanisms if enabled.
-- Live read-only verification confirmed the COMPANION executions table fields:
-  `id, job_id, source, process_id, pid, process_started_at, status, claimed_at, started_at, finished_at, error`.
-- The prep branch is:
+- Native Hermes is the authoritative reminder scheduler. Do not add a second scheduler, daemon, timer service, or scheduler-owning plugin.
+- Phase 6 prep branch:
   `prep/phase6-p6-02-p6-07`
+- PR #54 remains the Phase 6 preparation/integration PR.
 
-Read these files from that branch before proposing work:
+## P6-02
+
+P6-02 transport qualification is complete.
+
+The selected transport is a bounded Orion adapter over the native structured
+`tools.cronjob_tools.cronjob()` implementation, explicitly bound to the
+COMPANION `HERMES_HOME`.
+
+Do not use direct `jobs.json` writes or human-formatted CLI parsing as the primary adapter.
+
+## P6-03 current state
+
+P6-03 source-controlled compatibility work is substantially complete.
+
+The installed Hermes checkout still has Git HEAD:
+
+`5fc308a70719a83cccdbba4c0e39c23f5a8239d5`
+
+The qualified local P6-03 compatibility patch has been applied to installed:
+
+`cron/jobs.py`
+
+Installed patched SHA-256:
+
+`3766fe600b48d28130c4261ec9402bad1969bcc9218ef566610530bd2bdbcfa5`
+
+The source-application run passed the full revised disposable fixture suite against
+the installed patched source.
+
+Verified fixture coverage includes:
+
+- healthy store;
+- bare-list repair;
+- ID-keyed-map repair;
+- control-character repair;
+- combined ID-map + control-character repair;
+- race re-check proving repair re-reads under Hermes' existing jobs lock;
+- invalid JSON;
+- wrong top-level scalar;
+- unreadable-store simulation;
+- preservation-write failure;
+- repair-write failure.
+
+The patch preserves the exact byte sequence that produced the repair decision,
+records its SHA-256 in the recovery artifact name, and fails closed if preservation
+cannot complete.
+
+Production source application backup:
+
+`C:\Users\spill\AppData\Local\hermes\orion-compat-backups\p6-03-20260930-074533\cron-jobs.py.original`
+
+Manifest:
+
+`C:\Users\spill\AppData\Local\hermes\orion-compat-backups\p6-03-20260930-074533\manifest.json`
+
+The source application did **not** restart the Hermes gateway. Therefore live
+activation is still pending.
+
+## Prepared live-activation work
+
+The following are prepared ahead of time:
+
+1. `docs/phase6/p6-03-live-activation-plan.md`
+2. `scripts/phase6/Invoke-P6-03-LiveActivationDiscovery.ps1`
+3. `scripts/phase6/Invoke-P6-03-LiveActivation.ps1`
+
+The read-only discovery gate must run before restart authorization.
+
+Discovery must identify the exact COMPANION gateway ownership:
+
+- profile-scoped Windows Scheduled Task;
+- Startup-folder fallback;
+- manual/unsupervised process;
+- Windows service;
+- or an ambiguous/unexpected state.
+
+The prepared generic activation script supports only:
+
+- `windows-scheduled-task`
+- `windows-startup`
+
+If discovery shows any other mode, do not force that script. Prepare a
+mode-specific activation unit instead.
+
+The activation script also refuses to restart if COMPANION `cron/jobs.json`
+contains any jobs, to avoid accidentally exercising real reminder work during
+the activation gate.
+
+The eventual restart uses Hermes' own accepted Windows lifecycle implementation,
+`hermes_cli.gateway_windows.restart()`, not ad hoc taskkill/start commands.
+
+After restart, acceptance requires:
+
+- a new live gateway PID;
+- unchanged accepted Hermes Git HEAD;
+- unchanged expected Hermes dirty-file set;
+- unchanged P6-03 patch SHA-256;
+- COMPANION jobs still absent/empty;
+- a fresh COMPANION ticker heartbeat after restart, establishing that the new
+  post-patch gateway reached scheduler operation.
+
+Restart itself still requires explicit owner authorization.
+
+## Files to read first
+
+Read these files from the prep branch before proposing work:
 
 1. `docs/phase6/p6-01-closure-and-p6-02-07-plan.md`
 2. `docs/phase6/p6-02-reminder-contract-adapter-research.md`
-3. `scripts/phase6/Invoke-P6-ReadOnlyPreflight.ps1`
+3. `docs/phase6/p6-03-production-application-plan.md`
+4. `docs/phase6/p6-03-live-activation-plan.md`
+5. `scripts/phase6/Invoke-P6-03-LiveActivationDiscovery.ps1`
+6. `scripts/phase6/Invoke-P6-03-LiveActivation.ps1`
 
-Our proven workflow is native Windows PowerShell + Git/GitHub. There is no Builder Agent. Work gate-by-gate:
+## Resume workflow
 
-1. read/reconcile exact repo and installed state;
-2. give me one bounded PowerShell block at a time when local evidence is needed;
-3. I run it and paste the complete output;
-4. interpret before issuing the next command;
-5. discovery is read-only first;
-6. implementation is separately authorized;
-7. test progressively;
-8. GitHub is the durable record;
-9. PR readiness and merge are separate boundaries.
+Our proven workflow is native Windows PowerShell + Git/GitHub. There is no Builder Agent.
 
-Begin with **P6-02 — Reminder Contract & Hermes Adapter Design**, not implementation.
+1. Reconcile the exact PR #54 head and CI state.
+2. Confirm the local Orion prep branch is clean and at that head.
+3. Run the read-only P6-03 live-activation discovery gate.
+4. Interpret the complete output.
+5. If the discovered supervisor mode is supported, request separate explicit restart authorization.
+6. Run only the bounded activation gate matching the discovered supervisor mode.
+7. Record activation acceptance in GitHub.
+8. Then decide whether P6-03 is fully closed and proceed to P6-04 durable per-run reminder evidence.
 
-First task tomorrow:
-
-- verify the prep branch still descends from current main;
-- review the prepared Phase 6 plan and research;
-- run or ask me to run:
-  `scripts/phase6/Invoke-P6-ReadOnlyPreflight.ps1 -Ticket P6-02`
-- then resolve the adapter transport decision.
-
-The leading adapter hypothesis is a bounded structured call into the accepted Hermes cron/tool implementation because `hermes cron` delegates to the same native code, while human CLI output is brittle and the dashboard REST routes are not assumed to exist on the accepted 8642 gateway. Treat that as a hypothesis to prove, not an already accepted implementation decision.
-
-P6-02 must freeze:
-
-- reminder identity;
-- one-shot/recurring scope;
-- timezone semantics;
-- create/list/pause/resume/cancel behavior;
-- state vocabulary and authoritative source for each state;
-- manual-off/restart/missed behavior;
-- duplicate/idempotency wording;
-- delivery target rules;
-- browser reconnect behavior;
-- exact Hermes adapter surface.
-
-Do not create a real COMPANION reminder during P6-02 unless I separately authorize it.
-
-After P6-02, follow the prepared P6-03 through P6-07 sequence. Do not skip the corrupt-store preservation and per-run audit gaps just to get a UI working quickly.
+Do not create a real COMPANION reminder during P6-03 activation.
+Do not begin P6-04 until P6-03 closure is recorded.
+Do not touch Phase 4 voice or Persistent Goal Mode unless separately requested.
 
 ---
