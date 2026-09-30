@@ -19,6 +19,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
       - name: Parse Phase 6 PowerShell scripts
         shell: pwsh
         run: |
@@ -65,6 +69,33 @@ jobs:
               throw "Windows PowerShell parse failure: $($script.Name)"
             }
             Write-Host "WINPS_PARSE_PASS=$($script.Name)"
+          }
+
+      - name: Compile and smoke Phase 6 Python helpers
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m py_compile scripts/phase6/p6-readonly-schema-probe.py
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Phase 6 Python compile failed.'
+          }
+
+          $db = Join-Path $env:RUNNER_TEMP 'p6-schema-smoke.db'
+          python -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute('CREATE TABLE executions (id TEXT PRIMARY KEY, job_id TEXT NOT NULL, status TEXT NOT NULL)'); c.commit(); c.close()" $db
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Phase 6 SQLite smoke fixture creation failed.'
+          }
+
+          $output = python scripts/phase6/p6-readonly-schema-probe.py $db
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Phase 6 schema probe smoke failed.'
+          }
+          $output
+          if ($output -notcontains 'SQLITE_MODE=read_only') {
+            throw 'Schema probe did not confirm read-only open.'
+          }
+          if ($output -notcontains 'TABLE=executions;present=True') {
+            throw 'Schema probe did not observe executions table.'
           }
 
       - name: Guard prep-only scope
