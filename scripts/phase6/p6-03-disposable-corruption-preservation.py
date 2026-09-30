@@ -48,10 +48,18 @@ def _preserve_jobs_file_before_repair(jobs_file: Path, reason: str) -> Path:
             dst.flush()
             os.fsync(dst.fileno())
         os.replace(tmp_name, final_path)
-        try:
-            fsync_directory(recovery_dir)
-        except OSError:
-            pass
+        # The accepted Hermes pin does not provide utils.fsync_directory.
+        # On POSIX, fsync the containing directory so the published artifact's
+        # directory entry is durable before repair may overwrite jobs.json.
+        # Windows does not support opening directories this way; the file
+        # itself has already been flushed and fsynced before os.replace().
+        if os.name != "nt":
+            dir_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+            dir_fd = os.open(str(recovery_dir), dir_flags)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
     except Exception:
         try:
             os.close(fd)
