@@ -78,19 +78,38 @@ if (-not (Test-Path -LiteralPath $Patch)) {
     throw "STOP: P6-03 compatibility patch not found: $Patch"
 }
 
+$PatchAttr = ((& git -C $RepoRoot check-attr eol -- "compat/hermes/p6-03-jobs-corruption-preservation.patch") -join "")
+if ($LASTEXITCODE -ne 0 -or $PatchAttr -notmatch "eol: lf$") {
+    throw "STOP: P6-03 compatibility patch must be governed by eol=lf; observed: $PatchAttr"
+}
+
 $Stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $TempBase = Join-Path $env:TEMP "orion-p6-03-compat-$Stamp"
 $SourceRoot = Join-Path $TempBase "hermes-source"
 $DisposableHome = Join-Path $TempBase "hermes-home"
 $ArchivePath = Join-Path $TempBase "hermes-source.tar"
+$NormalizedPatch = Join-Path $TempBase "p6-03-jobs-corruption-preservation.lf.patch"
 
 New-Item -ItemType Directory -Path $SourceRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $DisposableHome -Force | Out-Null
+
+$PatchBytes = [System.IO.File]::ReadAllBytes($Patch)
+$PatchCrBytes = @($PatchBytes | Where-Object { $_ -eq 13 }).Count
+$PatchText = [System.IO.File]::ReadAllText($Patch)
+$PatchText = $PatchText.Replace("`r`n", "`n")
+if ($PatchText.Contains("`r")) {
+    throw "STOP: compatibility patch contains a bare CR byte."
+}
+$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText($NormalizedPatch, $PatchText, $Utf8NoBom)
 
 Write-Host "P6_03_COMPAT_REPO_BRANCH=$RepoBranch"
 Write-Host "P6_03_COMPAT_REPO_HEAD=$RepoHead"
 Write-Host "P6_03_COMPAT_HERMES_HEAD=$HermesHeadBefore"
 Write-Host "P6_03_COMPAT_PATCH=$Patch"
+Write-Host "P6_03_COMPAT_PATCH_ATTRIBUTE_EOL=lf"
+Write-Host "P6_03_COMPAT_PATCH_CR_BYTES_BEFORE_NORMALIZATION=$PatchCrBytes"
+Write-Host "P6_03_COMPAT_PATCH_NORMALIZED_COPY=$NormalizedPatch"
 Write-Host "P6_03_COMPAT_INSTALLED_HERMES_MUTATION_AUTHORIZED=false"
 Write-Host "P6_03_COMPAT_COMPANION_MUTATION_AUTHORIZED=false"
 Write-Host "P6_03_COMPAT_DISPOSABLE_SOURCE=$SourceRoot"
@@ -115,13 +134,13 @@ if ($LASTEXITCODE -ne 0) {
     throw "STOP: failed to commit disposable baseline."
 }
 
-& git -C $SourceRoot apply --check $Patch
+& git -C $SourceRoot apply --check $NormalizedPatch
 if ($LASTEXITCODE -ne 0) {
     throw "STOP: source-controlled P6-03 patch does not apply cleanly to accepted Hermes pin."
 }
 Write-Host "P6_03_COMPAT_GIT_APPLY_CHECK=PASS"
 
-& git -C $SourceRoot apply $Patch
+& git -C $SourceRoot apply $NormalizedPatch
 if ($LASTEXITCODE -ne 0) {
     throw "STOP: source-controlled P6-03 patch apply failed."
 }
