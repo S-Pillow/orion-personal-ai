@@ -185,26 +185,44 @@ Testing must use a disposable profile/root, never the live COMPANION `jobs.json`
 Required result: original bytes remain inspectable whenever repair is attempted; unrepairable state fails closed.
 
 
-### P6-03 disposable qualification result
+### P6-03 qualification result
 
-Status: **DISPOSABLE IMPLEMENTATION QUALIFIED / PRODUCTION PATCH NOT AUTHORIZED**
+Status: **SOURCE-CONTROLLED COMPATIBILITY PATCH QUALIFIED / PRODUCTION PATCH NOT AUTHORIZED**
 
-Accepted qualification head: `bcec42f4a18514a7896fc6ac90f6c7a758fc7742`.
+Accepted qualification head: `6097e1fd1f9ab6856aac4c6f374110583625a7fd`.
 
-The disposable qualification archived the exact accepted Hermes commit into a
-temporary source tree, patched only that temporary copy, bound a disposable
-`HERMES_HOME`, and exercised the repair boundary without modifying installed
-Hermes or the COMPANION profile.
+P6-03 qualification now covers both the disposable implementation behavior and the
+source-controlled compatibility patch against the exact accepted Hermes pin
+`5fc308a70719a83cccdbba4c0e39c23f5a8239d5`.
 
-Accepted evidence:
+The compatibility review:
+
+- archived the exact accepted Hermes commit into a fresh disposable source tree;
+- verified the committed patch is governed by `eol=lf`;
+- normalized a disposable patch copy before `git apply` so Windows
+  `core.autocrlf` cannot alter qualification behavior;
+- proved `git apply --check` succeeds against the accepted pin;
+- proved `git diff --check` succeeds after application;
+- proved the patch changes only `cron/jobs.py`;
+- bound the test run to a disposable `HERMES_HOME`;
+- did not modify installed Hermes or the COMPANION profile.
+
+Accepted functional evidence:
 
 - healthy canonical `jobs.json` loaded without creating a recovery artifact;
 - non-empty bare-list input was preserved byte-for-byte before canonical repair;
 - ID-keyed-map input was preserved byte-for-byte before canonical repair;
 - control-character fallback input was preserved byte-for-byte before canonical repair;
+- combined ID-keyed-map + control-character corruption was preserved and repaired;
+- a concurrent-change fixture proved the repair path re-reads under Hermes' existing
+  jobs lock and preserves the current locked bytes rather than stale pre-lock bytes;
+- every recovery artifact contained the SHA-256 of the exact preserved source bytes;
 - invalid/unrepairable JSON remained unchanged and failed closed;
 - wrong top-level scalar remained unchanged and failed closed;
+- unreadable-store simulation failed closed without a repair artifact;
 - forced preservation failure blocked repair and left the original untouched;
+- forced repair-write failure preserved the original recovery artifact before the
+  write failure propagated;
 - no external network attempt was observed;
 - no scheduler was started;
 - no job run was invoked;
@@ -215,22 +233,26 @@ Accepted evidence:
 
 The qualified implementation seam is therefore:
 
-1. preserve the exact on-disk `jobs.json` bytes immediately before an automatic
-   repair rewrite;
-2. publish the recovery artifact in a profile-local `cron/recovery/` location;
-3. encode a bounded repair reason in the artifact filename;
-4. flush and fsync the artifact contents before publication;
-5. use atomic rename publication where supported;
-6. on POSIX, fsync the recovery directory after publication;
-7. on Windows, rely on the artifact file fsync plus rename publication because
+1. read the exact `jobs.json` byte sequence used for the repair decision;
+2. if repair is required from an unlocked read, re-enter Hermes' existing
+   `_jobs_lock()` and re-read before preserving or rewriting;
+3. preserve the exact locked-read bytes in profile-local `cron/recovery/`;
+4. include a bounded repair reason and exact source SHA-256 in the artifact name;
+5. flush and fsync the artifact contents before publication;
+6. use atomic rename publication where supported;
+7. on POSIX, fsync the recovery directory after publication;
+8. on Windows, rely on the artifact file fsync plus rename publication because
    directory fsync is not supported through the same mechanism;
-8. fail closed if preservation cannot complete;
-9. do not change parse tolerance, scheduler ownership, CRUD semantics, dispatch,
-   delivery, or the repair-free peek path.
+9. fail closed if preservation cannot complete;
+10. if the later repair write fails, retain the recovery artifact and propagate
+    the write failure;
+11. do not change scheduler ownership, due computation, CRUD semantics, dispatch,
+    delivery, or the repair-free peek path.
 
-The qualification does **not** authorize modifying the installed Hermes checkout
-or COMPANION runtime. A source-controlled compatibility patch against the exact
-accepted Hermes pin must be reviewed separately before any production mutation.
+This qualification does **not** authorize modifying the installed Hermes checkout
+or COMPANION runtime. Production application of the qualified compatibility patch
+requires a separate explicit authorization and must preserve the accepted Hermes
+pin plus the pre-existing approved compatibility artifacts.
 
 ## 6. P6-04 — Durable Per-Run Reminder Evidence
 
