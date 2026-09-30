@@ -53,7 +53,7 @@ function Show-PinnedMatches {
     }
 }
 
-Section "Phase 6 / $Ticket — read-only baseline"
+Section "Phase 6 / $Ticket - read-only baseline"
 
 $OrionRoot = (& git rev-parse --show-toplevel).Trim()
 if (-not $OrionRoot) {
