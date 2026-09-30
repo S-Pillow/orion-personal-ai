@@ -149,30 +149,33 @@ if (Test-Path -LiteralPath $CompanionCron -PathType Container) {
 Section "Execution DB schema only"
 
 if ((Test-Path -LiteralPath $ExecutionDb -PathType Leaf) -and $Python) {
-    $SchemaProbe = @'
-import sqlite3
-import sys
-from pathlib import Path
-
-db = Path(sys.argv[1]).resolve()
-conn = sqlite3.connect(db.as_uri() + "?mode=ro", uri=True)
-try:
-    print("SQLITE_MODE=read_only")
-    for table in ("executions", "cron_incidents"):
-        found = conn.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
-            (table,),
-        ).fetchone()
-        print(f"TABLE={table};present={bool(found)}")
-        if found:
-            for row in conn.execute(f"PRAGMA table_info({table})"):
-                print(
-                    f"SCHEMA={table};name={row[1]};type={row[2]};"
-                    f"notnull={row[3]};pk={row[5]}"
-                )
-finally:
-    conn.close()
-'@
+    # Build the Python probe from ordinary PowerShell strings instead of a
+    # here-string. This keeps the script compatible with both Windows
+    # PowerShell 5.1 and PowerShell 7 parsing.
+    $SchemaProbe = @(
+        'import sqlite3'
+        'import sys'
+        'from pathlib import Path'
+        ''
+        'db = Path(sys.argv[1]).resolve()'
+        'conn = sqlite3.connect(db.as_uri() + "?mode=ro", uri=True)'
+        'try:'
+        '    print("SQLITE_MODE=read_only")'
+        '    for table in ("executions", "cron_incidents"):'
+        '        found = conn.execute('
+        '            "SELECT 1 FROM sqlite_master WHERE type=''table'' AND name=?",'
+        '            (table,),'
+        '        ).fetchone()'
+        '        print(f"TABLE={table};present={bool(found)}")'
+        '        if found:'
+        '            for row in conn.execute(f"PRAGMA table_info({table})"):'
+        '                print('
+        '                    f"SCHEMA={table};name={row[1]};type={row[2]};"'
+        '                    f"notnull={row[3]};pk={row[5]}"'
+        '                )'
+        'finally:'
+        '    conn.close()'
+    ) -join [Environment]::NewLine
     $SchemaProbe | python - $ExecutionDb
     if ($LASTEXITCODE -ne 0) {
         throw "Read-only SQLite schema probe failed."
