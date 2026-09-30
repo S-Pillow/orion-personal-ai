@@ -184,6 +184,54 @@ Testing must use a disposable profile/root, never the live COMPANION `jobs.json`
 
 Required result: original bytes remain inspectable whenever repair is attempted; unrepairable state fails closed.
 
+
+### P6-03 disposable qualification result
+
+Status: **DISPOSABLE IMPLEMENTATION QUALIFIED / PRODUCTION PATCH NOT AUTHORIZED**
+
+Accepted qualification head: `bcec42f4a18514a7896fc6ac90f6c7a758fc7742`.
+
+The disposable qualification archived the exact accepted Hermes commit into a
+temporary source tree, patched only that temporary copy, bound a disposable
+`HERMES_HOME`, and exercised the repair boundary without modifying installed
+Hermes or the COMPANION profile.
+
+Accepted evidence:
+
+- healthy canonical `jobs.json` loaded without creating a recovery artifact;
+- non-empty bare-list input was preserved byte-for-byte before canonical repair;
+- ID-keyed-map input was preserved byte-for-byte before canonical repair;
+- control-character fallback input was preserved byte-for-byte before canonical repair;
+- invalid/unrepairable JSON remained unchanged and failed closed;
+- wrong top-level scalar remained unchanged and failed closed;
+- forced preservation failure blocked repair and left the original untouched;
+- no external network attempt was observed;
+- no scheduler was started;
+- no job run was invoked;
+- Orion HEAD/worktree remained unchanged;
+- installed Hermes HEAD/worktree remained unchanged;
+- COMPANION cron metadata remained unchanged;
+- successful disposable artifacts were removed after qualification.
+
+The qualified implementation seam is therefore:
+
+1. preserve the exact on-disk `jobs.json` bytes immediately before an automatic
+   repair rewrite;
+2. publish the recovery artifact in a profile-local `cron/recovery/` location;
+3. encode a bounded repair reason in the artifact filename;
+4. flush and fsync the artifact contents before publication;
+5. use atomic rename publication where supported;
+6. on POSIX, fsync the recovery directory after publication;
+7. on Windows, rely on the artifact file fsync plus rename publication because
+   directory fsync is not supported through the same mechanism;
+8. fail closed if preservation cannot complete;
+9. do not change parse tolerance, scheduler ownership, CRUD semantics, dispatch,
+   delivery, or the repair-free peek path.
+
+The qualification does **not** authorize modifying the installed Hermes checkout
+or COMPANION runtime. A source-controlled compatibility patch against the exact
+accepted Hermes pin must be reviewed separately before any production mutation.
+
 ## 6. P6-04 — Durable Per-Run Reminder Evidence
 
 ### Objective
