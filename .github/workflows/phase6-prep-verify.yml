@@ -89,9 +89,18 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          python -m py_compile scripts/phase6/p6-readonly-schema-probe.py
-          if ($LASTEXITCODE -ne 0) {
-            throw 'Phase 6 Python compile failed.'
+
+          $helpers = Get-ChildItem scripts/phase6 -Filter *.py -File
+          if (-not $helpers) {
+            throw 'No Phase 6 Python helpers found.'
+          }
+
+          foreach ($helper in $helpers) {
+            python -m py_compile $helper.FullName
+            if ($LASTEXITCODE -ne 0) {
+              throw "Phase 6 Python compile failed: $($helper.Name)"
+            }
+            Write-Host "PY_COMPILE_PASS=$($helper.Name)"
           }
 
           $db = Join-Path $env:RUNNER_TEMP 'p6-schema-smoke.db'
