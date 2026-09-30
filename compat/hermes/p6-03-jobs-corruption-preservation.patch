@@ -1,43 +1,79 @@
 diff --git a/cron/jobs.py b/cron/jobs.py
 --- a/cron/jobs.py
 +++ b/cron/jobs.py
-@@ -1353,6 +1353,60 @@
-         return json.loads(raw, strict=False), True
+@@ -8,8 +8,9 @@
+ import contextlib
+ import copy
+ from contextvars import ContextVar
+-from dataclasses import dataclass
+-import json
++from dataclasses import dataclass
++import hashlib
++import json
+ import logging
+ import shutil
+ import tempfile
+@@ -1336,21 +1337,66 @@
+ # Job CRUD Operations
+ # =============================================================================
  
- 
-+def _preserve_jobs_file_before_repair(jobs_file: Path, reason: str) -> Path:
-+    """Preserve exact on-disk jobs.json bytes before an automatic repair rewrite."""
+-def _parse_jobs_file(jobs_file: Path) -> Tuple[Any, bool]:
+-    """Tolerantly parse jobs.json; shared by load_jobs and the save-path peek.
+-
+-    Returns ``(data, used_strict_fallback)``. utf-8-sig absorbs a Windows
+-    BOM; a strict parse failure is retried with ``strict=False`` to survive
+-    bare control characters in string values. IO errors from the open and
+-    parse errors from the fallback propagate to the caller, which decides
+-    between repair (load_jobs) and bail-out (peek).
+-    """
+-    with open(jobs_file, "r", encoding="utf-8-sig") as f:
+-        raw = f.read()
+-    try:
+-        return json.loads(raw), False
+-    except json.JSONDecodeError:
+-        return json.loads(raw, strict=False), True
++def _parse_jobs_bytes(raw: bytes) -> Tuple[Any, bool]:
++    """Tolerantly parse exact jobs.json bytes and report strict-fallback use."""
++    text = raw.decode("utf-8-sig")
++    try:
++        return json.loads(text), False
++    except json.JSONDecodeError:
++        return json.loads(text, strict=False), True
++
++
++def _parse_jobs_file(jobs_file: Path) -> Tuple[Any, bool]:
++    """Repair-free file parser shared with the save-path peek."""
++    return _parse_jobs_bytes(jobs_file.read_bytes())
++
++
++def _preserve_jobs_bytes_before_repair(
++    jobs_file: Path, original_bytes: bytes, reason: str
++) -> Path:
++    """Durably preserve the exact bytes that produced an automatic repair decision."""
 +    recovery_dir = jobs_file.parent / "recovery"
 +    recovery_dir.mkdir(parents=True, exist_ok=True)
 +
 +    safe_reason = re.sub(r"[^a-z0-9_-]+", "-", str(reason).strip().lower()).strip("-")
 +    if not safe_reason:
 +        safe_reason = "unspecified-repair"
-+
++    source_hash = hashlib.sha256(original_bytes).hexdigest()
 +    final_path = recovery_dir / (
-+        f"jobs.json.{time.time_ns()}.{os.getpid()}.{safe_reason}.original"
++        f"jobs.json.{time.time_ns()}.{os.getpid()}.{safe_reason}."
++        f"{source_hash}.{uuid.uuid4().hex}.original"
 +    )
 +    fd, tmp_name = tempfile.mkstemp(
-+        prefix=f".{final_path.name}.",
-+        suffix=".tmp",
-+        dir=str(recovery_dir),
++        prefix=f".{final_path.name}.", suffix=".tmp", dir=str(recovery_dir)
 +    )
 +    try:
-+        with open(jobs_file, "rb") as src, os.fdopen(fd, "wb") as dst:
-+            while True:
-+                chunk = src.read(1024 * 1024)
-+                if not chunk:
-+                    break
-+                dst.write(chunk)
++        with os.fdopen(fd, "wb") as dst:
++            dst.write(original_bytes)
 +            dst.flush()
 +            os.fsync(dst.fileno())
-+
 +        os.replace(tmp_name, final_path)
 +
 +        # The accepted Hermes pin has no shared fsync_directory helper.
-+        # On POSIX, fsync the directory entry after publication. Windows does
-+        # not support opening directories this way; the artifact file itself
-+        # has already been flushed and fsynced before os.replace().
++        # On POSIX, fsync the published directory entry. Windows cannot open
++        # directories this way; the artifact file was already flushed/fsynced.
 +        if os.name != "nt":
 +            dir_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
 +            dir_fd = os.open(str(recovery_dir), dir_flags)
@@ -55,32 +91,51 @@ diff --git a/cron/jobs.py b/cron/jobs.py
 +        except OSError:
 +            pass
 +        raise
-+
 +    return final_path
-+
-+
+ 
+ 
  def load_jobs() -> List[Dict[str, Any]]:
-     """Load all jobs from storage."""
-     jobs_file = _current_cron_store().jobs_file
-@@ -1415,8 +1469,15 @@
-             # hit control-character corruption (_strict_retry) or the store was
-             # an id-keyed map. save_jobs() re-emits the list shape every reader
-             # expects.
+@@ -1366,7 +1412,8 @@
+         return []
+ 
+     try:
+-        data, _strict_retry = _parse_jobs_file(jobs_file)
++        raw_bytes = jobs_file.read_bytes()
++        data, _strict_retry = _parse_jobs_bytes(raw_bytes)
+     except IOError as e:
+         logger.error("IOError reading jobs.json: %s", e)
+         raise RuntimeError(f"Failed to read cron database: {e}") from e
+@@ -1410,13 +1457,22 @@
+                 if isinstance(v, dict)
+             ]
+             needs_shape_repair = True
+-        if jobs and (_strict_retry or needs_shape_repair):
+-            # Rewrite into the canonical {"jobs": [...]} form: either the parse
+-            # hit control-character corruption (_strict_retry) or the store was
+-            # an id-keyed map. save_jobs() re-emits the list shape every reader
+-            # expects.
 -            save_jobs(jobs)
 -            if needs_shape_repair:
++        if jobs and (_strict_retry or needs_shape_repair):
++            # Re-read under Hermes' existing jobs lock before preserving or
++            # rewriting. This prevents an unlocked parse from preserving stale
++            # bytes if a sibling writer changed jobs.json in between.
++            if not getattr(_jobs_lock_state, "depth", 0):
++                with _jobs_lock():
++                    return load_jobs()
 +            if needs_shape_repair and _strict_retry:
 +                _repair_reason = "id-keyed-map-control-character-fallback"
 +            elif needs_shape_repair:
 +                _repair_reason = "id-keyed-map"
 +            else:
 +                _repair_reason = "control-character-fallback"
-+            _preserve_jobs_file_before_repair(jobs_file, _repair_reason)
++            _preserve_jobs_bytes_before_repair(jobs_file, raw_bytes, _repair_reason)
 +            save_jobs(jobs)
 +            if needs_shape_repair:
                  logger.warning("Auto-repaired jobs.json (id-keyed jobs map flattened to list)")
              else:
                  logger.warning("Auto-repaired jobs.json (had invalid control characters)")
-@@ -1425,9 +1486,10 @@
+@@ -1425,9 +1481,13 @@
      if isinstance(data, list):
          # Bare array — likely saved/edited outside save_jobs(). Wrap it back
          # into the expected {"jobs": [...]} structure.
@@ -88,7 +143,10 @@ diff --git a/cron/jobs.py b/cron/jobs.py
 -            save_jobs(data)
 -            logger.warning("Auto-repaired jobs.json (bare list wrapped as dict)")
 +        if data:
-+            _preserve_jobs_file_before_repair(jobs_file, "bare-list")
++            if not getattr(_jobs_lock_state, "depth", 0):
++                with _jobs_lock():
++                    return load_jobs()
++            _preserve_jobs_bytes_before_repair(jobs_file, raw_bytes, "bare-list")
 +            save_jobs(data)
 +            logger.warning("Auto-repaired jobs.json (bare list wrapped as dict)")
          _record_load_stamp(pre_read_stamp)
