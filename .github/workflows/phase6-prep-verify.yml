@@ -43,6 +43,30 @@ jobs:
             Write-Host "PARSE_PASS=$($script.Name)"
           }
 
+      - name: Parse Phase 6 scripts with Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $scripts = Get-ChildItem scripts/phase6 -Filter *.ps1 -File
+          if (-not $scripts) {
+            throw 'No Phase 6 PowerShell scripts found.'
+          }
+
+          foreach ($script in $scripts) {
+            $tokens = $null
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              $script.FullName,
+              [ref]$tokens,
+              [ref]$errors
+            )
+            if ($errors.Count -gt 0) {
+              $errors | Format-List
+              throw "Windows PowerShell parse failure: $($script.Name)"
+            }
+            Write-Host "WINPS_PARSE_PASS=$($script.Name)"
+          }
+
       - name: Guard prep-only scope
         shell: pwsh
         run: |
