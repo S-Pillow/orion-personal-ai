@@ -142,27 +142,51 @@ def main() -> int:
     if listed.get("count") != 1:
         raise AssertionError(f"list-after-create: expected one job: {listed!r}")
     jobs = listed.get("jobs")
-    if not isinstance(jobs, list) or len(jobs) != 1 or jobs[0].get("id") != job_id:
+    if not isinstance(jobs, list) or len(jobs) != 1 or jobs[0].get("job_id") != job_id:
         raise AssertionError(f"list-after-create: wrong job projection: {listed!r}")
+    if jobs[0].get("schedule") != "once in 30m":
+        raise AssertionError(f"list-after-create: unexpected schedule projection: {listed!r}")
     emit("P6_02_LIST_STRUCTURED", True)
+    emit("P6_02_LIST_JOB_ID_FIELD", "job_id")
 
-    paused = require_success("pause", cronjob(action="pause", job_id=job_id, reason="P6-02 qualification"))
-    paused_job = paused.get("job") if isinstance(paused.get("job"), dict) else paused
-    paused_state = paused_job.get("state") if isinstance(paused_job, dict) else None
-    if paused_state not in {"paused", None}:
-        raise AssertionError(f"pause: unexpected state: {paused!r}")
+    paused = require_success(
+        "pause",
+        cronjob(action="pause", job_id=job_id, reason="P6-02 qualification"),
+    )
+    paused_job = paused.get("job")
+    if not isinstance(paused_job, dict):
+        raise AssertionError(f"pause: missing structured job object: {paused!r}")
+    if paused_job.get("job_id") != job_id or paused_job.get("state") != "paused":
+        raise AssertionError(f"pause: unexpected job projection: {paused!r}")
+    if paused_job.get("enabled") is not False:
+        raise AssertionError(f"pause: expected enabled=false: {paused!r}")
     emit("P6_02_PAUSE_SUCCESS", True)
 
     resumed = require_success("resume", cronjob(action="resume", job_id=job_id))
+    resumed_job = resumed.get("job")
+    if not isinstance(resumed_job, dict):
+        raise AssertionError(f"resume: missing structured job object: {resumed!r}")
+    if resumed_job.get("job_id") != job_id or resumed_job.get("state") != "scheduled":
+        raise AssertionError(f"resume: unexpected job projection: {resumed!r}")
+    if resumed_job.get("enabled") is not True:
+        raise AssertionError(f"resume: expected enabled=true: {resumed!r}")
     emit("P6_02_RESUME_SUCCESS", True)
 
     updated = require_success(
         "update",
         cronjob(action="update", job_id=job_id, name="P6-02 disposable renamed"),
     )
+    updated_job = updated.get("job")
+    if not isinstance(updated_job, dict):
+        raise AssertionError(f"update: missing structured job object: {updated!r}")
+    if updated_job.get("job_id") != job_id or updated_job.get("name") != "P6-02 disposable renamed":
+        raise AssertionError(f"update: unexpected job projection: {updated!r}")
     emit("P6_02_UPDATE_SUCCESS", True)
 
     removed = require_success("remove", cronjob(action="remove", job_id=job_id))
+    removed_job = removed.get("removed_job")
+    if not isinstance(removed_job, dict) or removed_job.get("id") != job_id:
+        raise AssertionError(f"remove: unexpected removed_job projection: {removed!r}")
     emit("P6_02_REMOVE_SUCCESS", True)
 
     final_list = require_success("final-list", cronjob(action="list", include_disabled=True))
@@ -185,7 +209,7 @@ def main() -> int:
         raise AssertionError(f"External network attempts were observed: {external_attempts!r}")
     emit("P6_02_EXTERNAL_NETWORK_ATTEMPTS", 0)
     emit("P6_02_JOB_RUN_INVOKED", False)
-    emit("P6_02_LLM_PROVIDER_INVOCATION", False)
+    emit("P6_02_LLM_PROVIDER_INVOCATION_OBSERVED", False)
     emit("P6_02_DISPOSABLE_CRON_ADAPTER_PROBE", "PASS")
     return 0
 
