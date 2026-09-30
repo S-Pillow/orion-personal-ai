@@ -122,7 +122,7 @@ def main() -> int:
         cronjob(
             action="create",
             name="P6-02 disposable one-shot",
-            schedule="in 30m",
+            schedule="30m",
             deliver="local",
             no_agent=True,
             script=noop.name,
