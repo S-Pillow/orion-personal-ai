@@ -1,6 +1,6 @@
 # P6-02 Reminder Contract and Hermes Adapter Design — Prepared Research
 
-Status: **DESIGN CANDIDATE / NO IMPLEMENTATION**
+Status: **ADAPTER TRANSPORT FROZEN / NO PRODUCTION IMPLEMENTATION**
 
 Date: 2026-09-29  
 Accepted Hermes source pin: `5fc308a70719a83cccdbba4c0e39c23f5a8239d5`
@@ -384,3 +384,111 @@ Implication for P6-02:
 - otherwise prefer the bounded structured native cron/tool seam in the existing COMPANION environment.
 
 This strengthens Candidate A as the first surface to qualify tomorrow, while still leaving the decision contingent on local proof.
+
+
+## 16. P6-02 Candidate A qualification acceptance
+
+Candidate A is **accepted for P6-02** as Orion's reminder transport seam:
+
+> A bounded local Orion adapter will invoke the accepted Hermes
+> `tools.cronjob_tools.cronjob()` implementation with `HERMES_HOME`
+> explicitly bound to the COMPANION profile. Hermes remains the authoritative
+> scheduler and durable job owner.
+
+This decision does **not** authorize production reminder CRUD yet. P6-03 and
+P6-04 remain required before P6-05 can claim full production reminder
+acceptance.
+
+### Accepted evidence
+
+The qualification was run against accepted Hermes commit
+`5fc308a70719a83cccdbba4c0e39c23f5a8239d5` using a disposable
+`HERMES_HOME` under `%TEMP%`.
+
+Observed contract:
+
+- `cronjob(action="list")` returned structured JSON and an empty list in a new
+  disposable home;
+- invalid create without a schedule failed deterministically with
+  `schedule is required for create`;
+- a one-shot create using pinned-version duration syntax `30m` succeeded;
+- create returned structured fields including `job_id`, `schedule`,
+  `deliver`, `next_run_at`, and `job`;
+- list projected the native identifier as `job_id`;
+- pause, resume, update, and remove all succeeded through the native tool path;
+- pause projected `state=paused` / `enabled=false`;
+- resume projected `state=scheduled` / `enabled=true`;
+- remove returned the native removed record and the subsequent lookup failed
+  deterministically;
+- the final disposable list was empty;
+- no job `run` action was invoked;
+- no outbound network attempt was observed;
+- no LLM/provider invocation was observed;
+- the Hermes gateway listener remained off before and after;
+- COMPANION cron metadata was unchanged;
+- Hermes HEAD/worktree were unchanged;
+- Orion worktree was unchanged;
+- the successful disposable home was removed after the proof.
+
+The accepted run reported `P6_02_DISPOSABLE_CRON_ADAPTER_PROBE=PASS` and
+`P6_02_DISPOSABLE_ADAPTER_QUALIFICATION=PASS`.
+
+### Exact adapter contract frozen by P6-02
+
+The production adapter must:
+
+1. hard-gate the installed Hermes commit/version before relying on the
+   source-level seam;
+2. bind `HERMES_HOME` explicitly to
+   `%LOCALAPPDATA%\hermes\profiles\companion` before importing or invoking
+   cron modules;
+3. call the native `cronjob()` management path rather than editing
+   `cron/jobs.json` directly;
+4. accept only the narrowed Orion reminder operations needed by the product;
+5. parse the returned JSON object and fail closed if required fields or
+   response shapes drift;
+6. never start the Hermes dashboard or another scheduler merely to obtain CRUD;
+7. never treat CLI terminal text as the primary machine contract;
+8. never invoke `run` implicitly as part of create/list/update/pause/resume/remove;
+9. preserve manual-off semantics and surface native gateway liveness rather
+   than pretending an inert saved job is actively firing;
+10. keep browser state presentation-only; Hermes remains scheduling authority.
+
+### Pinned-version response-shape notes
+
+For the accepted Hermes pin:
+
+- formatted list/job projections use `job_id`;
+- create returns a top-level `job_id` plus a formatted `job`;
+- pause/resume/update return a formatted `job`;
+- remove returns `removed_job`, whose underlying native record uses `id`;
+- a one-shot duration is expressed as `30m` (rendered as `once in 30m`);
+- recurring duration syntax is distinct (for example `every 30m`).
+
+The adapter must not infer these shapes from current upstream `main`; the
+accepted installed pin controls until an Orion-approved Hermes upgrade.
+
+### Environment note
+
+The disposable run emitted Hermes' SQLite compatibility warning because the
+linked Python SQLite was 3.40.1. Hermes selected `journal_mode=DELETE` instead
+of WAL for that disposable execution database. This did not fail the
+qualification and did not alter COMPANION. Treat it as environment evidence,
+not as authorization to upgrade Hermes or Python inside P6-02.
+
+## 17. P6-02 disposition
+
+P6-02 transport selection is complete.
+
+- Candidate A: **ACCEPTED**
+- Candidate B (CLI): diagnostics/operator fallback only
+- Candidate C (dashboard REST): rejected as a required production dependency
+  for this design
+- Candidate D (direct lower-level mutation): not selected for production CRUD
+
+Next authorization unit: **P6-03 — corrupt-store preservation at the native
+Hermes load/repair boundary**.
+
+P6-03 must remain narrowly scoped to preservation/recovery behavior. It must not
+introduce a second scheduler, change reminder delivery semantics, or begin HUD
+implementation.
