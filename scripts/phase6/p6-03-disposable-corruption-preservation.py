@@ -137,6 +137,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source-root", required=True)
     parser.add_argument("--disposable-home", required=True)
+    parser.add_argument("--prepatched", action="store_true")
     args = parser.parse_args()
     source_root = Path(args.source_root).resolve()
     disposable_home = Path(args.disposable_home).resolve()
@@ -148,7 +149,19 @@ def main() -> int:
     emit("P6_03_CHILD_HERMES_HOME", disposable_home)
     emit("P6_03_CHILD_HERMES_PROFILE_PRESENT", "HERMES_PROFILE" in os.environ)
     emit("P6_03_PATCH_TARGET_DISPOSABLE", True)
-    patched_sha = apply_disposable_patch(jobs_path)
+    if args.prepatched:
+        patched_text = jobs_path.read_text(encoding="utf-8")
+        require(
+            "def _preserve_jobs_file_before_repair" in patched_text
+            and "_preserve_jobs_file_before_repair(jobs_file, _repair_reason)" in patched_text
+            and '_preserve_jobs_file_before_repair(jobs_file, "bare-list")' in patched_text,
+            "prepatched source is missing P6-03 compatibility markers",
+        )
+        patched_sha = hashlib.sha256(patched_text.encode("utf-8")).hexdigest()
+        emit("P6_03_SOURCE_CONTROLLED_PATCH_MODE", True)
+    else:
+        patched_sha = apply_disposable_patch(jobs_path)
+        emit("P6_03_SOURCE_CONTROLLED_PATCH_MODE", False)
     emit("P6_03_PATCHED_JOBS_SHA256", patched_sha)
     py_compile.compile(str(jobs_path), doraise=True)
     emit("P6_03_PATCHED_JOBS_PY_COMPILE", "PASS")
