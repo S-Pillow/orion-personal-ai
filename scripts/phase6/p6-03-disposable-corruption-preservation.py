@@ -242,7 +242,9 @@ def main() -> int:
         emit("P6_03_SOURCE_CONTROLLED_PATCH_MODE", False)
 
     emit("P6_03_PATCHED_JOBS_SHA256", patched_sha)
-    py_compile.compile(str(jobs_path), doraise=True)
+    compile_target = disposable_home / "compiled" / "cron_jobs.pyc"
+    compile_target.parent.mkdir(parents=True, exist_ok=True)
+    py_compile.compile(str(jobs_path), cfile=str(compile_target), doraise=True)
     emit("P6_03_PATCHED_JOBS_PY_COMPILE", "PASS")
 
     external_attempts = []
