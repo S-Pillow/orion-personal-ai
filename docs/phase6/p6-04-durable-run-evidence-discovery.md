@@ -208,3 +208,40 @@ Before any installed-source application:
 
 Next authorization unit:
 **P6-04 source-controlled compatibility implementation and disposable qualification**.
+
+
+## Source-controlled implementation prepared - 2026-10-01
+
+Status: **IMPLEMENTATION PREPARED / DISPOSABLE QUALIFICATION PENDING**
+
+Repository-side compatibility implementation is now prepared in:
+
+- `compat/hermes/p6-04-durable-run-evidence.patch`
+- `scripts/phase6/p6-04-disposable-run-evidence-qualification.py`
+- `scripts/phase6/Invoke-P6-04-CompatQualification.ps1`
+
+The patch is intentionally limited to:
+
+- `cron/executions.py`
+- `cron/scheduler.py`
+
+The prepared change:
+
+1. adds nullable `scheduled_at TEXT` and `delivery_outcome TEXT` columns;
+2. migrates existing ledgers additively with idempotent `ALTER TABLE ADD COLUMN`;
+3. extends `create_execution(...)` with optional `scheduled_at`;
+4. persists the already-existing `finish_execution(... delivery_outcome=...)` value
+   in the durable execution row;
+5. captures built-in scheduler scheduled time from the due-job record before
+   `claim_job_for_fire()` advances recurring `next_run_at`;
+6. leaves direct/manual scheduled time null unless a caller supplies an authoritative
+   value;
+7. leaves unknown/interrupted delivery outcome null rather than fabricating certainty.
+
+The qualification gate archives the exact accepted Hermes commit into a disposable
+source tree, reapplies the already-qualified P6-03 patch as a baseline, then applies
+P6-04. It verifies P6-04 changes only `cron/executions.py` and
+`cron/scheduler.py`, runs disposable P6-04 ledger/migration tests, and reruns the
+P6-03 corruption-preservation qualifier against the combined source.
+
+No installed Hermes mutation or live COMPANION reminder is authorized by this step.
