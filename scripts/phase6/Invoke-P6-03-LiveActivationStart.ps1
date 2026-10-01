@@ -59,8 +59,8 @@ function Get-GatewayPid {
     }
 }
 
-function Test-PidAlive([int]$Pid) {
-    return ($null -ne (Get-Process -Id $Pid -ErrorAction SilentlyContinue))
+function Test-PidAlive([int]$ProcessId) {
+    return ($null -ne (Get-Process -Id $ProcessId -ErrorAction SilentlyContinue))
 }
 
 function Get-CompanionJobCount {
