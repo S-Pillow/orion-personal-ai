@@ -35,8 +35,12 @@ $InstalledJobs = Join-Path $HermesRoot "cron\jobs.py"
 $InstalledExecutions = Join-Path $HermesRoot "cron\executions.py"
 $InstalledScheduler = Join-Path $HermesRoot "cron\scheduler.py"
 
+function Get-StatusLines([string]$Root) {
+    return @(& git -C $Root status --porcelain=v1)
+}
+
 function Get-StatusText([string]$Root) {
-    return ((& git -C $Root status --porcelain=v1) -join [Environment]::NewLine)
+    return ((Get-StatusLines $Root) -join [Environment]::NewLine)
 }
 
 function Invoke-StateProbe {
