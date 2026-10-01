@@ -258,3 +258,28 @@ and null rather than invented values where scheduled/delivery truth is unavailab
 
 No installed Hermes mutation, gateway restart, scheduler tick, provider call, live reminder
 creation or COMPANION mutation is authorized by this qualification step.
+
+
+## Qualification correction - scheduler runtime ordering assertion
+
+The first run of the Git-generated qualification gate reached the transformed-source
+P6-04 tests and passed schema creation, terminal immutability, known delivery outcomes,
+unknown/null handling, interrupted recovery, and old-schema migration. It then stopped
+on a source-order assertion that incorrectly treated lexical order in
+`cron/scheduler.py` as runtime order.
+
+The accepted scheduler defines `_process_job()` before `_submit_with_guard()`, so the
+textual occurrence of `claim_job_for_fire(...)` appears before the textual occurrence
+of `create_execution(...)`. At runtime, however, `_submit_with_guard()` creates the
+execution record and only then submits `_run_and_release`, which invokes
+`_process_job()`; the fire claim therefore occurs in the worker after execution
+creation.
+
+The qualifier now checks the actual structural chain:
+
+`due_jobs -> advance_next_runs -> _process_job definition/claim body -> _submit_with_guard
+definition -> create_execution(scheduled_at=pre-advance due-job value) -> _run_and_release
+invokes _process_job -> pool.submit(_run_and_release)`.
+
+This correction changes only the test assertion. It does not change the P6-04 source
+design or compatibility transformation.
