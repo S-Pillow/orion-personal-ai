@@ -12,6 +12,7 @@ $ExpectedHermesHead = "5fc308a70719a83cccdbba4c0e39c23f5a8239d5"
 $ExpectedP603JobsSha256 = "3766fe600b48d28130c4261ec9402bad1969bcc9218ef566610530bd2bdbcfa5"
 $ExpectedP604ExecutionsSha256 = "a7a146921af20f97594258f4672c68e0c4955e7c1a1b361e857be8b4e470d208"
 $ExpectedP604SchedulerSha256 = "6c0a43c175aab8e7d2a0107f6b067bcfa42f9a55650ab8cc761824c37fb02bfe"
+$ExpectedP604Columns = "id,job_id,source,process_id,pid,process_started_at,status,claimed_at,started_at,finished_at,error,scheduled_at,delivery_outcome"
 
 if ($AuthorizationToken -ne $ExpectedToken) {
     throw "STOP: explicit P6-04A generate-and-qualify authorization is required."
@@ -19,7 +20,7 @@ if ($AuthorizationToken -ne $ExpectedToken) {
 
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $HermesRoot = Join-Path $env:LOCALAPPDATA "hermes\hermes-agent"
-$CompanionCron = Join-Path $env:LOCALAPPDATA "hermes\profiles\companion\cron"
+$CompanionHome = Join-Path $env:LOCALAPPDATA "hermes\profiles\companion"
 $HermesPython = Join-Path $HermesRoot "venv\Scripts\python.exe"
 
 $P603Patch = Join-Path $RepoRoot "compat\hermes\p6-03-jobs-corruption-preservation.patch"
@@ -28,6 +29,7 @@ $Transformer = Join-Path $PSScriptRoot "p6-04a-build-disposable-source.py"
 $P604AProbe = Join-Path $PSScriptRoot "p6-04a-disposable-error-classification-qualification.py"
 $P604Probe = Join-Path $PSScriptRoot "p6-04-disposable-run-evidence-qualification.py"
 $P603Probe = Join-Path $PSScriptRoot "p6-03-disposable-corruption-preservation.py"
+$StateProbe = Join-Path $PSScriptRoot "p6-04-production-state-probe.py"
 
 $InstalledJobs = Join-Path $HermesRoot "cron\jobs.py"
 $InstalledExecutions = Join-Path $HermesRoot "cron\executions.py"
