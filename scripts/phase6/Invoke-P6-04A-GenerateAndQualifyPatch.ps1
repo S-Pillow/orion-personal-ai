@@ -100,9 +100,16 @@ function Apply-QualifiedBaseline([string]$SourceRoot, [string]$P603, [string]$P6
     & git -C $SourceRoot apply $P604
     if ($LASTEXITCODE -ne 0) { throw "STOP: failed to apply P6-04 baseline patch." }
 
-    & git -C $SourceRoot add .
-    & git -C $SourceRoot -c user.name=Orion-P6-04A -c user.email=orion-p6-04a@local commit -q -m "accepted-p6-03-p6-04-baseline"
+    $BaselineChanged = @(& git -C $SourceRoot status --porcelain=v1 | ForEach-Object { $_.Substring(3) } | Sort-Object)
+    $ExpectedBaselineChanged = @("cron/executions.py", "cron/jobs.py", "cron/scheduler.py")
+    if (($BaselineChanged -join "`n") -ne ($ExpectedBaselineChanged -join "`n")) {
+        throw "STOP: disposable P6-03/P6-04 baseline scope drift: $($BaselineChanged -join ', ')"
+    }
+    & git -C $SourceRoot add -- cron/jobs.py cron/executions.py cron/scheduler.py
+    if ($LASTEXITCODE -ne 0) { throw "STOP: failed to stage disposable P6-03/P6-04 baseline." }
+    & git -C $SourceRoot commit --quiet -m "accepted-p6-03-p6-04-baseline"
     if ($LASTEXITCODE -ne 0) { throw "STOP: failed to commit P6-03/P6-04 disposable baseline." }
+    return (& git -C $SourceRoot rev-parse HEAD).Trim()
 }
 
 $RepoBranch = (& git -C $RepoRoot branch --show-current).Trim()
