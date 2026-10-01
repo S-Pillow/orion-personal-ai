@@ -90,11 +90,53 @@ foreach ($Rel in @("cron/executions.py", "cron/scheduler.py")) {
 }
 
 $PatchTargets = @(
-    Select-String -LiteralPath $Patch -Pattern '^diff --git a/(.+) b/(.+)$' |
+    Select-String -LiteralPath $Patch -Pattern '^diff --git a/(.+) b/(.+)
+$StateBefore = Invoke-StateProbe
+$StateBefore | ForEach-Object { Write-Host $_ }
+$JobCount = [int](Get-ProbeValue $StateBefore "P6_04_PROD_STATE_JOB_COUNT")
+$Columns = Get-ProbeValue $StateBefore "P6_04_PROD_STATE_EXECUTION_COLUMNS"
+$Rows = [int](Get-ProbeValue $StateBefore "P6_04_PROD_STATE_EXECUTION_ROWS")
+$SqliteMode = Get-ProbeValue $StateBefore "P6_04_PROD_STATE_SQLITE_MODE"
+if ($JobCount -ne 0) { throw "STOP: COMPANION has $JobCount cron job(s); P6-04 source application preparation is blocked." }
+if ($Rows -ne 0) { throw "STOP: COMPANION executions.db contains $Rows row(s); expected discovery baseline is zero." }
+if ($SqliteMode -ne "read_only") { throw "STOP: executions.db was not inspected read-only." }
+$ExpectedColumns = "id,job_id,source,process_id,pid,process_started_at,status,claimed_at,started_at,finished_at,error"
+if ($Columns -ne $ExpectedColumns) { throw "STOP: COMPANION execution schema drift. Observed: $Columns" }
+
+& git -C $HermesRoot apply --check $Patch
+if ($LASTEXITCODE -ne 0) { throw "STOP: qualified P6-04 patch does not apply cleanly to installed accepted Hermes source." }
+
+$RepoHeadAfter = (& git -C $RepoRoot rev-parse HEAD).Trim()
+$RepoStatusAfter = Get-StatusText $RepoRoot
+$HermesHeadAfter = (& git -C $HermesRoot rev-parse HEAD).Trim()
+$HermesStatusAfter = Get-StatusLines $HermesRoot
+$StateAfter = Invoke-StateProbe
+
+if ($RepoHeadAfter -ne $RepoHeadBefore -or $RepoStatusAfter -ne $RepoStatusBefore) { throw "STOP: Orion repository changed during P6-04 preflight." }
+if ($HermesHeadAfter -ne $HermesHeadBefore) { throw "STOP: Hermes HEAD changed during P6-04 preflight." }
+Assert-StatusEquals $HermesStatusAfter $ExpectedHermesStatus "post-preflight Hermes"
+if ((Get-ProbeValue $StateAfter "P6_04_PROD_STATE_JOB_COUNT") -ne "0") { throw "STOP: COMPANION job count changed during preflight." }
+if ((Get-ProbeValue $StateAfter "P6_04_PROD_STATE_EXECUTION_COLUMNS") -ne $ExpectedColumns) { throw "STOP: COMPANION execution schema changed during preflight." }
+if ((Get-ProbeValue $StateAfter "P6_04_PROD_STATE_EXECUTION_ROWS") -ne "0") { throw "STOP: COMPANION execution row count changed during preflight." }
+
+Write-Host "P6_04_PROD_PREFLIGHT_REPO_HEAD=$RepoHeadBefore"
+Write-Host "P6_04_PROD_PREFLIGHT_PATCH_BLOB=$PatchBlob"
+Write-Host "P6_04_PROD_PREFLIGHT_PATCH_SHA256=$PatchSha"
+Write-Host "P6_04_PROD_PREFLIGHT_PATCH_TARGETS=cron/executions.py,cron/scheduler.py"
+Write-Host "P6_04_PROD_PREFLIGHT_HERMES_HEAD=$HermesHeadBefore"
+Write-Host "P6_04_PROD_PREFLIGHT_P603_JOBS_SHA256=$P603Sha"
+Write-Host "P6_04_PROD_PREFLIGHT_GIT_APPLY_CHECK=PASS"
+Write-Host "P6_04_PROD_PREFLIGHT_INSTALLED_HERMES_MUTATION=false"
+Write-Host "P6_04_PROD_PREFLIGHT_COMPANION_MUTATION=false"
+Write-Host "P6_04_PROD_PREFLIGHT_GATEWAY_RESTARTED=false"
+Write-Host "P6_04_PRODUCTION_APPLY_PREFLIGHT=PASS"
+ |
         ForEach-Object { "{0}|{1}" -f $_.Matches[0].Groups[1].Value, $_.Matches[0].Groups[2].Value }
 )
 $ExpectedTargets = @("cron/executions.py|cron/executions.py", "cron/scheduler.py|cron/scheduler.py")
-if (($PatchTargets | Sort-Object) -join "`n" -ne ($ExpectedTargets | Sort-Object) -join "`n") { throw "STOP: qualified P6-04 patch target scope drift: $($PatchTargets -join ', ')" }
+$PatchTargetsText = (@($PatchTargets | Sort-Object) -join "`n")
+$ExpectedTargetsText = (@($ExpectedTargets | Sort-Object) -join "`n")
+if ($PatchTargetsText -ne $ExpectedTargetsText) { throw "STOP: qualified P6-04 patch target scope drift: $($PatchTargets -join ', ')" }
 
 $StateBefore = Invoke-StateProbe
 $StateBefore | ForEach-Object { Write-Host $_ }
