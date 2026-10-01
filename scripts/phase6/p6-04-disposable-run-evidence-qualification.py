@@ -281,13 +281,31 @@ def main() -> int:
 
     source_anchor = 'execution = create_execution(\n                    job_id,\n                    source="builtin",\n                    scheduled_at=job.get("next_run_at"),\n                )'
     require(source_anchor in scheduler_text, "built-in scheduler scheduled_at seam drifted")
+
     due_index = scheduler_text.find("due_jobs = get_due_jobs()")
     advance_index = scheduler_text.find("advance_next_runs([job[\"id\"] for job in due_jobs])")
-    create_index = scheduler_text.find(source_anchor)
-    claim_index = scheduler_text.find('claimed = claim_job_for_fire(job["id"], return_job=True)')
+    process_def_index = scheduler_text.find("def _process_job(job: dict)")
+    claim_index = scheduler_text.find('claimed = claim_job_for_fire(job["id"], return_job=True)', process_def_index)
+    submit_def_index = scheduler_text.find("def _submit_with_guard(", process_def_index)
+    create_index = scheduler_text.find(source_anchor, submit_def_index)
+    run_release_index = scheduler_text.find("def _run_and_release(", create_index)
+    process_invoke_index = scheduler_text.find("return ctx.run(_process_job, j)", run_release_index)
+    pool_submit_index = scheduler_text.find("fut = pool.submit(_run_and_release)", process_invoke_index)
+
     require(due_index >= 0 and advance_index > due_index, "due/advance ordering not found")
-    require(create_index > advance_index, "execution creation ordering is unexpected")
-    require(claim_index > create_index, "claim occurs before execution scheduled_at capture")
+    require(process_def_index > advance_index, "_process_job definition ordering drifted")
+    require(claim_index > process_def_index, "claim call not found inside _process_job")
+    require(submit_def_index > claim_index, "_submit_with_guard definition ordering drifted")
+    require(create_index > submit_def_index, "execution creation not found inside _submit_with_guard")
+    require(run_release_index > create_index, "_run_and_release must be defined after execution creation")
+    require(
+        process_invoke_index > run_release_index,
+        "_run_and_release no longer invokes _process_job",
+    )
+    require(
+        pool_submit_index > process_invoke_index,
+        "worker submit must occur after execution creation and _run_and_release definition",
+    )
     emit("P6_04_FIXTURE_PRE_ADVANCE_SCHEDULED_TIME_SEAM", "PASS")
 
     latest = executions.latest_execution("legacy-job")
