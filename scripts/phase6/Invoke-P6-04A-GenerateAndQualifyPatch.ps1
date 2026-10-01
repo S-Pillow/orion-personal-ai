@@ -210,6 +210,10 @@ Write-Host "P6_04A_GENERATE_TESTED_CRON_HEALTH_SHA256=$HealthShaA"
 Write-Host "P6_04A_GENERATE_TESTED_CLASSIFIER_SHA256=$ClassifierShaA"
 Write-Host "P6_04A_GENERATE_TESTED_EXECUTIONS_SHA256=$ExecShaA"
 
+# Mark the new classifier as intent-to-add so git diff includes it in the generated patch.
+& git -C $SourceA add -N -- cron/error_classification.py
+if ($LASTEXITCODE -ne 0) { throw "STOP: failed to mark new classifier for patch generation." }
+
 $DiffArgs = @(
     "-C", $SourceA,
     "diff", "--patch", "--binary", "--full-index", "--no-ext-diff",
