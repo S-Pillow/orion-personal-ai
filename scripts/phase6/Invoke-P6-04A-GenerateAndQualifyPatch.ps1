@@ -39,17 +39,31 @@ function Get-StatusText([string]$Root) {
     return ((& git -C $Root status --porcelain=v1) -join [Environment]::NewLine)
 }
 
-function Get-CronMetadata([string]$CronPath) {
-    if (-not (Test-Path -LiteralPath $CronPath)) { return @() }
-    return @(
-        Get-ChildItem -LiteralPath $CronPath -Force |
-            Sort-Object Name |
-            ForEach-Object {
-                $Type = if ($_.PSIsContainer) { "DIR" } else { "FILE" }
-                $Length = if ($_.PSIsContainer) { 0 } else { $_.Length }
-                "{0}|{1}|{2}|{3}" -f $_.Name, $Type, $Length, $_.LastWriteTimeUtc.Ticks
-            }
-    )
+function Invoke-StateProbe {
+    $Output = @(& $HermesPython -B $StateProbe --companion-home $CompanionHome)
+    if ($LASTEXITCODE -ne 0) { throw "STOP: P6-04 production state probe failed." }
+    return $Output
+}
+
+function Get-ProbeValue([string[]]$Output, [string]$Key) {
+    $Prefix = $Key + "="
+    $Line = @($Output | Where-Object { $_.StartsWith($Prefix) })
+    if ($Line.Count -ne 1) { throw "STOP: expected exactly one $Key line from state probe." }
+    return $Line[0].Substring($Prefix.Length)
+}
+
+function Get-CompanionLogicalState([string[]]$ProbeOutput, [string]$Label) {
+    $JobCount = [int](Get-ProbeValue $ProbeOutput "P6_04_PROD_STATE_JOB_COUNT")
+    $DbPresent = Get-ProbeValue $ProbeOutput "P6_04_PROD_STATE_EXECUTIONS_DB_PRESENT"
+    $Rows = [int](Get-ProbeValue $ProbeOutput "P6_04_PROD_STATE_EXECUTION_ROWS")
+    $Columns = Get-ProbeValue $ProbeOutput "P6_04_PROD_STATE_EXECUTION_COLUMNS"
+    $Mode = Get-ProbeValue $ProbeOutput "P6_04_PROD_STATE_SQLITE_MODE"
+    if ($JobCount -ne 0) { throw "STOP: $Label COMPANION job count is $JobCount; expected 0." }
+    if ($DbPresent -ne "true") { throw "STOP: $Label COMPANION executions.db is missing." }
+    if ($Rows -ne 0) { throw "STOP: $Label COMPANION execution row count is $Rows; expected 0." }
+    if ($Columns -ne $ExpectedP604Columns) { throw "STOP: $Label COMPANION execution schema drift." }
+    if ($Mode -ne "read_only") { throw "STOP: $Label state probe was not read-only." }
+    return @{ JobCount = $JobCount; Rows = $Rows; Columns = $Columns; Mode = $Mode }
 }
 
 function Write-LfCopy([string]$Source, [string]$Destination) {
