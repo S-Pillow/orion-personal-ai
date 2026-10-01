@@ -127,3 +127,56 @@ Live activation acceptance must verify the two columns exist afterward, existing
 remains correct, no reminder is created merely to force migration, and the gateway/ticker
 is healthy. A live reminder belongs to the later P6-06 acceptance matrix rather than the
 source-application step.
+
+
+## Production source-application acceptance - 2026-10-01
+
+Status: **SOURCE APPLIED AND QUALIFIED / LIVE ACTIVATION NOT YET AUTHORIZED**
+
+Accepted operator run:
+
+- Orion head at execution: `c86a016e20a39e8077e0a0827ab07e8c09ddb63b`;
+- installed Hermes HEAD remained `5fc308a70719a83cccdbba4c0e39c23f5a8239d5`;
+- qualified P6-04 patch blob: `31c1127e032b0a7ea09ecfd92ed3eaa1d5b0542f`;
+- qualified P6-04 patch SHA-256:
+  `abe54cd59e217f60c01fd8ae68e1cfb1782b7267ff7b98a035b4481f66f787ed`;
+- original installed `cron/executions.py` SHA-256:
+  `b4a685a901abdffe2d1232099b3c27391775775a7011d52c90276cb15d3fd75d`;
+- original installed `cron/scheduler.py` SHA-256:
+  `f11a795a2cd9a6e43321beea601c13d0a2021c2cc80a7726b770d6ee2b6a1893`;
+- patched installed `cron/executions.py` SHA-256:
+  `a7a146921af20f97594258f4672c68e0c4955e7c1a1b361e857be8b4e470d208`;
+- patched installed `cron/scheduler.py` SHA-256:
+  `6c0a43c175aab8e7d2a0107f6b067bcfa42f9a55650ab8cc761824c37fb02bfe`;
+- external rollback backup root:
+  `C:\Users\spill\AppData\Local\hermes\orion-compat-backups\p6-04-20261001-054952`;
+- manifest:
+  `C:\Users\spill\AppData\Local\hermes\orion-compat-backups\p6-04-20261001-054952\manifest.json`;
+- changed production source scope was exactly
+  `cron/executions.py`, `cron/scheduler.py`;
+- both installed patched modules compiled successfully;
+- full P6-04 disposable qualification passed against installed patched source;
+- full P6-03 corruption-preservation regression qualification passed against the combined
+  installed source;
+- P6-04 external network attempts: 0;
+- P6-04 scheduler started: false;
+- P6-04 scheduler tick invoked: false;
+- P6-04 job run invoked: false;
+- P6-04 provider call invoked: false;
+- P6-04 COMPANION mutation: false;
+- Orion repository remained unchanged during application;
+- Hermes HEAD remained unchanged;
+- COMPANION execution schema remained at the original pre-P6-04 shape;
+- gateway restart: false;
+- live activation: false;
+- temporary disposable qualification artifacts were removed after success.
+
+The SQLite 3.40.1 warning observed during disposable qualification was the existing Hermes
+safety path selecting `journal_mode=DELETE`; no Hermes upgrade is authorized or required
+for P6-04.
+
+P6-04 production source application is accepted. The remaining boundary is **live
+activation and schema reconciliation**. A running gateway can continue using pre-patch
+modules until restarted. The next unit must first perform read-only activation discovery
+against the current COMPANION gateway/supervisor state, then choose the correct native
+Hermes Windows lifecycle action. No reminder creation is required to activate the schema.
