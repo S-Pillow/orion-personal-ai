@@ -165,3 +165,26 @@ It is intentionally limited to the exact discovered state: Scheduled Task presen
 fallback absent, gateway stopped, no live PID, and COMPANION cron store empty/absent. It uses
 `hermes_cli.gateway_windows.start()`, not ad hoc process creation. Running it still requires
 separate explicit owner authorization.
+
+## Live activation acceptance - 2026-10-01
+
+Status: **LIVE ACTIVATION ACCEPTED / P6-03 CLOSED**
+
+Read-only reconciliation passed after the start-only activation. It confirmed:
+
+- Orion head `4f50228ba545ffec91b6b1c17992acb6f89ed684`;
+- Hermes head `5fc308a70719a83cccdbba4c0e39c23f5a8239d5`;
+- patched `cron/jobs.py` SHA-256 `3766fe600b48d28130c4261ec9402bad1969bcc9218ef566610530bd2bdbcfa5`;
+- COMPANION gateway state `running`;
+- live gateway process present;
+- scheduler ticker heartbeat newer than the gateway process start;
+- COMPANION cron job count remained `0`;
+- Orion, Hermes and patch state remained unchanged;
+- no reminder was created.
+
+The earlier wrapper failure was caused by an Orion PowerShell helper parameter named
+`$Pid`, which collided with PowerShell's automatic `$PID` variable after Hermes had
+already started the gateway. The helper was renamed and no second start was issued.
+
+P6-03 is closed through source qualification, production source application, live activation
+and reconciliation. The next Phase 6 unit is P6-04 durable per-run reminder evidence.
