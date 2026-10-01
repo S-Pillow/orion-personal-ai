@@ -210,38 +210,51 @@ Next authorization unit:
 **P6-04 source-controlled compatibility implementation and disposable qualification**.
 
 
-## Source-controlled implementation prepared - 2026-10-01
+## Source-controlled implementation correction - 2026-10-01
 
-Status: **IMPLEMENTATION PREPARED / DISPOSABLE QUALIFICATION PENDING**
+Status: **HAND-AUTHORED PATCH RETIRED / GIT-GENERATED ROUND-TRIP QUALIFICATION PREPARED**
 
-Repository-side compatibility implementation is now prepared in:
+Two disposable qualification attempts stopped at `git apply --check` before any
+installed Hermes or COMPANION mutation. The first reported a patch fragment without a
+valid header; the second reported a corrupt patch. The common cause was process error:
+the P6-04 compatibility patch had been hand-authored, including unified-diff hunk
+metadata, and then manually adjusted.
 
-- `compat/hermes/p6-04-durable-run-evidence.patch`
+That artifact and its old qualifier have been removed from the branch. They must not be
+used or reconstructed manually.
+
+P6-04 now uses a stricter generation chain:
+
+1. archive the exact accepted Hermes commit into a disposable Git repository;
+2. apply and commit the already-qualified P6-03 compatibility patch as the baseline;
+3. apply P6-04 edits to real `cron/executions.py` and `cron/scheduler.py` using
+   exact source anchors;
+4. run P6-04 qualification against that directly transformed source;
+5. record SHA-256 hashes of the tested source files;
+6. have Git itself produce the compatibility patch with `git diff --patch`;
+7. create a second fresh disposable repository from the same accepted Hermes commit;
+8. reapply and commit P6-03;
+9. require `git apply --check` on the Git-generated P6-04 patch, then apply it;
+10. require the round-trip files to match the originally tested source SHA-256 hashes;
+11. rerun P6-04 qualification on the round-trip source;
+12. rerun the full P6-03 corruption-preservation qualification on the combined source.
+
+Prepared gate:
+
+- `scripts/phase6/p6-04-build-disposable-source.py`
+- `scripts/phase6/Invoke-P6-04-GenerateAndQualifyPatch.ps1`
 - `scripts/phase6/p6-04-disposable-run-evidence-qualification.py`
-- `scripts/phase6/Invoke-P6-04-CompatQualification.ps1`
 
-The patch is intentionally limited to:
+The gate does not write the generated patch into the Orion repository. On PASS it retains
+the generated patch under a unique temporary evidence directory and prints its path and
+SHA-256. That exact generated file must then be reviewed and committed to GitHub as the
+source-controlled P6-04 compatibility artifact before any installed-source application is
+considered.
 
-- `cron/executions.py`
-- `cron/scheduler.py`
+The source design itself is unchanged: additive nullable `scheduled_at` and
+`delivery_outcome` ledger columns, idempotent old-schema migration, pre-advance
+scheduled-time capture for built-in scheduled runs, durable terminal delivery outcome,
+and null rather than invented values where scheduled/delivery truth is unavailable.
 
-The prepared change:
-
-1. adds nullable `scheduled_at TEXT` and `delivery_outcome TEXT` columns;
-2. migrates existing ledgers additively with idempotent `ALTER TABLE ADD COLUMN`;
-3. extends `create_execution(...)` with optional `scheduled_at`;
-4. persists the already-existing `finish_execution(... delivery_outcome=...)` value
-   in the durable execution row;
-5. captures built-in scheduler scheduled time from the due-job record before
-   `claim_job_for_fire()` advances recurring `next_run_at`;
-6. leaves direct/manual scheduled time null unless a caller supplies an authoritative
-   value;
-7. leaves unknown/interrupted delivery outcome null rather than fabricating certainty.
-
-The qualification gate archives the exact accepted Hermes commit into a disposable
-source tree, reapplies the already-qualified P6-03 patch as a baseline, then applies
-P6-04. It verifies P6-04 changes only `cron/executions.py` and
-`cron/scheduler.py`, runs disposable P6-04 ledger/migration tests, and reruns the
-P6-03 corruption-preservation qualifier against the combined source.
-
-No installed Hermes mutation or live COMPANION reminder is authorized by this step.
+No installed Hermes mutation, gateway restart, scheduler tick, provider call, live reminder
+creation or COMPANION mutation is authorized by this qualification step.
