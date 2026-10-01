@@ -131,3 +131,37 @@ The source rollback backup remains:
 `%LOCALAPPDATA%\hermes\orion-compat-backups\p6-03-20260930-074533\cron-jobs.py.original`
 
 Source rollback plus a subsequent restart requires separate authorization.
+
+## Discovery result - 2026-09-30
+
+Status: **REGISTERED SCHEDULED TASK / GATEWAY CURRENTLY STOPPED**
+
+Read-only discovery passed with the following production evidence:
+
+- Orion head: `ce71de44db050f7ea8e8f2bb7edee4778662ea5c`;
+- installed Hermes HEAD: `5fc308a70719a83cccdbba4c0e39c23f5a8239d5`;
+- installed P6-03 `cron/jobs.py` SHA-256: `3766fe600b48d28130c4261ec9402bad1969bcc9218ef566610530bd2bdbcfa5`;
+- COMPANION task name: `Hermes_Gateway_companion`;
+- Scheduled Task present and state `Ready`;
+- last task result `0`;
+- no Startup-folder fallback present;
+- no COMPANION gateway PID file present;
+- no live gateway process detected;
+- no Windows service parent/supervisor detected;
+- `gateway_state.json` reports `stopped`, updated `2026-09-29T08:19:47.281639+00:00`;
+- Orion, Hermes and COMPANION cron metadata remained unchanged;
+- no restart was performed.
+
+This means the generic restart path is **not applicable** to the current state because
+there is no live gateway PID to restart. The correct bounded activation for the observed
+state is a **start-only** operation through Hermes' native Windows lifecycle implementation,
+while preserving the registered Scheduled Task as the persistence/supervisor mechanism.
+
+Prepared next gate:
+
+`scripts/phase6/Invoke-P6-03-LiveActivationStart.ps1`
+
+It is intentionally limited to the exact discovered state: Scheduled Task present, Startup
+fallback absent, gateway stopped, no live PID, and COMPANION cron store empty/absent. It uses
+`hermes_cli.gateway_windows.start()`, not ad hoc process creation. Running it still requires
+separate explicit owner authorization.
