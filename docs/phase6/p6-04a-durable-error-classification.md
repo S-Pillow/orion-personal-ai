@@ -57,10 +57,20 @@ receive the classifier result at the same transaction that writes terminal statu
 
 ## Qualification strategy
 
-The generation gate reconstructs the accepted source chain from the pinned Hermes commit,
-then applies the already qualified P6-03 and P6-04 patches before creating the P6-04A
-delta. P6-04A is generated from actual transformed source using `git diff --patch`, not
-a hand-authored patch.
+The generation gate creates a disposable local clone from the installed Hermes repository,
+forces deterministic Git line-ending behavior inside that clone, checks out the accepted
+Hermes pin, and applies the already qualified P6-03 and P6-04 patches. That state is
+committed as the disposable qualification baseline. After the P6-04A transform and direct
+qualification pass, the exact three-file candidate is committed separately and the
+installation patch is generated commit-to-commit with Git using `--binary --full-index`.
+A second disposable clone checks out the baseline commit, applies the generated patch,
+and must reproduce the exact already-tested source hashes. This avoids archive/re-init
+worktrees, `git add -N`, and dependence on global Windows CRLF settings.
+
+COMPANION safety is verified using authoritative logical state from the existing read-only
+production-state probe: job count, execution-row count, execution schema, and read-only
+SQLite access. Volatile ticker-heartbeat timestamps and generic cron-directory metadata
+are intentionally excluded because a healthy live scheduler is expected to update them.
 
 Qualification requires:
 
@@ -76,11 +86,14 @@ Qualification requires:
 9. terminal immutability remains intact;
 10. migration from the current P6-04 schema adds only nullable `error_class` and preserves
     historical rows;
-11. the Git-generated patch applies cleanly to a fresh accepted P6-03/P6-04 baseline and
-    reproduces exact tested source hashes;
+11. the Git-generated commit-to-commit patch applies cleanly to a fresh checkout of the
+    disposable P6-03/P6-04 baseline commit and reproduces exact tested source hashes;
 12. full P6-04 durable-run-evidence regression remains green;
 13. full P6-03 corruption-preservation regression remains green;
-14. external network attempts remain zero.
+14. external network attempts remain zero;
+15. installed Hermes HEAD/status/source hashes remain unchanged; and
+16. COMPANION logical job count, execution row count, and execution schema remain unchanged
+    while volatile heartbeat metadata is allowed to advance normally.
 
 Prepared artifacts:
 
