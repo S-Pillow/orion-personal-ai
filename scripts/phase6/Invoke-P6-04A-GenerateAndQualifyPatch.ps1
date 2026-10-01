@@ -76,12 +76,17 @@ function Write-LfCopy([string]$Source, [string]$Destination) {
     [System.IO.File]::WriteAllText($Destination, $Text, $Utf8NoBom)
 }
 
-function Init-Repo([string]$SourceRoot) {
-    & git -C $SourceRoot init -q
-    if ($LASTEXITCODE -ne 0) { throw "STOP: failed to initialize disposable git repository." }
-    & git -C $SourceRoot add .
-    & git -C $SourceRoot -c user.name=Orion-P6-04A -c user.email=orion-p6-04a@local commit -q -m "accepted-hermes-pin"
-    if ($LASTEXITCODE -ne 0) { throw "STOP: failed to commit accepted Hermes baseline." }
+function Clone-AcceptedHermes([string]$Destination) {
+    & git -c core.autocrlf=false clone --quiet --no-hardlinks $HermesRoot $Destination
+    if ($LASTEXITCODE -ne 0) { throw "STOP: failed to create disposable local Hermes clone." }
+    & git -C $Destination config core.autocrlf false
+    & git -C $Destination config core.eol lf
+    & git -C $Destination config user.name "Orion-P6-04A"
+    & git -C $Destination config user.email "orion-p6-04a@local"
+    & git -C $Destination checkout --quiet --detach $ExpectedHermesHead
+    if ($LASTEXITCODE -ne 0) { throw "STOP: failed to check out accepted Hermes pin in disposable clone." }
+    if ((& git -C $Destination rev-parse HEAD).Trim() -ne $ExpectedHermesHead) { throw "STOP: disposable clone did not resolve to accepted Hermes pin." }
+    if (Get-StatusText $Destination) { throw "STOP: disposable accepted Hermes clone is not clean." }
 }
 
 function Apply-QualifiedBaseline([string]$SourceRoot, [string]$P603, [string]$P604) {
