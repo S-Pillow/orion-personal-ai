@@ -79,8 +79,9 @@ Manifest:
 
 `C:\Users\spill\AppData\Local\hermes\orion-compat-backups\p6-03-20260930-074533\manifest.json`
 
-The source application did **not** restart the Hermes gateway. Therefore live
-activation is still pending.
+P6-03 live activation is complete. The first start-only activation reached Hermes' native Windows start path; the Orion wrapper then failed during post-start verification because a helper parameter named `$Pid` collided with PowerShell's automatic `$PID` variable. The helper was corrected without issuing a second start. A separate read-only reconciliation then proved the COMPANION gateway is running, the scheduler ticker heartbeat is newer than the gateway process start, the cron job count remains 0, and the accepted Hermes/P6-03 source state is unchanged.
+
+P6-03 is therefore closed.
 
 ## Prepared live-activation work
 
@@ -144,12 +145,10 @@ Our proven workflow is native Windows PowerShell + Git/GitHub. There is no Build
 
 1. Reconcile the exact PR #54 head and CI state.
 2. Confirm the local Orion prep branch is clean and at that head.
-3. Run the read-only P6-03 live-activation discovery gate.
-4. Interpret the complete output.
-5. If the discovered supervisor mode is supported, request separate explicit restart authorization.
-6. Run only the bounded activation gate matching the discovered supervisor mode.
-7. Record activation acceptance in GitHub.
-8. Then decide whether P6-03 is fully closed and proceed to P6-04 durable per-run reminder evidence.
+3. Treat P6-03 as closed; do not rerun discovery/start/restart unless new evidence requires it.
+4. Begin P6-04 with read-only discovery of Hermes execution/monitor seams for durable per-run reminder evidence.
+5. Preserve Hermes as scheduler owner and do not change delivery or CRUD semantics while discovering evidence gaps.
+6. Keep GitHub as the durable acceptance record.
 
 Do not create a real COMPANION reminder during P6-03 activation.
 Do not begin P6-04 until P6-03 closure is recorded.
