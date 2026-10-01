@@ -52,8 +52,8 @@ function Get-CronMetadata([string]$CronPath) {
 
 function Write-LfCopy([string]$Source, [string]$Destination) {
     $Text = [System.IO.File]::ReadAllText($Source)
-    $Text = $Text.Replace([Environment]::NewLine, [char]10)
-    if ($Text.Contains([char]13)) {
+    $Text = $Text.Replace("`r`n", "`n")
+    if ($Text.Contains("`r")) {
         throw "STOP: patch contains a bare CR byte: $Source"
     }
     $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
