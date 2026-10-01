@@ -1,0 +1,88 @@
+diff --git a/cron/executions.py b/cron/executions.py
+--- a/cron/executions.py
++++ b/cron/executions.py
+@@ -47,13 +47,23 @@ def _initialize_schema(conn: sqlite3.Connection) -> None:
+              process_id TEXT NOT NULL,
+              pid INTEGER NOT NULL,
+              process_started_at INTEGER,
+              status TEXT NOT NULL CHECK(status IN
+                ('claimed','running','completed','failed','unknown')),
+              claimed_at TEXT NOT NULL,
+              started_at TEXT,
+              finished_at TEXT,
+-             error TEXT
++             error TEXT,
++             scheduled_at TEXT,
++             delivery_outcome TEXT
+            )"""
+     )
++    existing_columns = {
++        str(row[1])
++        for row in conn.execute("PRAGMA table_info(executions)").fetchall()
++    }
++    if "scheduled_at" not in existing_columns:
++        conn.execute("ALTER TABLE executions ADD COLUMN scheduled_at TEXT")
++    if "delivery_outcome" not in existing_columns:
++        conn.execute("ALTER TABLE executions ADD COLUMN delivery_outcome TEXT")
+     conn.execute(
+         "CREATE INDEX IF NOT EXISTS idx_executions_job_claimed "
+         "ON executions(job_id, claimed_at DESC, id DESC)"
+@@ -136,18 +146,21 @@ def _prune_unlocked(conn: sqlite3.Connection) -> None:
+         (limit,),
+     )
+ 
+ 
+-def create_execution(job_id: str, *, source: str) -> Dict[str, Any]:
++def create_execution(
++    job_id: str, *, source: str, scheduled_at: Optional[str] = None
++) -> Dict[str, Any]:
+     """Persist a claimed attempt before executor/provider dispatch."""
+     now = _hermes_now().isoformat()
+     execution_id = uuid.uuid4().hex
+     pid = os.getpid()
+     with _transaction() as conn:
+         conn.execute(
+             """INSERT INTO executions
+                (id, job_id, source, process_id, pid, process_started_at,
+-                status, claimed_at)
+-               VALUES (?, ?, ?, ?, ?, ?, 'claimed', ?)""",
++                status, claimed_at, scheduled_at)
++               VALUES (?, ?, ?, ?, ?, ?, 'claimed', ?, ?)""",
+             (execution_id, str(job_id), str(source), _PROCESS_ID, pid,
+-             _process_start_time(pid), now),
++             _process_start_time(pid), now,
++             str(scheduled_at) if scheduled_at is not None else None),
+         )
+         row = conn.execute(
+             "SELECT * FROM executions WHERE id=?", (execution_id,)
+@@ -185,10 +198,11 @@ def finish_execution(
+     status = "completed" if success else "failed"
+     detail = None if success else (str(error) if error else "unknown failure")
+     with _transaction() as conn:
+         cur = conn.execute(
+-            """UPDATE executions SET status=?, finished_at=?, error=?
++            """UPDATE executions SET status=?, finished_at=?, error=?, delivery_outcome=?
+                WHERE id=? AND status IN ('claimed','running')""",
+-            (status, now, detail, execution_id),
++            (status, now, detail,
++             str(delivery_outcome) if delivery_outcome is not None else None,
++             execution_id),
+         )
+         if cur.rowcount != 1:
+             return None
+diff --git a/cron/scheduler.py b/cron/scheduler.py
+--- a/cron/scheduler.py
++++ b/cron/scheduler.py
+@@ -7906,7 +7906,11 @@ def tick(
+             # Record the attempt before executor dispatch. Recovery classifies
+             # abandoned records as unknown; it never automatically retries them.
+             try:
+-                execution = create_execution(job_id, source="builtin")
++                execution = create_execution(
++                    job_id,
++                    source="builtin",
++                    scheduled_at=job.get("next_run_at"),
++                )
+                 dispatched_job = dict(job, execution_id=execution["id"])
+                 _ctx = contextvars.copy_context()
+             except Exception as execution_err:
