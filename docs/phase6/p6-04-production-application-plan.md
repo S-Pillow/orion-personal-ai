@@ -180,3 +180,38 @@ activation and schema reconciliation**. A running gateway can continue using pre
 modules until restarted. The next unit must first perform read-only activation discovery
 against the current COMPANION gateway/supervisor state, then choose the correct native
 Hermes Windows lifecycle action. No reminder creation is required to activate the schema.
+
+
+## Live activation acceptance - 2026-10-01
+
+Status: **LIVE ACTIVATION ACCEPTED / OR-REM-009 FINAL CLOSURE STILL BLOCKED ON DURABLE ERROR CLASSIFICATION**
+
+Accepted operator evidence:
+
+- Orion head at activation: `48e3a58daa6c72ca8d563e5ab0db97c325a46410`;
+- Hermes HEAD remained `5fc308a70719a83cccdbba4c0e39c23f5a8239d5`;
+- supervisor task: `Hermes_Gateway_companion`, state `Ready`;
+- pre-restart gateway PID: `38284`;
+- post-restart gateway PID: `37016`;
+- restart used Hermes native Windows lifecycle and drained the prior gateway cleanly;
+- fresh ticker heartbeat observed after restart;
+- COMPANION job count remained `0`;
+- COMPANION execution row count remained `0`;
+- execution schema migrated from the original 11 columns to include
+  `scheduled_at` and `delivery_outcome`;
+- gateway state reported `running`;
+- Orion repository remained unchanged during activation;
+- Hermes HEAD remained unchanged;
+- accepted P6-03/P6-04 source hashes remained unchanged;
+- no reminder was created.
+
+The P6-04 source and schema activation are therefore production-verified.
+
+P6-04 is not yet declared fully closed against OR-REM-009. The approved PRD requires each
+scheduled execution to retain bounded run evidence including an error/failure
+classification where applicable. The installed Hermes ledger currently retains the raw
+`error` text while `agent/monitoring/cron_health.py` derives `error_class` only when
+projecting telemetry. That classification is not itself retained in `executions.db`.
+Before OR-REM-009 can be closed, resolve this as a narrow compatibility delta: persist a
+nullable `error_class` value for failed/unknown terminal records while preserving the
+existing classifier semantics and leaving successful rows null.
