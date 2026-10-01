@@ -117,7 +117,6 @@ $RepoHead = (& git -C $RepoRoot rev-parse HEAD).Trim()
 $RepoStatusBefore = Get-StatusText $RepoRoot
 $HermesHeadBefore = (& git -C $HermesRoot rev-parse HEAD).Trim()
 $HermesStatusBefore = Get-StatusText $HermesRoot
-$CompanionBefore = Get-CronMetadata $CompanionCron
 
 if ($RepoBranch -ne $ExpectedBranch) { throw "STOP: expected Orion branch $ExpectedBranch; observed $RepoBranch" }
 if ($RepoStatusBefore) { throw "STOP: Orion worktree must be clean before P6-04A generation." }
@@ -146,7 +145,7 @@ if ($InstalledJobsSha -ne $ExpectedP603JobsSha256) { throw "STOP: installed P6-0
 if ($InstalledExecutionsSha -ne $ExpectedP604ExecutionsSha256) { throw "STOP: installed P6-04 executions.py hash drift." }
 if ($InstalledSchedulerSha -ne $ExpectedP604SchedulerSha256) { throw "STOP: installed P6-04 scheduler.py hash drift." }
 
-foreach ($Required in @($HermesPython, $P603Patch, $P604Patch, $Transformer, $P604AProbe, $P604Probe, $P603Probe)) {
+foreach ($Required in @($HermesPython, $P603Patch, $P604Patch, $Transformer, $P604AProbe, $P604Probe, $P603Probe, $StateProbe)) {
     if (-not (Test-Path -LiteralPath $Required)) {
         throw "STOP: required P6-04A generation input missing: $Required"
     }
@@ -162,21 +161,22 @@ foreach ($PatchRel in @(
     }
 }
 
+$StateBeforeOutput = Invoke-StateProbe
+$StateBefore = Get-CompanionLogicalState $StateBeforeOutput "pre-generation"
+
 $Stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $TempBase = Join-Path $env:TEMP "orion-p6-04a-generate-$Stamp"
-$SourceA = Join-Path $TempBase "source-tested"
-$SourceB = Join-Path $TempBase "source-roundtrip"
+$SourceA = Join-Path $TempBase "candidate"
+$SourceB = Join-Path $TempBase "roundtrip"
 $HomeA = Join-Path $TempBase "home-p604a-tested"
 $HomeB = Join-Path $TempBase "home-p604a-roundtrip"
 $HomeP604 = Join-Path $TempBase "home-p604-regression"
 $HomeP603 = Join-Path $TempBase "home-p603-regression"
-$ArchivePath = Join-Path $TempBase "hermes-source.tar"
 $P603Normalized = Join-Path $TempBase "p6-03.lf.patch"
 $P604Normalized = Join-Path $TempBase "p6-04.lf.patch"
 $CandidatePatch = Join-Path $TempBase "p6-04a-durable-error-classification.git-generated.patch"
 
-New-Item -ItemType Directory -Path $SourceA -Force | Out-Null
-New-Item -ItemType Directory -Path $SourceB -Force | Out-Null
+New-Item -ItemType Directory -Path $TempBase -Force | Out-Null
 New-Item -ItemType Directory -Path $HomeA -Force | Out-Null
 New-Item -ItemType Directory -Path $HomeB -Force | Out-Null
 New-Item -ItemType Directory -Path $HomeP604 -Force | Out-Null
@@ -191,19 +191,16 @@ Write-Host "P6_04A_GENERATE_HERMES_HEAD=$HermesHeadBefore"
 Write-Host "P6_04A_GENERATE_INSTALLED_P603_JOBS_SHA256=$InstalledJobsSha"
 Write-Host "P6_04A_GENERATE_INSTALLED_P604_EXECUTIONS_SHA256=$InstalledExecutionsSha"
 Write-Host "P6_04A_GENERATE_INSTALLED_P604_SCHEDULER_SHA256=$InstalledSchedulerSha"
+Write-Host "P6_04A_GENERATE_COMPANION_JOB_COUNT_BEFORE=$($StateBefore.JobCount)"
+Write-Host "P6_04A_GENERATE_COMPANION_EXECUTION_ROWS_BEFORE=$($StateBefore.Rows)"
+Write-Host "P6_04A_GENERATE_COMPANION_EXECUTION_COLUMNS_BEFORE=$($StateBefore.Columns)"
 Write-Host "P6_04A_GENERATE_INSTALLED_HERMES_MUTATION_AUTHORIZED=false"
 Write-Host "P6_04A_GENERATE_COMPANION_MUTATION_AUTHORIZED=false"
 Write-Host "P6_04A_GENERATE_LIVE_JOB_AUTHORIZED=false"
 
-& git -C $HermesRoot archive --format=tar --output=$ArchivePath $ExpectedHermesHead
-if ($LASTEXITCODE -ne 0) { throw "STOP: failed to archive pinned Hermes source." }
-& tar -xf $ArchivePath -C $SourceA
-if ($LASTEXITCODE -ne 0) { throw "STOP: failed to extract tested disposable source." }
-& tar -xf $ArchivePath -C $SourceB
-if ($LASTEXITCODE -ne 0) { throw "STOP: failed to extract round-trip disposable source." }
-
-Init-Repo $SourceA
-Apply-QualifiedBaseline $SourceA $P603Normalized $P604Normalized
+Clone-AcceptedHermes $SourceA
+$BaselineCommit = Apply-QualifiedBaseline $SourceA $P603Normalized $P604Normalized
+Write-Host "P6_04A_GENERATE_BASELINE_COMMIT=$BaselineCommit"
 
 & $HermesPython -B $Transformer --source-root $SourceA
 if ($LASTEXITCODE -ne 0) { throw "STOP: deterministic P6-04A source transformation failed." }
@@ -238,21 +235,32 @@ Write-Host "P6_04A_GENERATE_TESTED_CRON_HEALTH_SHA256=$HealthShaA"
 Write-Host "P6_04A_GENERATE_TESTED_CLASSIFIER_SHA256=$ClassifierShaA"
 Write-Host "P6_04A_GENERATE_TESTED_EXECUTIONS_SHA256=$ExecShaA"
 
-# Mark the new classifier as intent-to-add so git diff includes it in the generated patch.
-& git -C $SourceA add -N -- cron/error_classification.py
-if ($LASTEXITCODE -ne 0) { throw "STOP: failed to mark new classifier for patch generation." }
+& git -C $SourceA add -- agent/monitoring/cron_health.py cron/error_classification.py cron/executions.py
+if ($LASTEXITCODE -ne 0) { throw "STOP: failed to stage exact P6-04A candidate scope." }
+$StagedNames = @(& git -C $SourceA diff --cached --name-only | Sort-Object)
+if (($StagedNames -join "`n") -ne ($ExpectedChanged -join "`n")) {
+    throw "STOP: staged P6-04A candidate scope drift: $($StagedNames -join ', ')"
+}
+& git -C $SourceA commit --quiet -m "candidate-p6-04a-durable-error-classification"
+if ($LASTEXITCODE -ne 0) { throw "STOP: failed to commit disposable P6-04A candidate." }
+$CandidateCommit = (& git -C $SourceA rev-parse HEAD).Trim()
+Write-Host "P6_04A_GENERATE_CANDIDATE_COMMIT=$CandidateCommit"
+if (Get-StatusText $SourceA) { throw "STOP: disposable candidate clone is not clean after candidate commit." }
 
 $DiffArgs = @(
     "-C", $SourceA,
     "diff", "--patch", "--binary", "--full-index", "--no-ext-diff",
-    "--output=$CandidatePatch", "--",
+    "--output=$CandidatePatch",
+    $BaselineCommit,
+    $CandidateCommit,
+    "--",
     "agent/monitoring/cron_health.py",
     "cron/error_classification.py",
     "cron/executions.py"
 )
 & git @DiffArgs
-if ($LASTEXITCODE -ne 0) { throw "STOP: git failed to generate P6-04A patch." }
-if (-not (Test-Path -LiteralPath $CandidatePatch)) { throw "STOP: git-generated P6-04A patch is missing." }
+if ($LASTEXITCODE -ne 0) { throw "STOP: git failed to generate commit-to-commit P6-04A patch." }
+if (-not (Test-Path -LiteralPath $CandidatePatch)) { throw "STOP: commit-to-commit P6-04A patch is missing." }
 
 $CandidateBytes = [System.IO.File]::ReadAllBytes($CandidatePatch)
 if ($CandidateBytes.Length -eq 0) { throw "STOP: git-generated P6-04A patch is empty." }
@@ -260,19 +268,24 @@ $CandidateCrBytes = @($CandidateBytes | Where-Object { $_ -eq 13 }).Count
 if ($CandidateCrBytes -ne 0) { throw "STOP: git-generated P6-04A patch contains CR bytes." }
 
 $CandidateSha = (Get-FileHash -LiteralPath $CandidatePatch -Algorithm SHA256).Hash.ToLowerInvariant()
-Write-Host "P6_04A_GENERATE_PATCH_METHOD=git_diff_patch"
+Write-Host "P6_04A_GENERATE_PATCH_METHOD=git_diff_commit_to_commit"
 Write-Host "P6_04A_GENERATE_PATCH_SHA256=$CandidateSha"
 Write-Host "P6_04A_GENERATE_PATCH_CR_BYTES=$CandidateCrBytes"
 
-Init-Repo $SourceB
-Apply-QualifiedBaseline $SourceB $P603Normalized $P604Normalized
+& git -c core.autocrlf=false clone --quiet --no-hardlinks $SourceA $SourceB
+if ($LASTEXITCODE -ne 0) { throw "STOP: failed to clone disposable candidate history for round-trip qualification." }
+& git -C $SourceB config core.autocrlf false
+& git -C $SourceB config core.eol lf
+& git -C $SourceB checkout --quiet --detach $BaselineCommit
+if ($LASTEXITCODE -ne 0) { throw "STOP: failed to check out disposable baseline commit for round-trip qualification." }
+if (Get-StatusText $SourceB) { throw "STOP: round-trip baseline clone is not clean before patch application." }
 
 & git -C $SourceB apply --check $CandidatePatch
-if ($LASTEXITCODE -ne 0) { throw "STOP: git-generated P6-04A patch failed fresh-tree apply check." }
+if ($LASTEXITCODE -ne 0) { throw "STOP: commit-to-commit P6-04A patch failed fresh-baseline apply check." }
 Write-Host "P6_04A_GENERATE_ROUNDTRIP_APPLY_CHECK=PASS"
 
 & git -C $SourceB apply $CandidatePatch
-if ($LASTEXITCODE -ne 0) { throw "STOP: git-generated P6-04A patch failed fresh-tree application." }
+if ($LASTEXITCODE -ne 0) { throw "STOP: commit-to-commit P6-04A patch failed fresh-baseline application." }
 
 & git -C $SourceB diff --check
 if ($LASTEXITCODE -ne 0) { throw "STOP: round-trip P6-04A source contains whitespace errors." }
@@ -295,7 +308,7 @@ Write-Host "P6_04A_GENERATE_ROUNDTRIP_CLASSIFIER_SHA256=$ClassifierShaB"
 Write-Host "P6_04A_GENERATE_ROUNDTRIP_EXECUTIONS_SHA256=$ExecShaB"
 
 if ($HealthShaB -ne $HealthShaA -or $ClassifierShaB -ne $ClassifierShaA -or $ExecShaB -ne $ExecShaA) {
-    throw "STOP: generated P6-04A patch did not reproduce exact tested source hashes."
+    throw "STOP: commit-to-commit P6-04A patch did not reproduce exact tested source hashes."
 }
 Write-Host "P6_04A_GENERATE_SOURCE_HASH_ROUNDTRIP=PASS"
 
@@ -314,22 +327,26 @@ Write-Host "P6_04A_GENERATE_P603_REGRESSION=PASS"
 $RepoHeadAfter = (& git -C $RepoRoot rev-parse HEAD).Trim()
 $RepoStatusAfter = Get-StatusText $RepoRoot
 $HermesHeadAfter = (& git -C $HermesRoot rev-parse HEAD).Trim()
-$HermesStatusAfter = Get-StatusText $HermesRoot
-$CompanionAfter = Get-CronMetadata $CompanionCron
+$StateAfterOutput = Invoke-StateProbe
+$StateAfter = Get-CompanionLogicalState $StateAfterOutput "post-generation"
 
 if ($RepoHeadAfter -ne $RepoHead -or $RepoStatusAfter -ne $RepoStatusBefore) {
     throw "STOP: Orion repository changed during P6-04A generation."
 }
-if ($HermesHeadAfter -ne $HermesHeadBefore -or $HermesStatusAfter -ne $HermesStatusBefore) {
-    throw "STOP: installed Hermes changed during P6-04A generation."
-}
-if (($CompanionAfter -join [Environment]::NewLine) -ne ($CompanionBefore -join [Environment]::NewLine)) {
-    throw "STOP: COMPANION cron metadata changed during P6-04A generation."
-}
+if ($HermesHeadAfter -ne $HermesHeadBefore) { throw "STOP: installed Hermes HEAD changed during P6-04A generation." }
+Assert-StatusEquals (Get-StatusLines $HermesRoot) $ExpectedHermesStatus "post-generation Hermes"
+if ((Get-FileHash -LiteralPath $InstalledJobs -Algorithm SHA256).Hash.ToLowerInvariant() -ne $InstalledJobsSha) { throw "STOP: installed P6-03 jobs.py changed during P6-04A generation." }
+if ((Get-FileHash -LiteralPath $InstalledExecutions -Algorithm SHA256).Hash.ToLowerInvariant() -ne $InstalledExecutionsSha) { throw "STOP: installed P6-04 executions.py changed during P6-04A generation." }
+if ((Get-FileHash -LiteralPath $InstalledScheduler -Algorithm SHA256).Hash.ToLowerInvariant() -ne $InstalledSchedulerSha) { throw "STOP: installed P6-04 scheduler.py changed during P6-04A generation." }
+if ($StateAfter.JobCount -ne $StateBefore.JobCount) { throw "STOP: COMPANION logical job count changed during P6-04A generation." }
+if ($StateAfter.Rows -ne $StateBefore.Rows) { throw "STOP: COMPANION logical execution row count changed during P6-04A generation." }
+if ($StateAfter.Columns -ne $StateBefore.Columns) { throw "STOP: COMPANION logical execution schema changed during P6-04A generation." }
 
+Write-Host "P6_04A_GENERATE_COMPANION_JOB_COUNT_AFTER=$($StateAfter.JobCount)"
+Write-Host "P6_04A_GENERATE_COMPANION_EXECUTION_ROWS_AFTER=$($StateAfter.Rows)"
+Write-Host "P6_04A_GENERATE_COMPANION_EXECUTION_COLUMNS_AFTER=$($StateAfter.Columns)"
 Write-Host "P6_04A_GENERATE_ORION_UNCHANGED=true"
 Write-Host "P6_04A_GENERATE_HERMES_UNCHANGED=true"
-Write-Host "P6_04A_GENERATE_COMPANION_CRON_UNCHANGED=true"
+Write-Host "P6_04A_GENERATE_COMPANION_LOGICAL_STATE_UNCHANGED=true"
 Write-Host "P6_04A_GENERATE_PATCH_FILE=$CandidatePatch"
-Write-Host "P6_04A_GENERATE_FAILURE_ARTIFACTS_REMOVED=false"
 Write-Host "P6_04A_GENERATE_AND_QUALIFY=PASS"
