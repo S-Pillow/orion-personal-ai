@@ -131,11 +131,8 @@ $ExpectedHermesStatus = @(
     "?? gateway/platforms/api_server.py.orion-p4-04a.json",
     "?? gateway/platforms/api_server.py.orion-p5-03a2-approval-compat.bak",
     "?? gateway/platforms/api_server.py.orion-p5-03a2-approval-compat.json"
-) -join [Environment]::NewLine
-
-if ($HermesStatusBefore -ne $ExpectedHermesStatus) {
-    throw "STOP: installed Hermes worktree differs from accepted P6-04 live state."
-}
+)
+Assert-StatusEquals (Get-StatusLines $HermesRoot) $ExpectedHermesStatus "pre-generation Hermes"
 
 $InstalledJobsSha = (Get-FileHash -LiteralPath $InstalledJobs -Algorithm SHA256).Hash.ToLowerInvariant()
 $InstalledExecutionsSha = (Get-FileHash -LiteralPath $InstalledExecutions -Algorithm SHA256).Hash.ToLowerInvariant()
