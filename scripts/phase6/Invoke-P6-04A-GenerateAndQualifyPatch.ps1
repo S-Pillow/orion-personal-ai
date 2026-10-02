@@ -43,6 +43,14 @@ function Get-StatusText([string]$Root) {
     return ((Get-StatusLines $Root) -join [Environment]::NewLine)
 }
 
+function Assert-StatusEquals([string[]]$Actual, [string[]]$Expected, [string]$Label) {
+    $ActualSorted = @($Actual | Sort-Object)
+    $ExpectedSorted = @($Expected | Sort-Object)
+    if (($ActualSorted -join "`n") -ne ($ExpectedSorted -join "`n")) {
+        throw "STOP: $Label status mismatch. Actual: $($ActualSorted -join ' || ')"
+    }
+}
+
 function Invoke-StateProbe {
     $Output = @(& $HermesPython -B $StateProbe --companion-home $CompanionHome)
     if ($LASTEXITCODE -ne 0) { throw "STOP: P6-04 production state probe failed." }
