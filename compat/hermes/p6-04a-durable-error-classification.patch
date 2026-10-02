@@ -1,0 +1,163 @@
+diff --git a/agent/monitoring/cron_health.py b/agent/monitoring/cron_health.py
+index 2c4fe8d35ff2ea81ecfb0e14142b7876f06130fe..834ee55b7907599962a5bd8e22248103cc6c311b 100644
+--- a/agent/monitoring/cron_health.py
++++ b/agent/monitoring/cron_health.py
+@@ -4,13 +4,13 @@ from __future__ import annotations
+ 
+ import hashlib
+ import logging
+-import re
+ from dataclasses import dataclass
+ from datetime import datetime
+ from typing import Any, Optional
+ 
+ from agent.monitoring.events import CronExecutionEvent
+ from agent.monitoring.gateway_health import GatewayHealthSnapshot, GatewayMetric
++from cron.error_classification import classify_cron_error
+ from cron.jobs import (
+     _compute_grace_seconds,
+     get_catch_up_occurrence_count,
+@@ -44,32 +44,6 @@ def _job_key(raw: Any) -> str:
+     return f"sha256:{hashlib.sha256(value).hexdigest()[:24]}"
+ 
+ 
+-def classify_cron_error(raw: Any) -> str:
+-    text = str(raw or "").lower()
+-    if (
+-        re.search(r"\b(?:authentication|authenticated|authenticate|authorization|authorized|authorize|unauthorized|forbidden)\b", text)
+-        or re.search(r"\bbearer\b", text)
+-        or re.search(r"\b(?:access|api|refresh) token\b", text)
+-        or re.search(r"\b(?:401|403)\b", text)
+-    ):
+-        return "auth_failed"
+-    if "rate limit" in text or "429" in text or "quota" in text:
+-        return "rate_limited"
+-    if "timeout" in text or "timed out" in text:
+-        return "timeout"
+-    if any(value in text for value in ("network", "connection", "dns", "socket", "unreachable")):
+-        return "network_error"
+-    if "dispatch" in text or "executor" in text:
+-        return "dispatch_failed"
+-    if "interrupt" in text or "owner exited" in text or "restarted" in text:
+-        return "interrupted"
+-    if "empty response" in text:
+-        return "empty_response"
+-    if any(value in text for value in ("config", "missing", "invalid")):
+-        return "invalid_config"
+-    return "unknown"
+-
+-
+ def _parse_time(raw: Any) -> Optional[datetime]:
+     try:
+         return datetime.fromisoformat(str(raw)) if raw else None
+diff --git a/cron/error_classification.py b/cron/error_classification.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..53642256e53e4df0839f08606bacf963f9284740
+--- /dev/null
++++ b/cron/error_classification.py
+@@ -0,0 +1,35 @@
++"""Shared deterministic cron execution error classification."""
++
++from __future__ import annotations
++
++import re
++from typing import Any
++
++
++def classify_cron_error(raw: Any) -> str:
++    text = str(raw or "").lower()
++    if (
++        re.search(r"\b(?:authentication|authenticated|authenticate|authorization|authorized|authorize|unauthorized|forbidden)\b", text)
++        or re.search(r"\bbearer\b", text)
++        or re.search(r"\b(?:access|api|refresh) token\b", text)
++        or re.search(r"\b(?:401|403)\b", text)
++    ):
++        return "auth_failed"
++    if "rate limit" in text or "429" in text or "quota" in text:
++        return "rate_limited"
++    if "timeout" in text or "timed out" in text:
++        return "timeout"
++    if any(value in text for value in ("network", "connection", "dns", "socket", "unreachable")):
++        return "network_error"
++    if "dispatch" in text or "executor" in text:
++        return "dispatch_failed"
++    if "interrupt" in text or "owner exited" in text or "restarted" in text:
++        return "interrupted"
++    if "empty response" in text:
++        return "empty_response"
++    if any(value in text for value in ("config", "missing", "invalid")):
++        return "invalid_config"
++    return "unknown"
++
++
++__all__ = ["classify_cron_error"]
+diff --git a/cron/executions.py b/cron/executions.py
+index 9897545748b23ec2d812424ba922ff28f5cfb579..66c0f476c15063b5c86f1d91800bcfc9c9884e41 100644
+--- a/cron/executions.py
++++ b/cron/executions.py
+@@ -14,6 +14,7 @@ import uuid
+ from contextlib import contextmanager
+ from typing import Any, Dict, Iterator, List, Optional
+ 
++from cron.error_classification import classify_cron_error
+ from hermes_constants import get_hermes_home
+ from hermes_time import now as _hermes_now
+ 
+@@ -55,7 +56,8 @@ def _initialize_schema(conn: sqlite3.Connection) -> None:
+              finished_at TEXT,
+              error TEXT,
+              scheduled_at TEXT,
+-             delivery_outcome TEXT
++             delivery_outcome TEXT,
++             error_class TEXT
+            )"""
+     )
+     existing_columns = {
+@@ -66,6 +68,8 @@ def _initialize_schema(conn: sqlite3.Connection) -> None:
+         conn.execute("ALTER TABLE executions ADD COLUMN scheduled_at TEXT")
+     if "delivery_outcome" not in existing_columns:
+         conn.execute("ALTER TABLE executions ADD COLUMN delivery_outcome TEXT")
++    if "error_class" not in existing_columns:
++        conn.execute("ALTER TABLE executions ADD COLUMN error_class TEXT")
+     conn.execute(
+         "CREATE INDEX IF NOT EXISTS idx_executions_job_claimed "
+         "ON executions(job_id, claimed_at DESC, id DESC)"
+@@ -197,13 +201,15 @@ def finish_execution(
+     now = _hermes_now().isoformat()
+     status = "completed" if success else "failed"
+     detail = None if success else (str(error) if error else "unknown failure")
++    error_class = None if success else classify_cron_error(detail)
+     with _transaction() as conn:
+         cur = conn.execute(
+-            """UPDATE executions SET status=?, finished_at=?, error=?, delivery_outcome=?
++            """UPDATE executions
++               SET status=?, finished_at=?, error=?, delivery_outcome=?, error_class=?
+                WHERE id=? AND status IN ('claimed','running')""",
+             (status, now, detail,
+              str(delivery_outcome) if delivery_outcome is not None else None,
+-             execution_id),
++             error_class, execution_id),
+         )
+         if cur.rowcount != 1:
+             return None
+@@ -230,13 +236,15 @@ def recover_interrupted_executions() -> int:
+                 continue
+             if _owner_is_live(int(row["pid"]), row["process_started_at"]):
+                 continue
++            detail = (
++                "Scheduler restarted after this execution's owner exited before a durable "
++                "terminal state; whether side effects ran is unknown."
++            )
+             cur = conn.execute(
+-                """UPDATE executions SET status='unknown', finished_at=?, error=?
++                """UPDATE executions
++                   SET status='unknown', finished_at=?, error=?, error_class=?
+                    WHERE id=? AND status IN ('claimed','running')""",
+-                (now,
+-                 "Scheduler restarted after this execution's owner exited before a durable "
+-                 "terminal state; whether side effects ran is unknown.",
+-                 row["id"]),
++                (now, detail, classify_cron_error(detail), row["id"]),
+             )
+             changed += cur.rowcount
+             if cur.rowcount:
