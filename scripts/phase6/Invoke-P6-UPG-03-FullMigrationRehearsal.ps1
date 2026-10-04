@@ -290,7 +290,7 @@ else {
 
 $FocusedTests = @(
     "tests/cron/test_restart_safe_worker.py",
-    "tests/tools/test_local_env_blocklist.py::test_builders_strip_runtime_markers_and_owned_paths",
+    "tests/tools/test_local_env_blocklist.py",
     "tests/cron/test_cron_multiplex_tick_ownership.py",
     "tests/cron/test_cron_multiplex_desktop_ticker_scope.py",
     "tests/cron/test_ticker_stall.py",
