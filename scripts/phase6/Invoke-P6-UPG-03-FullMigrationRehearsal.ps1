@@ -27,8 +27,8 @@ $ExpectedCompatFileHashes = @{
 $InstalledHermesPython = Join-Path $InstalledHermesRoot "venv\Scripts\python.exe"
 $StateProbe = Join-Path $RepoRoot "scripts\phase6\p6-04-production-state-probe.py"
 $RiskProbe = Join-Path $RepoRoot "scripts\phase6\p6-upg-03-risk-probes.py"
-$WorkerFix = Join-Path $RepoRoot "scripts\phase6\p6-upg-03-apply-v0215-windows-worker-env-fix.py"
 $CompatPatch = Join-Path $RepoRoot "compat\hermes\v2026.9.24-orion-minimal-compat.patch"
+$WorkerCompatPatch = Join-Path $RepoRoot "compat\hermes\v2026.9.24-upstream-f57d235-worker-env.patch"
 
 function Get-KeyValue([string[]]$Output, [string]$Key) {
     $Prefix = $Key + "="
@@ -72,7 +72,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "STOP: P6-UPG-03 branch does not descend from qualified P6-UPG-02."
 }
 
-foreach ($Path in @($InstalledHermesPython, $SystemPython, $StateProbe, $RiskProbe, $WorkerFix, $CompatPatch)) {
+foreach ($Path in @($InstalledHermesPython, $SystemPython, $StateProbe, $RiskProbe, $CompatPatch, $WorkerCompatPatch)) {
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
         throw "STOP: required file missing: $Path"
     }
@@ -195,6 +195,16 @@ foreach ($Relative in $ExpectedCompatFileHashes.Keys) {
 }
 Write-Host "P6_UPG_03_QUALIFIED_COMPAT_REPRODUCED=PASS"
 
+git -C $Target apply --check $WorkerCompatPatch
+if ($LASTEXITCODE -ne 0) {
+    throw "STOP: reviewed upstream f57d235 worker-env backport does not apply cleanly."
+}
+git -C $Target apply $WorkerCompatPatch
+if ($LASTEXITCODE -ne 0) {
+    throw "STOP: failed to apply reviewed upstream f57d235 worker-env backport."
+}
+Write-Host "P6_UPG_03_UPSTREAM_F57D235_BACKPORT_APPLIED=PASS"
+
 & $SystemPython -m venv $RuntimeVenv
 if ($LASTEXITCODE -ne 0) {
     throw "STOP: runtime venv creation failed."
@@ -239,54 +249,23 @@ if ($LASTEXITCODE -ne 0) {
 $OldPythonPath = $env:PYTHONPATH
 try {
     $env:PYTHONPATH = "$Target;$RuntimeSite"
-    $WorkerRed = @(& $StorePython -B $RiskProbe --mode worker --repo-root $Target --runtime-site $RuntimeSite 2>&1)
-    $WorkerRed | ForEach-Object { Write-Host $_ }
+    $WorkerGreen = @(& $StorePython -B $RiskProbe --mode worker --repo-root $Target --runtime-site $RuntimeSite 2>&1)
+    $WorkerGreen | ForEach-Object { Write-Host $_ }
     if ($LASTEXITCODE -ne 0) {
-        throw "STOP: managed-worker red probe harness itself failed."
+        throw "STOP: patched-worker qualification probe failed."
     }
 }
 finally {
     $env:PYTHONPATH = $OldPythonPath
 }
 
-$RedPass = Get-KeyValue $WorkerRed "P6_UPG_03_WORKER_CHILD_IMPORTS_PASS"
-$RedMissing = Get-KeyValue $WorkerRed "P6_UPG_03_WORKER_MISSING_RUNTIME_DEP"
-$WorkerBlocked = $false
-
-if ($RedPass -eq "false" -and $RedMissing -eq "true") {
-    $WorkerBlocked = $true
-    Write-Host "P6_UPG_03_WORKER_ENV_TARGET_RISK_REPRODUCED=true"
-
-    & $RuntimePython -B $WorkerFix --candidate-root $Target
-    if ($LASTEXITCODE -ne 0) {
-        throw "STOP: exact-target worker-env compatibility transform failed."
-    }
-
-    try {
-        $env:PYTHONPATH = "$Target;$RuntimeSite"
-        $WorkerGreen = @(& $StorePython -B $RiskProbe --mode worker --repo-root $Target --runtime-site $RuntimeSite 2>&1)
-        $WorkerGreen | ForEach-Object { Write-Host $_ }
-        if ($LASTEXITCODE -ne 0) {
-            throw "STOP: managed-worker green probe harness itself failed."
-        }
-    }
-    finally {
-        $env:PYTHONPATH = $OldPythonPath
-    }
-
-    $GreenPass = Get-KeyValue $WorkerGreen "P6_UPG_03_WORKER_CHILD_IMPORTS_PASS"
-    if ($GreenPass -ne "true") {
-        throw "STOP: disposable worker-env repair did not make the child import path healthy."
-    }
-
-    Write-Host "P6_UPG_03_UPSTREAM_F57D235_BACKPORT_PROOF=PASS"
+$GreenPass = Get-KeyValue $WorkerGreen "P6_UPG_03_WORKER_CHILD_IMPORTS_PASS"
+$GreenHasRuntime = Get-KeyValue $WorkerGreen "P6_UPG_03_WORKER_CHILD_HAS_RUNTIME_SITE"
+if ($GreenPass -ne "true" -or $GreenHasRuntime -ne "true") {
+    throw "STOP: upstream f57d235 backport did not produce a healthy external-worker dependency path."
 }
-elseif ($RedPass -eq "true") {
-    Write-Host "P6_UPG_03_WORKER_ENV_TARGET_RISK_REPRODUCED=false"
-}
-else {
-    throw "STOP: worker probe failed in an unexpected shape."
-}
+
+Write-Host "P6_UPG_03_UPSTREAM_F57D235_BACKPORT_PROOF=PASS"
 
 $FocusedTests = @(
     "tests/cron/test_restart_safe_worker.py",
@@ -363,10 +342,6 @@ Write-Host "P6_UPG_03_INSTALLED_HERMES_UNCHANGED=true"
 Write-Host "P6_UPG_03_GATEWAY_RESTARTED=false"
 Write-Host "P6_UPG_03_LIVE_REMINDER_RUN=false"
 
-if ($WorkerBlocked) {
-    Write-Host "P6_UPG_03_VERDICT=BLOCKED_WORKER_ENV"
-    Write-Host "P6_UPG_03_NEXT=promote_upstream_f57d235_worker_env_backport_and_requalify"
-}
-else {
-    Write-Host "P6_UPG_03_VERDICT=PASS"
-}
+Write-Host "P6_UPG_03_VERDICT=PASS"
+Write-Host "P6_UPG_03_CANDIDATE=V0215_PLUS_ORION_COMPAT_PLUS_UPSTREAM_F57D235"
+Write-Host "P6_UPG_03_NEXT=prepare_combined_immutable_compat_artifact_for_p6_upg_04_review"
