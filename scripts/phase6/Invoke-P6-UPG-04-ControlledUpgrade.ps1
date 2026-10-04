@@ -251,14 +251,21 @@ if (-not (Test-Path -LiteralPath $ClearancePath -PathType Leaf)) {
     Stop-P6 "vendor P1 #131145 has no qualified candidate clearance artifact. Production upgrade is NO-GO."
 }
 $Clearance = Get-Content -LiteralPath $ClearancePath -Raw | ConvertFrom-Json
-if (
-    $Clearance.schema -ne 1 -or
-    $Clearance.issue -ne 131145 -or
-    $Clearance.status -ne "qualified_fix_included" -or
-    $Clearance.candidate_artifact_sha256 -ne $ExpectedArtifactHash
-) {
-    Stop-P6 "vendor warm-up clearance artifact is invalid or does not bind to this candidate."
+$AllowedClearanceSources = @("upstream_merged_commit", "stable_release")
+$ClearanceValid = (
+    $Clearance.schema -eq 1 -and
+    $Clearance.issue -eq 131145 -and
+    $Clearance.status -eq "qualified_fix_included" -and
+    $Clearance.candidate_artifact_sha256 -eq $ExpectedArtifactHash -and
+    [string]$Clearance.vendor_fix.source -in $AllowedClearanceSources -and
+    -not [string]::IsNullOrWhiteSpace([string]$Clearance.vendor_fix.reference) -and
+    -not [string]::IsNullOrWhiteSpace([string]$Clearance.qualification.orion_commit) -and
+    -not [string]::IsNullOrWhiteSpace([string]$Clearance.qualification.evidence)
+)
+if (-not $ClearanceValid) {
+    Stop-P6 "vendor warm-up clearance artifact is invalid, incomplete, or does not bind to this candidate."
 }
+Write-Host "P6_UPG_04_VENDOR_CLEARANCE=PASS"
 
 $Preflight = Join-Path $OrionRepo "scripts\phase6\Invoke-P6-UPG-04-Preflight.ps1"
 $StateGuard = Join-Path $OrionRepo "scripts\phase6\p6-upg-04-state-guard.py"
