@@ -1,0 +1,490 @@
+diff --git a/agent/monitoring/cron_health.py b/agent/monitoring/cron_health.py
+index d0cb28fc0b90082f8ab16a7386ac9d965bda8a09..9a4202322d1d9694cca80f8702ab49c2da7f49a6 100644
+--- a/agent/monitoring/cron_health.py
++++ b/agent/monitoring/cron_health.py
+@@ -3,13 +3,13 @@
+ from __future__ import annotations
+ 
+ import logging
+-import re
+ from dataclasses import dataclass
+ from datetime import datetime
+ from typing import Any, Callable, Optional
+ 
+ from agent.monitoring.events import CronExecutionEvent
+-from agent.monitoring.gateway_health import GatewayMetric, _contains_any, _safe_instance_id
++from agent.monitoring.gateway_health import GatewayMetric, _safe_instance_id
++from cron.error_classification import classify_cron_error
+ from cron.jobs import (
+     _compute_grace_seconds,
+     get_catch_up_occurrence_count,
+@@ -36,30 +36,6 @@ class CronHealthSnapshot:
+ # Opaque job key: same sha256:<24 hex> shape as service.instance.id — never the raw id.
+ _job_key = _safe_instance_id
+ 
+-_AUTH_RE = re.compile(
+-    r"\b(?:authentication|authenticated|authenticate|authorization|authorized|authorize|unauthorized|forbidden|bearer|401|403)\b"
+-    r"|\b(?:access|api|refresh) token\b"
+-)
+-
+-# Ordered (predicate, class) rules; first match wins. Auth uses word boundaries so
+-# "oauth"/"tokenizer"/"HTTP 4015" do not false-positive.
+-_CRON_ERROR_RULES: tuple[tuple[Callable[[str], bool], str], ...] = (
+-    (lambda s: _AUTH_RE.search(s) is not None, "auth_failed"),
+-    (_contains_any("rate limit", "429", "quota"), "rate_limited"),
+-    (_contains_any("timeout", "timed out"), "timeout"),
+-    (_contains_any("network", "connection", "dns", "socket", "unreachable"), "network_error"),
+-    (_contains_any("dispatch", "executor"), "dispatch_failed"),
+-    (_contains_any("interrupt", "owner exited", "restarted"), "interrupted"),
+-    (_contains_any("empty response"), "empty_response"),
+-    (_contains_any("config", "missing", "invalid"), "invalid_config"),
+-)
+-
+-
+-def classify_cron_error(raw: Any) -> str:
+-    text = str(raw or "").lower()
+-    return next((label for match, label in _CRON_ERROR_RULES if match(text)), "unknown")
+-
+-
+ def _parse_time(raw: Any) -> Optional[datetime]:
+     try:
+         return datetime.fromisoformat(str(raw)) if raw else None
+diff --git a/cron/error_classification.py b/cron/error_classification.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..45a1a04326dc473bc5c2087147f4055e4697f127
+--- /dev/null
++++ b/cron/error_classification.py
+@@ -0,0 +1,41 @@
++"""Shared deterministic cron execution error classification.
++
++The rule block below is extracted unchanged from the pinned Hermes v0.21.5
++cron-health implementation. The tiny _contains_any helper is duplicated here
++with the same semantics to keep cron independent of agent.monitoring imports.
++"""
++
++from __future__ import annotations
++
++import re
++from typing import Any, Callable
++
++
++def _contains_any(*needles: str) -> Callable[[str], bool]:
++    return lambda text: any(needle in text for needle in needles)
++
++
++_AUTH_RE = re.compile(
++    r"\b(?:authentication|authenticated|authenticate|authorization|authorized|authorize|unauthorized|forbidden|bearer|401|403)\b"
++    r"|\b(?:access|api|refresh) token\b"
++)
++
++# Ordered (predicate, class) rules; first match wins. Auth uses word boundaries so
++# "oauth"/"tokenizer"/"HTTP 4015" do not false-positive.
++_CRON_ERROR_RULES: tuple[tuple[Callable[[str], bool], str], ...] = (
++    (lambda s: _AUTH_RE.search(s) is not None, "auth_failed"),
++    (_contains_any("rate limit", "429", "quota"), "rate_limited"),
++    (_contains_any("timeout", "timed out"), "timeout"),
++    (_contains_any("network", "connection", "dns", "socket", "unreachable"), "network_error"),
++    (_contains_any("dispatch", "executor"), "dispatch_failed"),
++    (_contains_any("interrupt", "owner exited", "restarted"), "interrupted"),
++    (_contains_any("empty response"), "empty_response"),
++    (_contains_any("config", "missing", "invalid"), "invalid_config"),
++)
++
++
++def classify_cron_error(raw: Any) -> str:
++    text = str(raw or "").lower()
++    return next((label for match, label in _CRON_ERROR_RULES if match(text)), "unknown")
++
++__all__ = ["classify_cron_error"]
+diff --git a/cron/executions.py b/cron/executions.py
+index 2f53c3b7e1ce041b226e303c55d97ba8e873e4a6..2bddc31fc1fda41be109f889aa2f97a7140bd07d 100644
+--- a/cron/executions.py
++++ b/cron/executions.py
+@@ -18,6 +18,7 @@ from datetime import datetime
+ from pathlib import Path
+ from typing import Any, Dict, Iterator, List, Optional
+ 
++from cron.error_classification import classify_cron_error
+ from hermes_constants import get_hermes_home
+ from hermes_time import now as _hermes_now
+ from cron.constants import CLAIM_TTL_INACTIVITY_HEADROOM
+@@ -87,6 +88,7 @@ def _initialize_schema(conn: sqlite3.Connection) -> None:
+     )
+     add_column_if_missing(conn, "executions", "delivery_outcome", "delivery_outcome TEXT")
+     add_column_if_missing(conn, "executions", "scheduled_instant", "scheduled_instant TEXT")
++    add_column_if_missing(conn, "executions", "error_class", "error_class TEXT")
+     conn.execute(
+         "CREATE INDEX IF NOT EXISTS idx_executions_occurrence "
+         "ON executions(job_id, scheduled_instant) WHERE status='completed'"
+@@ -288,14 +290,16 @@ def finish_execution(
+     now = _hermes_now().isoformat()
+     status = "completed" if success else "failed"
+     detail = None if success else (str(error) if error else "unknown failure")
++    error_class = None if success else classify_cron_error(detail)
+     with _transaction() as conn:
+         cur = conn.execute(
+             """UPDATE executions
+                SET status=?, finished_at=?, error=?, handoff_pending=0,
+-                   handoff_started_at=NULL, delivery_outcome=?
++                   handoff_started_at=NULL, delivery_outcome=?, error_class=?
+                WHERE id=? AND status IN ('claimed','running')
+                  AND process_id=? AND pid=?""",
+-            (status, now, detail, delivery_outcome, execution_id, _PROCESS_ID, os.getpid()),
++            (status, now, detail, delivery_outcome, error_class,
++             execution_id, _PROCESS_ID, os.getpid()),
+         )
+         if cur.rowcount != 1:
+             return None
+@@ -363,7 +367,7 @@ def recover_interrupted_executions() -> int:
+                 continue
+             cur = conn.execute(
+                 """UPDATE executions
+-                   SET status='unknown', finished_at=?, error=?,
++                   SET status='unknown', finished_at=?, error=?, error_class='interrupted',
+                        handoff_pending=0, handoff_started_at=NULL
+                    WHERE id=? AND status=? AND process_id=? AND pid=?
+                      AND handoff_pending=?
+diff --git a/cron/jobs.py b/cron/jobs.py
+index 20e3ae5a8f604166e2c08d44d443c3e488698e8d..020091323c162d84cafff13810439ab2abef0f23 100644
+--- a/cron/jobs.py
++++ b/cron/jobs.py
+@@ -3,6 +3,7 @@
+ 
+ import contextlib
+ import copy
++import hashlib
+ from contextvars import ContextVar
+ from dataclasses import dataclass, field
+ import json
+@@ -1320,16 +1321,93 @@ def get_ticker_last_error() -> Optional[str]:
+ 
+ # --- Job CRUD Operations ---
+ 
+-def _parse_jobs_file(jobs_file: Path) -> Tuple[Any, bool]:
+-    """Tolerant jobs.json parse -> ``(data, used_strict_fallback)``: utf-8-sig absorbs a BOM, strict
+-    failure retries with ``strict=False``. IO/fallback errors propagate (caller decides repair vs
+-    bail)."""
+-    with open(jobs_file, "r", encoding="utf-8-sig") as f:
+-        raw = f.read()
++def _parse_jobs_bytes(raw: bytes) -> Tuple[Any, bool]:
++    """Tolerantly parse exact jobs.json bytes and report strict-fallback use."""
++    text = raw.decode("utf-8-sig")
+     try:
+-        return json.loads(raw), False
++        return json.loads(text), False
+     except json.JSONDecodeError:
+-        return json.loads(raw, strict=False), True
++        return json.loads(text, strict=False), True
++
++
++def _parse_jobs_file(jobs_file: Path) -> Tuple[Any, bool]:
++    """Repair-free file parser shared with save-path inspection."""
++    return _parse_jobs_bytes(jobs_file.read_bytes())
++
++
++_MAX_RECOVERY_ARTIFACTS = 32
++
++
++def _preserve_jobs_bytes_before_repair(
++    jobs_file: Path, original_bytes: bytes, reason: str
++) -> Path:
++    """Preserve exact source bytes before automatic repair; identical bytes dedupe."""
++    recovery_dir = jobs_file.parent / "recovery"
++    recovery_dir.mkdir(parents=True, exist_ok=True)
++
++    digest = hashlib.sha256(original_bytes).hexdigest()
++    short_digest = digest[:24]
++    safe_reason = re.sub(
++        r"[^a-z0-9_-]+", "-", str(reason).strip().lower()
++    ).strip("-")[:32] or "repair"
++
++    existing = sorted(recovery_dir.glob(f"jobs.*.{short_digest}.original"))
++    if existing:
++        return existing[-1]
++
++    final_path = recovery_dir / (
++        f"jobs.{time.time_ns()}.{safe_reason}.{short_digest}.original"
++    )
++
++    fd = None
++    tmp_name = None
++    try:
++        fd, tmp_name = tempfile.mkstemp(
++            prefix=".jobs-recovery-", suffix=".tmp", dir=str(recovery_dir)
++        )
++        with os.fdopen(fd, "wb") as dst:
++            fd = None
++            dst.write(original_bytes)
++            dst.flush()
++            os.fsync(dst.fileno())
++
++        os.replace(tmp_name, final_path)
++        tmp_name = None
++
++        if os.name != "nt":
++            flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
++            dir_fd = os.open(str(recovery_dir), flags)
++            try:
++                os.fsync(dir_fd)
++            finally:
++                os.close(dir_fd)
++
++        artifacts = sorted(
++            recovery_dir.glob("jobs.*.original"),
++            key=lambda p: p.stat().st_mtime_ns,
++            reverse=True,
++        )
++        for stale in artifacts[_MAX_RECOVERY_ARTIFACTS:]:
++            try:
++                stale.unlink()
++            except OSError:
++                logger.warning(
++                    "Could not prune old cron recovery artifact %s", stale
++                )
++
++        return final_path
++    except Exception:
++        if fd is not None:
++            try:
++                os.close(fd)
++            except OSError:
++                pass
++        if tmp_name is not None:
++            try:
++                os.unlink(tmp_name)
++            except OSError:
++                pass
++        raise
+ 
+ 
+ def load_jobs() -> List[Dict[str, Any]]:
+@@ -1344,7 +1422,8 @@ def load_jobs() -> List[Dict[str, Any]]:
+         return []
+ 
+     try:
+-        data, _strict_retry = _parse_jobs_file(jobs_file)
++        raw_bytes = jobs_file.read_bytes()
++        data, _strict_retry = _parse_jobs_bytes(raw_bytes)
+     except IOError as e:
+         logger.error("IOError reading jobs.json: %s", e)
+         raise RuntimeError(f"Failed to read cron database: {e}") from e
+@@ -1375,6 +1454,13 @@ def load_jobs() -> List[Dict[str, Any]]:
+         raise RuntimeError(
+             f"Cron database corrupted: expected {{'jobs': [...]}}, got {type(data).__name__}")
+     if jobs and repair:
++        # The initial parse may have happened outside the cross-process store
++        # lock. Re-enter under the existing lock and re-read before preserving
++        # or replacing so a sibling writer cannot make us archive stale bytes.
++        if not getattr(_jobs_lock_state, "depth", 0):
++            with _jobs_lock():
++                return load_jobs()
++        _preserve_jobs_bytes_before_repair(jobs_file, raw_bytes, repair)
+         save_jobs(jobs)
+         logger.warning("Auto-repaired jobs.json (%s)", repair)
+     _record_load_stamp(pre_read_stamp)
+
+diff --git a/cron/scheduler_worker_env.py b/cron/scheduler_worker_env.py
+--- a/cron/scheduler_worker_env.py
++++ b/cron/scheduler_worker_env.py
+@@ -9,13 +9,18 @@
+ 
+ The shared subprocess sanitizer strips Hermes-owned PYTHONPATH entries because user
+ children must not see our tree. This child IS Hermes, so the pin is applied *after* the
+-env is built, on the sanitized env -- the sanitizer's other decisions (dropped runtime
+-site-packages, dropped venv markers) stand.
++env is built, on the sanitized env. On a self-managed (shell-installer / PM) install the
++sanitizer's drop of the runtime site-packages cannot stand this time: the worker's
++interpreter is the store Python, which owns no third-party dependencies, so the activated
++dependency environment's site-packages must be restored here too or the child dies at its
++first import (``No module named 'ruamel'``, #122222) before it can publish its ownership
++acknowledgement.
+ """
+ 
+ from __future__ import annotations
+ 
+ import os
++import sys
+ import sysconfig
+ from pathlib import Path
+ 
+@@ -27,8 +32,68 @@ def _installed_purelib() -> Path | None:
+         return None
+ 
+ 
++def _in_real_venv(path: Path) -> bool:
++    """True when *path* sits under a directory carrying ``pyvenv.cfg``.
++
++    ``activate_dependencies`` exposes the selected generation by path (no ``sys.prefix``
++    switch), so the only proof that a ``site-packages`` entry is a dependency environment
++    rather than a directory that merely happens to be named that is the venv marker in an
++    ancestor.
++    """
++    current = path
++    while current != current.parent:
++        try:
++            if (current / "pyvenv.cfg").is_file():
++                return True
++        except OSError:
++            return False
++        current = current.parent
++    return False
++
++
++def _activated_dependency_site_packages() -> Path | None:
++    """The site-packages this process imports Hermes's dependencies from, or ``None``.
++
++    On a self-managed install the gateway runs on the store Python and
++    ``activate_dependencies`` puts the dependency generation on ``sys.path`` -- the same
++    signal ``pm.environments.running_from_selected_environment`` reads. Derived from
++    ``sys.path`` (never via ``selected_venv()``/``site_packages()``) so the child-spawn
++    path performs no home-scoped filesystem reads. The interpreter's own ``purelib`` is
++    excluded: a runner that owns its dependencies (wheel / pipx / test / developer venv)
++    hands the child its own interpreter and needs nothing added. ``None`` therefore means
++    "pin the tree only", and nothing is invented.
++    """
++    purelib = _installed_purelib()
++    purelib_key = os.path.normcase(str(purelib)) if purelib is not None else None
++    seen: set[str] = set()
++    for entry in sys.path:
++        if not entry:
++            continue
++        path = Path(entry)
++        if path.name not in ("site-packages", "dist-packages"):
++            continue
++        try:
++            resolved = path.resolve()
++        except OSError:
++            continue
++        key = os.path.normcase(str(resolved))
++        if key in seen:
++            continue
++        seen.add(key)
++        if purelib_key is not None and key == purelib_key:
++            continue
++        if not resolved.is_dir():
++            continue
++        if not _in_real_venv(resolved):
++            continue
++        return resolved
++    return None
++
++
+ def pin_hermes_tree_on_pythonpath(worker_env: dict, repo_root: Path) -> dict:
+-    """Prepend ``repo_root`` to the worker env's own PYTHONPATH (never ``os.environ``'s).
++    """Prepend ``repo_root`` -- and, when the worker's interpreter cannot import Hermes's
++    dependencies otherwise, the activated environment's ``site-packages`` -- to the worker
++    env's own PYTHONPATH (never ``os.environ``'s).
+ 
+     Skipped when ``repo_root`` is the interpreter's ``purelib``: under a wheel / pipx /
+     uv-tool install ``cron/`` lives in site-packages itself, which is already importable,
+@@ -38,5 +103,9 @@ def pin_hermes_tree_on_pythonpath(worker_env: dict, repo_root: Path) -> dict:
+     if _installed_purelib() == Path(root).resolve():
+         return worker_env
+     existing = [e for e in worker_env.get("PYTHONPATH", "").split(os.pathsep) if e]
+-    worker_env["PYTHONPATH"] = os.pathsep.join(dict.fromkeys([root, *existing]))
+-    return worker_env
++    pinned = [root]
++    dependency = _activated_dependency_site_packages()
++    if dependency is not None:
++        pinned.append(str(dependency))
++    worker_env["PYTHONPATH"] = os.pathsep.join(dict.fromkeys([*pinned, *existing]))
++    return worker_env
+
+diff --git a/tests/cron/test_restart_safe_worker.py b/tests/cron/test_restart_safe_worker.py
+--- a/tests/cron/test_restart_safe_worker.py
++++ b/tests/cron/test_restart_safe_worker.py
+@@ -639,7 +639,10 @@ def test_launch_external_worker_pin_extends_the_sanitized_env_not_os_environ(
+ 
+     assert scheduler._launch_external_cron_worker(job) is True
+     entries = spawned[0][1]["env"]["PYTHONPATH"].split(os.pathsep)
+-    assert entries == [str(repo_root), str(tmp_path / "kept-by-sanitizer")]
++    # Relationship, not an exact list: on a self-managed install the pin also restores the
++    # activated dependency site-packages (#122222), so the entry count is runner-dependent.
++    assert entries[0] == str(repo_root)
++    assert str(tmp_path / "kept-by-sanitizer") in entries
+ 
+     # Wheel / pipx layout: repo_root == purelib -> untouched.
+     monkeypatch.setattr(worker_env_mod, "_installed_purelib", lambda: repo_root)
+@@ -648,6 +651,82 @@ def test_launch_external_worker_pin_extends_the_sanitized_env_not_os_environ(
+     assert "PYTHONPATH" not in worker_env_mod.pin_hermes_tree_on_pythonpath({}, repo_root)
+ 
+ 
++def test_pin_restores_activated_dependency_site_packages(monkeypatch, tmp_path):
++    """#122222: on a self-managed install the sanitizer drops the activated dependency
++    site-packages and the store-Python worker cannot import them; the pin restores them
++    next to the tree, in activation order, after the tree and before the kept entries."""
++    import cron.scheduler_worker_env as worker_env_mod
++
++    venv = tmp_path / "installs" / "env"
++    dependency = venv / "lib" / "python3.14" / "site-packages"
++    dependency.mkdir(parents=True)
++    (venv / "pyvenv.cfg").write_text("version = 3.14\n")
++    repo_root = tmp_path / "hermes-agent"
++    repo_root.mkdir()
++    monkeypatch.setattr(
++        worker_env_mod, "_activated_dependency_site_packages", lambda: dependency.resolve()
++    )
++
++    env = worker_env_mod.pin_hermes_tree_on_pythonpath(
++        {"PYTHONPATH": str(tmp_path / "kept")}, repo_root
++    )
++    entries = env["PYTHONPATH"].split(os.pathsep)
++    assert entries == [
++        str(repo_root.resolve()),
++        str(dependency.resolve()),
++        str(tmp_path / "kept"),
++    ]
++
++
++def test_activated_dependency_site_packages_derives_from_sys_path(monkeypatch, tmp_path):
++    import cron.scheduler_worker_env as worker_env_mod
++
++    venv = tmp_path / "env"
++    dependency = venv / "lib" / "python3.14" / "site-packages"
++    dependency.mkdir(parents=True)
++    (venv / "pyvenv.cfg").write_text("version = 3.14\n")
++    purelib = tmp_path / "purelib"
++    purelib.mkdir()
++
++    monkeypatch.setattr(worker_env_mod, "_installed_purelib", lambda: purelib.resolve())
++    monkeypatch.setattr(
++        worker_env_mod.sys,
++        "path",
++        [str(purelib), str(dependency), str(tmp_path / "user-libs")],
++    )
++
++    assert worker_env_mod._activated_dependency_site_packages() == dependency.resolve()
++
++
++def test_activated_dependency_site_packages_excludes_own_purelib(monkeypatch, tmp_path):
++    """A runner that owns its dependencies (here its only venv site-packages IS its own
++    purelib) needs nothing added, so nothing is invented."""
++    import cron.scheduler_worker_env as worker_env_mod
++
++    purelib = tmp_path / "venv" / "lib" / "python3.11" / "site-packages"
++    purelib.mkdir(parents=True)
++    (tmp_path / "venv" / "pyvenv.cfg").write_text("version = 3.11\n")
++    monkeypatch.setattr(worker_env_mod, "_installed_purelib", lambda: purelib.resolve())
++    monkeypatch.setattr(worker_env_mod.sys, "path", [str(purelib)])
++
++    assert worker_env_mod._activated_dependency_site_packages() is None
++
++
++def test_activated_dependency_site_packages_requires_real_venv(monkeypatch, tmp_path):
++    """A directory that merely happens to be named site-packages, outside any venv, is
++    never pinned."""
++    import cron.scheduler_worker_env as worker_env_mod
++
++    not_a_venv = tmp_path / "site-packages"
++    not_a_venv.mkdir()
++    purelib = tmp_path / "purelib"
++    purelib.mkdir()
++    monkeypatch.setattr(worker_env_mod, "_installed_purelib", lambda: purelib.resolve())
++    monkeypatch.setattr(worker_env_mod.sys, "path", [str(not_a_venv)])
++
++    assert worker_env_mod._activated_dependency_site_packages() is None
++
++
+ def test_shared_run_path_hands_gateway_fire_to_external_worker(monkeypatch):
+     import cron.scheduler as scheduler
+ 
