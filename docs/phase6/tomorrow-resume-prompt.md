@@ -1,157 +1,141 @@
-# Resume Prompt - Orion Phase 6
-
-Use this prompt to resume the Orion Personal AI project cleanly.
-
----
+# Resume Prompt — Orion P6-UPG-04
 
 We are resuming the Orion Personal AI project.
 
 Repository: `S-Pillow/orion-personal-ai`
 
-Start by reconciling GitHub and the installed Hermes state. Do not guess from memory.
+Use native Windows PowerShell + Git/GitHub. There is no Builder Agent.
 
-## Current durable checkpoint
+Start by reconciling GitHub, current upstream Hermes release/issue state, and
+the installed production Hermes state. Do not guess from memory.
 
-- Phase 5 is closed through P5-03C.
-- Phase 4 live voice acceptance remains parked by owner decision. Do not resume or redesign voice unless explicitly requested.
-- Persistent Goal Mode remains deferred/discussion-only.
-- Accepted Hermes pin remains:
-  - tag `v2026.8.27`
-  - package `0.20.6`
-  - commit `5fc308a70719a83cccdbba4c0e39c23f5a8239d5`
-- Native Hermes is the authoritative reminder scheduler. Do not add a second scheduler, daemon, timer service, or scheduler-owning plugin.
-- Phase 6 prep branch:
-  `prep/phase6-p6-02-p6-07`
-- PR #54 remains the Phase 6 preparation/integration PR.
+## Durable checkpoint
 
-## P6-02
+Accepted production Hermes remains unchanged:
 
-P6-02 transport qualification is complete.
+- tag `v2026.8.27`
+- package `0.20.6`
+- commit `5fc308a70719a83cccdbba4c0e39c23f5a8239d5`
 
-The selected transport is a bounded Orion adapter over the native structured
-`tools.cronjob_tools.cronjob()` implementation, explicitly bound to the
-COMPANION `HERMES_HOME`.
+P6-03, P6-04, and P6-04A production compatibility work are already live on
+that accepted production install. Do not reset, clean, or revert the accepted
+production Hermes dirty set.
 
-Do not use direct `jobs.json` writes or human-formatted CLI parsing as the primary adapter.
+P6-UPG-03 is accepted and closed.
 
-## P6-03 current state
+Qualified upgrade target:
 
-P6-03 source-controlled compatibility work is substantially complete.
+- Hermes tag `v2026.9.24`
+- package `0.21.5`
+- exact target commit `f97608f178d1ffeca59860195ab7da295f7c8e5f`
+- P6-UPG-02 Orion compatibility
+- upstream external-worker fix
+  `f57d2357485f1cc234e438b813e75c241a09c9e7`
+- combined artifact
+  `compat/hermes/v2026.9.24-orion-qualified-combined.patch`
+- combined SHA-256
+  `21edb9cf49eb6e2724852dc090f755cf38564db5026ab4d0b3814f34c0b355e4`
 
-The installed Hermes checkout still has Git HEAD:
+P6-UPG-03 acceptance:
 
-`5fc308a70719a83cccdbba4c0e39c23f5a8239d5`
+- upstream worker-fix tests: 5 passed
+- Orion-relevant focused tests: 56 passed, 15 skipped
+- SQLite guard selftest: PASS
+- production logical state unchanged
+- installed Hermes unchanged
+- no restart/live reminder
 
-The qualified local P6-03 compatibility patch has been applied to installed:
+## Current branch
 
-`cron/jobs.py`
+`feature/p6-upg-04-controlled-production-upgrade`
 
-Installed patched SHA-256:
+Read first:
 
-`3766fe600b48d28130c4261ec9402bad1969bcc9218ef566610530bd2bdbcfa5`
+1. `docs/phase6/p6-upg-04-controlled-production-upgrade-review.md`
+2. `scripts/phase6/Test-P6-UPG-04-Packet.ps1`
+3. `scripts/phase6/Invoke-P6-UPG-04-Preflight.ps1`
+4. `scripts/phase6/Invoke-P6-UPG-04-ControlledUpgrade.ps1`
+5. `scripts/phase6/p6-upg-04-state-guard.py`
 
-The source-application run passed the full revised disposable fixture suite against
-the installed patched source.
+## Current production decision: NO-GO until upstream changes
 
-Verified fixture coverage includes:
+As of 2026-10-04, latest stable Hermes remains `v2026.9.24 / 0.21.5`.
 
-- healthy store;
-- bare-list repair;
-- ID-keyed-map repair;
-- control-character repair;
-- combined ID-map + control-character repair;
-- race re-check proving repair re-reads under Hermes' existing jobs lock;
-- invalid JSON;
-- wrong top-level scalar;
-- unreadable-store simulation;
-- preservation-write failure;
-- repair-write failure.
+Upstream #131145 remains OPEN / P1 on Hermes 0.21.5 + Windows 11. It documents
+an incomplete boot warm-up that can let the inbound gate open and leave the
+first turn wedged before any provider call while gateway status still looks
+healthy.
 
-The patch preserves the exact byte sequence that produced the repair decision,
-records its SHA-256 in the recovery artifact name, and fails closed if preservation
-cannot complete.
+PR #131148 is closed unmerged. Maintainer closure says its first unbounded wait
+created a larger availability problem; after restoring the bounded behavior
+the PR had no net change, and the underlying hang remains tracked in #131145.
 
-Production source application backup:
+PR #132700 is still a draft partial visibility fix only; its own description
+says the wedge root cause remains follow-up work.
 
-`C:\Users\spill\AppData\Local\hermes\orion-compat-backups\p6-03-20260930-074533\cron-jobs.py.original`
+Therefore do not execute the production upgrade merely because the prepared
+packet exists.
 
-Manifest:
+## Evidence policy
 
-`C:\Users\spill\AppData\Local\hermes\orion-compat-backups\p6-03-20260930-074533\manifest.json`
+Do not independently re-prove documented vendor defects when the target source
+and upstream evidence already establish them. Treat upstream issue/fix evidence
+as a decision input unless Orion is materially different or local testing would
+change the decision.
 
-P6-03 live activation is complete. The first start-only activation reached Hermes' native Windows start path; the Orion wrapper then failed during post-start verification because a helper parameter named `$Pid` collided with PowerShell's automatic `$PID` variable. The helper was corrected without issuing a second start. A separate read-only reconciliation then proved the COMPANION gateway is running, the scheduler ticker heartbeat is newer than the gateway process start, the cron job count remains 0, and the accepted Hermes/P6-03 source state is unchanged.
+## Tomorrow's sequence
 
-P6-03 is therefore closed.
+1. Re-check the latest stable Hermes release and #131145 first.
+2. If #131145 is still unresolved for the candidate, keep production on
+   accepted v0.20.6. Do not run the mutation packet.
+3. Synchronize the P6-UPG-04 branch and run
+   `scripts/phase6/Test-P6-UPG-04-Packet.ps1`.
+4. Run `scripts/phase6/Invoke-P6-UPG-04-Preflight.ps1` with its default
+   `OPEN_UNRESOLVED` disposition. The expected safe result while the vendor
+   blocker remains is `P6_UPG_04_VERDICT=NO_GO_VENDOR_P1_WARMUP`.
+5. If upstream has shipped a proven merged fix or newer stable release,
+   reconcile only that concrete upstream change, update the candidate and
+   hashes, requalify it, and create
+   `docs/phase6/p6-upg-04-warmup-clearance.json` with vendor provenance +
+   Orion qualification evidence.
+6. Re-run packet self-check and read-only preflight.
+7. Only then request explicit owner authorization for the production mutation
+   and one controlled gateway restart.
 
-## Prepared live-activation work
+## Prepared execution strategy after clearance + authorization
 
-The following are prepared ahead of time:
+The controlled packet does not use `hermes update`.
 
-1. `docs/phase6/p6-03-live-activation-plan.md`
-2. `scripts/phase6/Invoke-P6-03-LiveActivationDiscovery.ps1`
-3. `scripts/phase6/Invoke-P6-03-LiveActivation.ps1`
+It:
 
-The read-only discovery gate must run before restart authorization.
+- verifies the exact installed production head/dirty set and idle state;
+- verifies one gateway owner/listener and zero active work;
+- verifies the qualified artifact and exact target installer hashes;
+- downloads the exact target installer by commit;
+- gracefully stops the old gateway and requires the old process to exit;
+- runs fresh offline SQLite integrity across root + all profile state DBs;
+- creates verified SQLite backups outside `HERMES_HOME`;
+- preserves the complete old install and Hermes launcher directory;
+- stages exact v0.21.5 using the vendor installer's official stage protocol;
+- applies the single qualified combined compatibility artifact;
+- verifies exact patched source hashes;
+- builds the target venv/dependencies via official installer stages;
+- starts the gateway once using the vendor CLI;
+- verifies one new gateway owner/listener, fresh SQLite integrity, cron schema,
+  ticker heartbeat advancement, and positive warm-up completion;
+- rolls back the old install on critical activation failure.
 
-Discovery must identify the exact COMPANION gateway ownership:
+State-integrity anomalies fail closed: the packet does not restart a gateway
+against unverified state.
 
-- profile-scoped Windows Scheduled Task;
-- Startup-folder fallback;
-- manual/unsupervised process;
-- Windows service;
-- or an ambiguous/unexpected state.
+Rollback does not force-kill by default. The optional
+`-AllowEmergencyForceStop` path is a separate emergency authorization and
+will only target a listener owner that is verified as a Hermes gateway.
 
-The prepared generic activation script supports only:
+## Authorization boundary
 
-- `windows-scheduled-task`
-- `windows-startup`
+No production Hermes mutation, pin change, gateway stop/restart, live reminder,
+state repair, or emergency force-stop is authorized by this preparation.
 
-If discovery shows any other mode, do not force that script. Prepare a
-mode-specific activation unit instead.
-
-The activation script also refuses to restart if COMPANION `cron/jobs.json`
-contains any jobs, to avoid accidentally exercising real reminder work during
-the activation gate.
-
-The eventual restart uses Hermes' own accepted Windows lifecycle implementation,
-`hermes_cli.gateway_windows.restart()`, not ad hoc taskkill/start commands.
-
-After restart, acceptance requires:
-
-- a new live gateway PID;
-- unchanged accepted Hermes Git HEAD;
-- unchanged expected Hermes dirty-file set;
-- unchanged P6-03 patch SHA-256;
-- COMPANION jobs still absent/empty;
-- a fresh COMPANION ticker heartbeat after restart, establishing that the new
-  post-patch gateway reached scheduler operation.
-
-Restart itself still requires explicit owner authorization.
-
-## Files to read first
-
-Read these files from the prep branch before proposing work:
-
-1. `docs/phase6/p6-01-closure-and-p6-02-07-plan.md`
-2. `docs/phase6/p6-02-reminder-contract-adapter-research.md`
-3. `docs/phase6/p6-03-production-application-plan.md`
-4. `docs/phase6/p6-03-live-activation-plan.md`
-5. `scripts/phase6/Invoke-P6-03-LiveActivationDiscovery.ps1`
-6. `scripts/phase6/Invoke-P6-03-LiveActivation.ps1`
-
-## Resume workflow
-
-Our proven workflow is native Windows PowerShell + Git/GitHub. There is no Builder Agent.
-
-1. Reconcile the exact PR #54 head and CI state.
-2. Confirm the local Orion prep branch is clean and at that head.
-3. Treat P6-03 as closed; do not rerun discovery/start/restart unless new evidence requires it.
-4. Begin P6-04 with read-only discovery of Hermes execution/monitor seams for durable per-run reminder evidence.
-5. Preserve Hermes as scheduler owner and do not change delivery or CRUD semantics while discovering evidence gaps.
-6. Keep GitHub as the durable acceptance record.
-
-Do not create a real COMPANION reminder during P6-03 activation.
-Do not begin P6-04 until P6-03 closure is recorded.
-Do not touch Phase 4 voice or Persistent Goal Mode unless separately requested.
-
----
+Do not invent a workaround for #131145. Prefer the safe documented upstream
+path: vendor fix/new stable, bounded requalification, then controlled upgrade.
