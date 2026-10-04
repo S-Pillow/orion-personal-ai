@@ -49,14 +49,10 @@ Do not reset, clean, stash, or overwrite local work if a guard fails.
 
     $Python = "C:\Users\spill\AppData\Local\Programs\Python\Python311\python.exe"
 
-    foreach ($File in @(
-        ".\scripts\phase6\p6-upg-03-risk-probes.py",
-        ".\scripts\phase6\p6-upg-03-apply-v0215-windows-worker-env-fix.py"
-    )) {
-        & $Python -B -c "import pathlib,sys; p=pathlib.Path(sys.argv[1]); compile(p.read_text(encoding='utf-8-sig'), str(p), 'exec'); print('PY_PARSE_PASS=' + str(p))" $File
-        if ($LASTEXITCODE -ne 0) {
-            throw "STOP: Python parse failed: $File"
-        }
+    $File = ".\scripts\phase6\p6-upg-03-risk-probes.py"
+    & $Python -B -c "import pathlib,sys; p=pathlib.Path(sys.argv[1]); compile(p.read_text(encoding='utf-8-sig'), str(p), 'exec'); print('PY_PARSE_PASS=' + str(p))" $File
+    if ($LASTEXITCODE -ne 0) {
+        throw "STOP: Python parse failed: $File"
     }
 
     $Wrapper = ".\scripts\phase6\Invoke-P6-UPG-03-FullMigrationRehearsal.ps1"
@@ -90,17 +86,9 @@ Return the complete output.
 
 ### PASS
 
-No new compatibility blocker reproduced. Focused upstream risk regressions passed
-and production remained unchanged.
-
-### BLOCKED_WORKER_ENV
-
-The exact v0.21.5 target reproduced the managed external-worker dependency-path
-defect described in upstream P1 reports #122529/#129235, while the narrow
-disposable repair proved the same topology green.
-
-This is useful evidence. It means the next step is to promote that one additional
-compatibility delta and requalify it before any production upgrade.
+The candidate consisting of exact Hermes v0.21.5 + the already-qualified Orion
+P6-UPG-02 compatibility patch + the documented upstream `f57d235` worker-env
+backport passed the focused qualification and production remained unchanged.
 
 ### STOP
 
