@@ -54,69 +54,100 @@ def static_probe(repo_root: Path) -> int:
 
 
 def worker_probe(repo_root: Path, runtime_site: Path) -> int:
-    # Parent-equivalent process: the dependency-light interpreter can import
-    # Hermes because the parent process has repo + runtime site-packages on
-    # sys.path. The spawned restart-safe worker receives a sanitized env and
-    # exact-tag pin_hermes_tree_on_pythonpath(), which only restores repo_root.
-    # Load only the exact worker-env helper file. Importing it through
-    # "cron.scheduler_worker_env" executes cron/__init__.py first, which imports
-    # the full scheduler stack and makes this dependency-path probe depend on
-    # unrelated parent-runtime initialization.
-    worker_path = repo_root / "cron" / "scheduler_worker_env.py"
-    spec = importlib.util.spec_from_file_location(
-        "p6_upg_03_scheduler_worker_env",
-        worker_path,
-    )
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"cannot load worker-env helper: {worker_path}")
-    worker_env = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(worker_env)
+    stage = "preflight"
+    try:
+        runtime_site = runtime_site.resolve()
+        sys_path_resolved = []
+        for entry in sys.path:
+            if not entry:
+                continue
+            try:
+                sys_path_resolved.append(Path(entry).resolve())
+            except OSError:
+                continue
 
-    # These imports prove the simulated parent/store interpreter can see the
-    # disposable runtime dependency tree before we sanitize the child env.
-    import croniter  # noqa: F401
-    import ruamel.yaml  # noqa: F401
+        runtime_on_parent_path = runtime_site in sys_path_resolved
+        emit("P6_UPG_03_WORKER_RUNTIME_SITE_ON_PARENT_PATH", runtime_on_parent_path)
+        if not runtime_on_parent_path:
+            raise RuntimeError("disposable runtime site-packages is not active on parent sys.path")
 
-    child_env = dict(os.environ)
-    child_env.pop("PYTHONPATH", None)
-    child_env.pop("PYTHONHOME", None)
-    child_env.pop("VIRTUAL_ENV", None)
+        # Load only the exact helper file. Importing through cron.* would execute
+        # cron/__init__.py and pull unrelated scheduler dependencies into the
+        # harness before we have tested the worker environment itself.
+        stage = "load_worker_env_helper"
+        worker_path = repo_root / "cron" / "scheduler_worker_env.py"
+        spec = importlib.util.spec_from_file_location(
+            "p6_upg_03_scheduler_worker_env",
+            worker_path,
+        )
+        if spec is None or spec.loader is None:
+            raise RuntimeError(f"cannot load worker-env helper: {worker_path}")
+        worker_env = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(worker_env)
+        emit("P6_UPG_03_WORKER_HELPER_LOAD", "PASS")
 
-    child_env = worker_env.pin_hermes_tree_on_pythonpath(child_env, repo_root)
+        # The parent/store process deliberately has the runtime dependency path
+        # active. Avoid importing the full dependency stack here; the behavior
+        # under test is whether the sanitized CHILD can still import it.
+        stage = "build_child_env"
+        child_env = dict(os.environ)
+        child_env.pop("PYTHONPATH", None)
+        child_env.pop("PYTHONHOME", None)
+        child_env.pop("VIRTUAL_ENV", None)
+        child_env = worker_env.pin_hermes_tree_on_pythonpath(child_env, repo_root)
 
-    child = subprocess.run(
-        [
-            sys.executable,
-            "-B",
-            "-c",
-            (
-                "import croniter, ruamel.yaml, cron.scheduler; "
-                "print('P6_UPG_03_WORKER_CHILD_IMPORTS=PASS')"
-            ),
-        ],
-        cwd=str(repo_root),
-        env=child_env,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        timeout=30,
-    )
+        entries = [
+            Path(entry).resolve()
+            for entry in child_env.get("PYTHONPATH", "").split(os.pathsep)
+            if entry
+        ]
+        emit("P6_UPG_03_WORKER_CHILD_HAS_REPO_ROOT", repo_root.resolve() in entries)
+        emit("P6_UPG_03_WORKER_CHILD_HAS_RUNTIME_SITE", runtime_site in entries)
 
-    emit("P6_UPG_03_WORKER_PARENT_IMPORTS", "PASS")
-    emit("P6_UPG_03_WORKER_CHILD_RC", child.returncode)
+        stage = "spawn_child"
+        child = subprocess.run(
+            [
+                sys.executable,
+                "-B",
+                "-c",
+                (
+                    "import croniter, ruamel.yaml, cron.scheduler; "
+                    "print('P6_UPG_03_WORKER_CHILD_IMPORTS=PASS')"
+                ),
+            ],
+            cwd=str(repo_root),
+            env=child_env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=30,
+        )
 
-    if child.stdout.strip():
-        for line in child.stdout.splitlines():
-            if line.strip():
-                print(line.strip(), flush=True)
+        emit("P6_UPG_03_WORKER_PARENT_PATH_PRECONDITION", "PASS")
+        emit("P6_UPG_03_WORKER_CHILD_RC", child.returncode)
 
-    stderr = child.stderr.lower()
-    missing_dep = "modulenotfounderror" in stderr and (
-        "ruamel" in stderr or "croniter" in stderr
-    )
-    emit("P6_UPG_03_WORKER_MISSING_RUNTIME_DEP", missing_dep)
-    emit("P6_UPG_03_WORKER_CHILD_IMPORTS_PASS", child.returncode == 0)
-    return 0
+        if child.stdout.strip():
+            for line in child.stdout.splitlines():
+                if line.strip():
+                    print(line.strip(), flush=True)
+
+        stderr = child.stderr.lower()
+        missing_dep = "modulenotfounderror" in stderr and (
+            "ruamel" in stderr or "croniter" in stderr
+        )
+        emit("P6_UPG_03_WORKER_MISSING_RUNTIME_DEP", missing_dep)
+        emit("P6_UPG_03_WORKER_CHILD_IMPORTS_PASS", child.returncode == 0)
+        if child.returncode != 0 and not missing_dep:
+            diagnostic = " | ".join(
+                line.strip() for line in child.stderr.splitlines()[-4:] if line.strip()
+            )
+            emit("P6_UPG_03_WORKER_CHILD_UNEXPECTED_ERROR", diagnostic or "unknown")
+        return 0
+    except Exception as exc:
+        emit("P6_UPG_03_WORKER_PROBE_STAGE", stage)
+        emit("P6_UPG_03_WORKER_PROBE_ERROR_TYPE", type(exc).__name__)
+        emit("P6_UPG_03_WORKER_PROBE_ERROR", str(exc).replace("\n", " | "))
+        return 2
 
 
 def _integrity_ok(db: Path) -> bool:
