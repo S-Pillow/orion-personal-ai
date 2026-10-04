@@ -16,17 +16,22 @@ def emit(key: str, value: object) -> None:
 
 
 def static_probe(repo_root: Path) -> int:
-    worker = (repo_root / "cron" / "scheduler_worker_env.py").read_text(encoding="utf-8")
-    startup = (repo_root / "gateway" / "run_startup.py").read_text(encoding="utf-8")
-    venv_sync = (repo_root / "hermes_cli" / "venv_sync.py").read_text(encoding="utf-8")
+    worker_path = repo_root / "cron" / "scheduler_worker_env.py"
+    startup_path = repo_root / "gateway" / "run_startup.py"
+
+    if not worker_path.is_file():
+        raise AssertionError(f"missing pinned target source: {worker_path}")
+    if not startup_path.is_file():
+        raise AssertionError(f"missing pinned target source: {startup_path}")
+
+    worker = worker_path.read_text(encoding="utf-8")
+    startup = startup_path.read_text(encoding="utf-8")
 
     worker_pins_runtime_site = "selected_venv" in worker and "site_packages" in worker
     warmup_releases_gate = "opening inbound gate anyway" in startup
-    pending_marker_present = "source-completion-pending" in venv_sync
 
     emit("P6_UPG_03_TARGET_WORKER_PINS_RUNTIME_SITE", worker_pins_runtime_site)
     emit("P6_UPG_03_TARGET_WARMUP_CAN_RELEASE_GATE", warmup_releases_gate)
-    emit("P6_UPG_03_TARGET_SOURCE_COMPLETION_MARKER", pending_marker_present)
 
     if worker_pins_runtime_site:
         emit("P6_UPG_03_WORKER_RISK_STATIC", "not_present")
@@ -38,8 +43,11 @@ def static_probe(repo_root: Path) -> int:
     else:
         emit("P6_UPG_03_WARMUP_RISK_STATIC", "present")
 
-    if not pending_marker_present:
-        raise AssertionError("pinned target source no longer carries expected completion marker contract")
+    # The open source-completion-pending issue remains a production-upgrade
+    # operational guard, but hermes_cli/venv_sync.py is not present in the
+    # exact v2026.9.24 target tree. Do not infer exact-tag applicability by
+    # reading a current-main path that the pinned target does not contain.
+    emit("P6_UPG_03_SOURCE_COMPLETION_MARKER_EXACT_TAG", "not_asserted")
 
     emit("P6_UPG_03_STATIC_RISK_PROBE", "PASS")
     return 0
