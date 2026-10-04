@@ -198,6 +198,14 @@ Write-Host "P6_UPG_04_GATEWAY_COMMAND_SHAPE_OK=$($LooksLikeGateway.ToString().To
 if ($UsesInstalledVenv -or -not $LooksLikeGateway) {
     Stop-P6 "gateway topology differs from the accepted Windows production topology."
 }
+$GatewayProcesses = @(
+    Get-CimInstance Win32_Process -Filter "Name = 'python.exe'" |
+        Where-Object { [string]$_.CommandLine -match "(?i)hermes_cli\.main.*gateway\s+run" }
+)
+Write-Host "P6_UPG_04_GATEWAY_PROCESS_COUNT=$($GatewayProcesses.Count)"
+if ($GatewayProcesses.Count -ne 1 -or [int]$GatewayProcesses[0].ProcessId -ne $GatewayPid) {
+    Stop-P6 "gateway process ownership is duplicated or does not match the listener owner."
+}
 Write-Host "P6_UPG_04_GATEWAY_BASELINE=PASS"
 
 $GatewayStatePath = Join-Path $HermesHome "gateway_state.json"
