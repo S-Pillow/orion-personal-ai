@@ -55,17 +55,24 @@ stand in for the base gateway interpreter, and proves:
 1. parent Hermes imports succeed when repo + `venv/Lib/site-packages` are active;
 2. exact v0.21.5 child sanitization + tree-only pinning causes the worker import
    to fail for a missing third-party dependency;
-3. an exact-target compatibility transform that restores only the validated
-   `<repo>/venv/Lib/site-packages` path next to the tree makes the identical
-   child probe pass.
+3. the upstream source fix from commit
+   `f57d2357485f1cc234e438b813e75c241a09c9e7` makes the identical child
+   probe pass.
 
-This matches the principle of the newer upstream #122222/#122529 fix without
-copying its later PM-specific implementation into a tag that does not contain
-the PM package.
+That upstream commit closed #122222 four days after the target release. It
+modifies the same v0.21.5 worker-env helper without depending on the later PM
+package: it finds the activated dependency `site-packages` already present on
+the parent process's `sys.path`, excludes the interpreter's own purelib,
+requires a real `pyvenv.cfg` ancestor, and restores that path next to the
+checkout for the Hermes worker.
 
-A red→green result is recorded as **BLOCKED_WORKER_ENV**. The exact-target
-worker compatibility delta must then be promoted and requalified before any
-production migration.
+The later PM-specific implementation superseded this upstream code on newer
+Hermes architecture, but the earlier `f57d235` fix is the source-backed
+backport appropriate to the exact pre-PM v0.21.5 target.
+
+A red→green result is recorded as **BLOCKED_WORKER_ENV**. The reviewed
+`f57d235` worker-env source delta must then be promoted into Orion's v0.21.5
+compatibility patch and requalified before any production migration.
 
 ### 2. Single scheduler ownership / duplicate delivery
 
