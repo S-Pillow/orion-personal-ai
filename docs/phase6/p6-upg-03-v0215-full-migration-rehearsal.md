@@ -48,16 +48,12 @@ The exact v0.21.5 source shows a Windows legacy/base-interpreter topology:
   leaving a restart-safe worker launched under the base interpreter without
   third-party dependencies.
 
-The rehearsal therefore builds the dependency venv at the exact target shape
-`<disposable-target>/venv`, uses a separate dependency-light interpreter to
-stand in for the base gateway interpreter, and proves:
-
-1. parent Hermes imports succeed when repo + `venv/Lib/site-packages` are active;
-2. exact v0.21.5 child sanitization + tree-only pinning causes the worker import
-   to fail for a missing third-party dependency;
-3. the upstream source fix from commit
-   `f57d2357485f1cc234e438b813e75c241a09c9e7` makes the identical child
-   probe pass.
+The documented defect is accepted as upstream evidence; P6-UPG-03 no longer
+spends time re-proving the broken stock behavior. The rehearsal instead builds
+the dependency venv at the exact target shape `<disposable-target>/venv`,
+applies the reviewed upstream source fix from commit
+`f57d2357485f1cc234e438b813e75c241a09c9e7`, and qualifies the patched
+candidate directly.
 
 That upstream commit closed #122222 four days after the target release. It
 modifies the same v0.21.5 worker-env helper without depending on the later PM
@@ -70,9 +66,11 @@ The later PM-specific implementation superseded this upstream code on newer
 Hermes architecture, but the earlier `f57d235` fix is the source-backed
 backport appropriate to the exact pre-PM v0.21.5 target.
 
-A red→green result is recorded as **BLOCKED_WORKER_ENV**. The reviewed
-`f57d235` worker-env source delta must then be promoted into Orion's v0.21.5
-compatibility patch and requalified before any production migration.
+The upstream backport is carried as
+`compat/hermes/v2026.9.24-upstream-f57d235-worker-env.patch` alongside the
+already-qualified Orion compatibility patch. A PASS means the combined
+candidate is ready for P6-UPG-04 review; it does not authorize production
+mutation.
 
 ### 2. Single scheduler ownership / duplicate delivery
 
@@ -131,17 +129,16 @@ SQLite database and a deliberately invalid database image.
 
 ## P6-UPG-03 verdicts
 
-The runner may end in one of three evidence states:
+The runner has two evidence states:
 
-- `PASS` — migration/rehearsal gates passed and no new compatibility blocker
-  reproduced.
-- `BLOCKED_WORKER_ENV` — exact v0.21.5 reproduces the managed-worker dependency
-  defect while the narrow disposable repair proves green. Promote that delta
-  before production migration.
+- `PASS` — exact Hermes v0.21.5 + P6-UPG-02 Orion compatibility +
+  upstream `f57d235` worker-env backport passed focused qualification and
+  production remained unchanged.
 - `STOP` — unexpected source/state/test drift or a failed invariant.
 
-A `BLOCKED_WORKER_ENV` result is useful qualification evidence, not a failed
-experiment: it identifies the exact additional compatibility work required.
+Known upstream defects are treated as decision inputs; this ticket does not
+require reproducing them again when the affected target source and reviewed
+upstream fix are already established.
 
 ## Production boundary
 
