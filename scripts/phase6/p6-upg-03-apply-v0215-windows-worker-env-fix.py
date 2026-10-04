@@ -1,45 +1,11 @@
 from __future__ import annotations
 
 import argparse
-import ast
 from pathlib import Path
 
 
-OLD_BODY = '''    root = str(repo_root)
-    if _installed_purelib() == Path(root).resolve():
-        return worker_env
-    existing = [e for e in worker_env.get("PYTHONPATH", "").split(os.pathsep) if e]
-    worker_env["PYTHONPATH"] = os.pathsep.join(dict.fromkeys([root, *existing]))
-    return worker_env
-'''
-
-NEW_BODY = '''    root_path = Path(repo_root).resolve()
-    root = str(root_path)
-    if _installed_purelib() == root_path:
-        return worker_env
-
-    # v0.21.5's Windows detached gateway supports a legacy base-interpreter
-    # topology: VIRTUAL_ENV points at <repo>/venv while the gateway process
-    # itself may run under the base Python. The shared child sanitizer
-    # deliberately strips both that marker and its Lib/site-packages path.
-    # A restart-safe cron worker is Hermes itself, so restore this producer-
-    # owned dependency path next to the checkout before spawning it.
-    pinned = [root]
-    if os.name == "nt":
-        runtime_venv = root_path / "venv"
-        runtime_site = runtime_venv / "Lib" / "site-packages"
-        try:
-            if (runtime_venv / "pyvenv.cfg").is_file() and runtime_site.is_dir():
-                pinned.append(str(runtime_site))
-        except OSError:
-            pass
-
-    existing = [e for e in worker_env.get("PYTHONPATH", "").split(os.pathsep) if e]
-    worker_env["PYTHONPATH"] = os.pathsep.join(
-        dict.fromkeys([*pinned, *existing])
-    )
-    return worker_env
-'''
+EXPECTED_SOURCE = "\"\"\"Cron: import path of the restart-safe external worker.\n\nThe worker is spawned as ``sys.executable -m cron.scheduler``. Its entry module is\n``cron.scheduler``, not ``hermes_cli.main``, so nothing bootstraps the gateway's checkout\nonto its ``sys.path``; historically it imported ``cron`` only through the implicit ``-m``\ncwd entry. That entry is gone under ``PYTHONSAFEPATH`` and useless when the venv's\neditable install maps a moved/deleted checkout -- the worker then dies with\n\"No module named 'cron'\" before its ownership ack (#112729, hypothesised cause).\n\nThe shared subprocess sanitizer strips Hermes-owned PYTHONPATH entries because user\nchildren must not see our tree. This child IS Hermes, so the pin is applied *after* the\nenv is built, on the sanitized env -- the sanitizer's other decisions (dropped runtime\nsite-packages, dropped venv markers) stand.\n\"\"\"\n\nfrom __future__ import annotations\n\nimport os\nimport sysconfig\nfrom pathlib import Path\n\n\ndef _installed_purelib() -> Path | None:\n    try:\n        return Path(sysconfig.get_paths()[\"purelib\"]).resolve()\n    except (KeyError, OSError):\n        return None\n\n\ndef pin_hermes_tree_on_pythonpath(worker_env: dict, repo_root: Path) -> dict:\n    \"\"\"Prepend ``repo_root`` to the worker env's own PYTHONPATH (never ``os.environ``'s).\n\n    Skipped when ``repo_root`` is the interpreter's ``purelib``: under a wheel / pipx /\n    uv-tool install ``cron/`` lives in site-packages itself, which is already importable,\n    and pinning it would move site-packages ahead of the stdlib on ``sys.path``.\n    \"\"\"\n    root = str(repo_root)\n    if _installed_purelib() == Path(root).resolve():\n        return worker_env\n    existing = [e for e in worker_env.get(\"PYTHONPATH\", \"\").split(os.pathsep) if e]\n    worker_env[\"PYTHONPATH\"] = os.pathsep.join(dict.fromkeys([root, *existing]))\n    return worker_env\n"
+UPSTREAM_FIXED_SOURCE = "\"\"\"Cron: import path of the restart-safe external worker.\n\nThe worker is spawned as ``sys.executable -m cron.scheduler``. Its entry module is\n``cron.scheduler``, not ``hermes_cli.main``, so nothing bootstraps the gateway's checkout\nonto its ``sys.path``; historically it imported ``cron`` only through the implicit ``-m``\ncwd entry. That entry is gone under ``PYTHONSAFEPATH`` and useless when the venv's\neditable install maps a moved/deleted checkout -- the worker then dies with\n\"No module named 'cron'\" before its ownership ack (#112729, hypothesised cause).\n\nThe shared subprocess sanitizer strips Hermes-owned PYTHONPATH entries because user\nchildren must not see our tree. This child IS Hermes, so the pin is applied *after* the\nenv is built, on the sanitized env. On a self-managed (shell-installer / PM) install the\nsanitizer's drop of the runtime site-packages cannot stand this time: the worker's\ninterpreter is the store Python, which owns no third-party dependencies, so the activated\ndependency environment's site-packages must be restored here too or the child dies at its\nfirst import (``No module named 'ruamel'``, #122222) before it can publish its ownership\nacknowledgement.\n\"\"\"\n\nfrom __future__ import annotations\n\nimport os\nimport sys\nimport sysconfig\nfrom pathlib import Path\n\n\ndef _installed_purelib() -> Path | None:\n    try:\n        return Path(sysconfig.get_paths()[\"purelib\"]).resolve()\n    except (KeyError, OSError):\n        return None\n\n\ndef _in_real_venv(path: Path) -> bool:\n    \"\"\"True when *path* sits under a directory carrying ``pyvenv.cfg``.\n\n    ``activate_dependencies`` exposes the selected generation by path (no ``sys.prefix``\n    switch), so the only proof that a ``site-packages`` entry is a dependency environment\n    rather than a directory that merely happens to be named that is the venv marker in an\n    ancestor.\n    \"\"\"\n    current = path\n    while current != current.parent:\n        try:\n            if (current / \"pyvenv.cfg\").is_file():\n                return True\n        except OSError:\n            return False\n        current = current.parent\n    return False\n\n\ndef _activated_dependency_site_packages() -> Path | None:\n    \"\"\"The site-packages this process imports Hermes's dependencies from, or ``None``.\n\n    On a self-managed install the gateway runs on the store Python and\n    ``activate_dependencies`` puts the dependency generation on ``sys.path`` -- the same\n    signal ``pm.environments.running_from_selected_environment`` reads. Derived from\n    ``sys.path`` (never via ``selected_venv()``/``site_packages()``) so the child-spawn\n    path performs no home-scoped filesystem reads. The interpreter's own ``purelib`` is\n    excluded: a runner that owns its dependencies (wheel / pipx / test / developer venv)\n    hands the child its own interpreter and needs nothing added. ``None`` therefore means\n    \"pin the tree only\", and nothing is invented.\n    \"\"\"\n    purelib = _installed_purelib()\n    purelib_key = os.path.normcase(str(purelib)) if purelib is not None else None\n    seen: set[str] = set()\n    for entry in sys.path:\n        if not entry:\n            continue\n        path = Path(entry)\n        if path.name not in (\"site-packages\", \"dist-packages\"):\n            continue\n        try:\n            resolved = path.resolve()\n        except OSError:\n            continue\n        key = os.path.normcase(str(resolved))\n        if key in seen:\n            continue\n        seen.add(key)\n        if purelib_key is not None and key == purelib_key:\n            continue\n        if not resolved.is_dir():\n            continue\n        if not _in_real_venv(resolved):\n            continue\n        return resolved\n    return None\n\n\ndef pin_hermes_tree_on_pythonpath(worker_env: dict, repo_root: Path) -> dict:\n    \"\"\"Prepend ``repo_root`` -- and, when the worker's interpreter cannot import Hermes's\n    dependencies otherwise, the activated environment's ``site-packages`` -- to the worker\n    env's own PYTHONPATH (never ``os.environ``'s).\n\n    Skipped when ``repo_root`` is the interpreter's ``purelib``: under a wheel / pipx /\n    uv-tool install ``cron/`` lives in site-packages itself, which is already importable,\n    and pinning it would move site-packages ahead of the stdlib on ``sys.path``.\n    \"\"\"\n    root = str(repo_root)\n    if _installed_purelib() == Path(root).resolve():\n        return worker_env\n    existing = [e for e in worker_env.get(\"PYTHONPATH\", \"\").split(os.pathsep) if e]\n    pinned = [root]\n    dependency = _activated_dependency_site_packages()\n    if dependency is not None:\n        pinned.append(str(dependency))\n    worker_env[\"PYTHONPATH\"] = os.pathsep.join(dict.fromkeys([*pinned, *existing]))\n    return worker_env"
 
 
 def main() -> int:
@@ -47,21 +13,17 @@ def main() -> int:
     parser.add_argument("--candidate-root", required=True)
     args = parser.parse_args()
 
-    root = Path(args.candidate_root).resolve()
-    path = root / "cron" / "scheduler_worker_env.py"
-    source = path.read_text(encoding="utf-8")
+    path = Path(args.candidate_root).resolve() / "cron" / "scheduler_worker_env.py"
+    actual = path.read_text(encoding="utf-8")
 
-    count = source.count(OLD_BODY)
-    if count != 1:
+    if actual != EXPECTED_SOURCE:
         raise RuntimeError(
-            f"v0.21.5 worker-env body drift: expected one exact anchor, found {count}"
+            "v0.21.5 scheduler_worker_env.py differs from the reviewed exact-tag source"
         )
 
-    updated = source.replace(OLD_BODY, NEW_BODY, 1)
-    ast.parse(updated)
-    path.write_text(updated, encoding="utf-8", newline="\n")
+    path.write_text(UPSTREAM_FIXED_SOURCE, encoding="utf-8", newline="\n")
 
-    print("P6_UPG_03_EXACT_TARGET_WORKER_ENV_FIX_APPLIED=PASS")
+    print("P6_UPG_03_UPSTREAM_F57D235_WORKER_FIX_APPLIED=PASS")
     return 0
 
 
