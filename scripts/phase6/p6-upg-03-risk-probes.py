@@ -5,7 +5,6 @@ import os
 import sqlite3
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 
@@ -119,24 +118,29 @@ def _integrity_ok(db: Path) -> bool:
         return False
 
 
-def integrity_selftest() -> int:
-    with tempfile.TemporaryDirectory(prefix="p6-upg-03-integrity-") as td:
-        root = Path(td)
-        good = root / "good.db"
-        bad = root / "bad.db"
+def integrity_selftest(work_root: Path) -> int:
+    root = work_root / "integrity-selftest"
+    root.mkdir(parents=True, exist_ok=False)
 
-        with sqlite3.connect(good) as conn:
-            conn.execute("CREATE TABLE sentinel(id INTEGER PRIMARY KEY, value TEXT)")
-            conn.execute("INSERT INTO sentinel(value) VALUES ('preserved')")
-            conn.commit()
+    good = root / "good.db"
+    bad = root / "bad.db"
 
-        bad.write_bytes(b"SQLite format 3\x00" + b"orion-invalid-db-image" * 64)
+    with sqlite3.connect(good) as conn:
+        conn.execute("CREATE TABLE sentinel(id INTEGER PRIMARY KEY, value TEXT)")
+        conn.execute("INSERT INTO sentinel(value) VALUES ('preserved')")
+        conn.commit()
 
-        if not _integrity_ok(good):
-            raise AssertionError("fresh valid SQLite database failed integrity guard")
-        if _integrity_ok(bad):
-            raise AssertionError("invalid SQLite image unexpectedly passed integrity guard")
+    bad.write_bytes(b"SQLite format 3\x00" + b"orion-invalid-db-image" * 64)
 
+    if not _integrity_ok(good):
+        raise AssertionError("fresh valid SQLite database failed integrity guard")
+    if _integrity_ok(bad):
+        raise AssertionError("invalid SQLite image unexpectedly passed integrity guard")
+
+    # Keep fixtures under the disposable rehearsal root and let process exit
+    # release any briefly retained Windows sqlite3 file handle. Immediate
+    # TemporaryDirectory cleanup is not part of the integrity contract.
+    emit("P6_UPG_03_INTEGRITY_FIXTURE_ROOT", root)
     emit("P6_UPG_03_POSTRESTART_INTEGRITY_GUARD_SELFTEST", "PASS")
     return 0
 
