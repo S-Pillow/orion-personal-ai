@@ -279,7 +279,7 @@ if ($RedPass -eq "false" -and $RedMissing -eq "true") {
         throw "STOP: disposable worker-env repair did not make the child import path healthy."
     }
 
-    Write-Host "P6_UPG_03_EXACT_TARGET_WORKER_ENV_FIX_PROOF=PASS"
+    Write-Host "P6_UPG_03_UPSTREAM_F57D235_BACKPORT_PROOF=PASS"
 }
 elseif ($RedPass -eq "true") {
     Write-Host "P6_UPG_03_WORKER_ENV_TARGET_RISK_REPRODUCED=false"
@@ -289,6 +289,8 @@ else {
 }
 
 $FocusedTests = @(
+    "tests/cron/test_restart_safe_worker.py",
+    "tests/tools/test_local_env_blocklist.py::test_builders_strip_runtime_markers_and_owned_paths",
     "tests/cron/test_cron_multiplex_tick_ownership.py",
     "tests/cron/test_cron_multiplex_desktop_ticker_scope.py",
     "tests/cron/test_ticker_stall.py",
@@ -363,7 +365,7 @@ Write-Host "P6_UPG_03_LIVE_REMINDER_RUN=false"
 
 if ($WorkerBlocked) {
     Write-Host "P6_UPG_03_VERDICT=BLOCKED_WORKER_ENV"
-    Write-Host "P6_UPG_03_NEXT=promote_exact_v0215_windows_worker_env_delta_and_requalify"
+    Write-Host "P6_UPG_03_NEXT=promote_upstream_f57d235_worker_env_backport_and_requalify"
 }
 else {
     Write-Host "P6_UPG_03_VERDICT=PASS"
