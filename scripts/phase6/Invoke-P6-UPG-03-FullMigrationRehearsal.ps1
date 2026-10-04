@@ -239,6 +239,10 @@ if ($LASTEXITCODE -ne 0) {
     throw "STOP: SQLite integrity-guard selftest failed."
 }
 
+$OldHome = $env:HERMES_HOME
+$OldPythonPath = $env:PYTHONPATH
+$OldDontWrite = $env:PYTHONDONTWRITEBYTECODE
+
 $UpstreamWorkerFixTests = @(
     "tests/cron/test_restart_safe_worker.py::test_launch_external_worker_pin_extends_the_sanitized_env_not_os_environ",
     "tests/cron/test_restart_safe_worker.py::test_pin_restores_activated_dependency_site_packages",
