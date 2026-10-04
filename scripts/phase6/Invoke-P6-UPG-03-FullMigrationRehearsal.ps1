@@ -224,7 +224,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "STOP: static target-risk probe failed."
 }
 
-& $RuntimePython -B $RiskProbe --mode integrity
+& $RuntimePython -B $RiskProbe --mode integrity --work-root $WorkRoot
 if ($LASTEXITCODE -ne 0) {
     throw "STOP: SQLite integrity-guard selftest failed."
 }
