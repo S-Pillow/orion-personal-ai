@@ -200,6 +200,25 @@ if ($UsesInstalledVenv -or -not $LooksLikeGateway) {
 }
 Write-Host "P6_UPG_04_GATEWAY_BASELINE=PASS"
 
+$GatewayStatePath = Join-Path $HermesHome "gateway_state.json"
+if (-not (Test-Path -LiteralPath $GatewayStatePath -PathType Leaf)) {
+    Stop-P6 "gateway_state.json is missing; cannot prove gateway is idle before upgrade."
+}
+try {
+    $GatewayRuntime = Get-Content -LiteralPath $GatewayStatePath -Raw | ConvertFrom-Json
+    $ActiveAgents = [int]($GatewayRuntime.active_agents)
+    $ActiveWorkCount = @($GatewayRuntime.active_work | Where-Object { $null -ne $_ }).Count
+}
+catch {
+    Stop-P6 "gateway_state.json could not be parsed for the idle-work gate."
+}
+Write-Host "P6_UPG_04_GATEWAY_ACTIVE_AGENTS=$ActiveAgents"
+Write-Host "P6_UPG_04_GATEWAY_ACTIVE_WORK_COUNT=$ActiveWorkCount"
+if ($ActiveAgents -ne 0 -or $ActiveWorkCount -ne 0) {
+    Stop-P6 "gateway has active work; defer the upgrade until it is idle."
+}
+Write-Host "P6_UPG_04_GATEWAY_IDLE=PASS"
+
 $StateDbPaths = @(
     (Join-Path $HermesHome "state.db"),
     (Join-Path $CompanionHome "state.db")
