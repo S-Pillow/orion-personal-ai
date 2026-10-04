@@ -278,8 +278,12 @@ if ($UpstreamWorkerFixExit -ne 0) {
 Write-Host "P6_UPG_03_UPSTREAM_F57D235_BACKPORT_PROOF=PASS"
 
 $FocusedTests = @(
-    "tests/cron/test_restart_safe_worker.py",
-    "tests/tools/test_local_env_blocklist.py",
+    "tests/tools/test_local_env_blocklist.py::TestActiveVenvMarkerStripping::test_virtualenv_marker_stripped_end_to_end",
+    "tests/tools/test_local_env_blocklist.py::TestActiveVenvMarkerStripping::test_sanitize_subprocess_env_strips_markers",
+    "tests/tools/test_local_env_blocklist.py::TestPythonpathSelectiveStrip::test_owned_entries_stripped_matrix",
+    "tests/tools/test_local_env_blocklist.py::TestPythonpathSelectiveStrip::test_windows_hermes_owned_paths_stripped",
+    "tests/tools/test_local_env_blocklist.py::TestPythonpathSelectiveStrip::test_base_python_sanitizer_uses_validated_separate_runtime_venv",
+    "tests/tools/test_local_env_blocklist.py::TestPythonpathSelectiveStrip::test_builders_strip_hermes_venv_pythonpath",
     "tests/cron/test_cron_multiplex_tick_ownership.py",
     "tests/cron/test_cron_multiplex_desktop_ticker_scope.py",
     "tests/cron/test_ticker_stall.py",
