@@ -293,8 +293,9 @@ $FocusedTests = @(
 )
 
 foreach ($Relative in $FocusedTests) {
-    if (-not (Test-Path -LiteralPath (Join-Path $Target $Relative) -PathType Leaf)) {
-        throw "STOP: expected focused target test missing: $Relative"
+    $RelativeFile = ($Relative -split "::", 2)[0]
+    if (-not (Test-Path -LiteralPath (Join-Path $Target $RelativeFile) -PathType Leaf)) {
+        throw "STOP: expected focused target test file missing: $RelativeFile"
     }
 }
 
