@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "issue": 131145,
+  "status": "qualified_fix_included",
+  "candidate_artifact_sha256": "REPLACE_ONLY_AFTER_VENDOR_FIX_IS_INCLUDED_AND_REQUALIFIED",
+  "vendor_fix": {
+    "source": "upstream_merged_commit_or_stable_release",
+    "reference": "REQUIRED"
+  },
+  "qualification": {
+    "orion_commit": "REQUIRED",
+    "evidence": "REQUIRED"
+  }
+}
