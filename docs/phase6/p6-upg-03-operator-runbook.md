@@ -51,7 +51,7 @@ Do not reset, clean, stash, or overwrite local work if a guard fails.
 
     foreach ($File in @(
         ".\scripts\phase6\p6-upg-03-risk-probes.py",
-        ".\scripts\phase6\p6-upg-03-apply-worker-env-fix.py"
+        ".\scripts\phase6\p6-upg-03-apply-v0215-windows-worker-env-fix.py"
     )) {
         & $Python -B -c "import pathlib,sys; p=pathlib.Path(sys.argv[1]); compile(p.read_text(encoding='utf-8-sig'), str(p), 'exec'); print('PY_PARSE_PASS=' + str(p))" $File
         if ($LASTEXITCODE -ne 0) {
