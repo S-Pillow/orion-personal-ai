@@ -5,7 +5,8 @@ param(
     [string]$HermesHome = "$env:LOCALAPPDATA\hermes",
     [string]$CompanionHome = "$env:LOCALAPPDATA\hermes\profiles\companion",
     [string]$InstalledHermesRoot = "$env:LOCALAPPDATA\hermes\hermes-agent",
-    [int]$GatewayPort = 8642
+    [int]$GatewayPort = 8642,
+    [switch]$AllowEmergencyForceStop
 )
 
 $ErrorActionPreference = "Stop"
@@ -150,10 +151,32 @@ function Invoke-P6Rollback {
 
         $Remaining = Wait-GatewayListenerCount -ExpectedCount 0 -TimeoutSeconds 20
         if ($Remaining.Count -ne 0) {
+            Write-Host "P6_UPG_04_ROLLBACK_GRACEFUL_STOP_FAILED=true"
+            if (-not $AllowEmergencyForceStop) {
+                Write-Host "P6_UPG_04_ROLLBACK_BLOCKED_LIVE_LISTENER=true"
+                throw "rollback cannot replace the installation while a gateway listener is still live; emergency force-stop was not separately authorized."
+            }
+
             foreach ($Listener in $Remaining) {
-                Stop-Process -Id ([int]$Listener.OwningProcess) -Force -ErrorAction SilentlyContinue
+                $Pid = [int]$Listener.OwningProcess
+                $Proc = Get-CimInstance Win32_Process -Filter "ProcessId = $Pid"
+                $LooksLikeHermesGateway = (
+                    $null -ne $Proc -and
+                    [string]$Proc.CommandLine -match "(?i)hermes_cli\.main.*gateway\s+run"
+                )
+                if (-not $LooksLikeHermesGateway) {
+                    throw "emergency rollback refused to force-stop unverified listener owner PID $Pid."
+                }
+            }
+
+            Write-Host "P6_UPG_04_EMERGENCY_FORCE_STOP_AUTHORIZED=true"
+            foreach ($Listener in $Remaining) {
+                Stop-Process -Id ([int]$Listener.OwningProcess) -Force -ErrorAction Stop
             }
             $Remaining = Wait-GatewayListenerCount -ExpectedCount 0 -TimeoutSeconds 10
+            if ($Remaining.Count -ne 0) {
+                throw "emergency force-stop did not release the gateway listener."
+            }
         }
 
         if (Test-Path -LiteralPath $InstalledHermesRoot -PathType Container) {
@@ -337,6 +360,25 @@ $BinBackup = Join-Path $BackupRoot "bin"
 if (Test-Path -LiteralPath $BinRoot -PathType Container) {
     Copy-Item -LiteralPath $BinRoot -Destination $BinBackup -Recurse
 }
+
+$StateBackupRoot = Join-Path $BackupRoot "state-db"
+New-Item -ItemType Directory -Path $StateBackupRoot | Out-Null
+$StateBackupIndex = 0
+foreach ($Db in @(
+    (Join-Path $HermesHome "state.db"),
+    (Join-Path $CompanionHome "state.db")
+)) {
+    if (-not (Test-Path -LiteralPath $Db -PathType Leaf)) {
+        continue
+    }
+    $StateBackupIndex += 1
+    $BackupDb = Join-Path $StateBackupRoot ("state-$StateBackupIndex.db")
+    & $OldPython -B $StateGuard --mode sqlite-backup --db $Db --out $BackupDb
+    if ($LASTEXITCODE -ne 0) {
+        Stop-P6 "verified offline SQLite backup failed; installation was not changed."
+    }
+}
+Write-Host "P6_UPG_04_OFFLINE_STATE_BACKUPS=$StateBackupIndex"
 Write-Host "P6_UPG_04_BACKUP_ROOT=$BackupRoot"
 
     Move-Item -LiteralPath $InstalledHermesRoot -Destination $BackupInstallRoot
