@@ -128,6 +128,7 @@ $BackupRoot = $null
 $BackupInstallRoot = $null
 $BinBackup = $null
 $MutationStarted = $false
+$GatewayStopped = $false
 $OldGatewayPid = $null
 
 function Invoke-P6Rollback {
@@ -311,12 +312,12 @@ if ($StopExit -ne 0 -or $AfterStop.Count -ne 0) {
     Stop-P6 "old gateway did not stop cleanly; source installation was not changed."
 }
 Write-Host "P6_UPG_04_GATEWAY_STOP_PASS=true"
+$GatewayStopped = $true
 
+try {
 foreach ($Db in @((Join-Path $HermesHome "state.db"), (Join-Path $CompanionHome "state.db"))) {
     & $OldPython -B $StateGuard --mode sqlite-integrity --db $Db
     if ($LASTEXITCODE -ne 0) {
-        & $OldHermesExe gateway start
-        [void](Wait-GatewayListenerCount -ExpectedCount 1 -TimeoutSeconds 60)
         Stop-P6 "offline pre-upgrade SQLite integrity check failed; installation was not changed."
     }
 }
@@ -338,7 +339,6 @@ if (Test-Path -LiteralPath $BinRoot -PathType Container) {
 }
 Write-Host "P6_UPG_04_BACKUP_ROOT=$BackupRoot"
 
-try {
     Move-Item -LiteralPath $InstalledHermesRoot -Destination $BackupInstallRoot
     $MutationStarted = $true
     Write-Host "P6_UPG_04_OLD_INSTALL_PRESERVED=PASS"
@@ -539,12 +539,26 @@ try {
     Write-Host "P6_UPG_04_ROLLBACK_BACKUP_RETAINED=$BackupRoot"
     Write-Host "P6_UPG_04_VERDICT=PASS"
     $MutationStarted = $false
+    $GatewayStopped = $false
 }
 catch {
     $Failure = $_
     Write-Host "P6_UPG_04_FAILURE_TYPE=$($Failure.Exception.GetType().Name)"
     if ($MutationStarted) {
         Invoke-P6Rollback
+    }
+    elseif ($GatewayStopped) {
+        try {
+            $env:HERMES_HOME = $HermesHome
+            $env:HERMES_NONINTERACTIVE = "1"
+            $env:HERMES_GATEWAY_INSTALL_START_ON_LOGIN = "0"
+            & $OldHermesExe gateway start
+            $RestoreListeners = Wait-GatewayListenerCount -ExpectedCount 1 -TimeoutSeconds 60
+            Write-Host "P6_UPG_04_PREMUTATION_GATEWAY_RESTORED=$($RestoreListeners.Count -eq 1)"
+        }
+        catch {
+            Write-Host "P6_UPG_04_PREMUTATION_GATEWAY_RESTORED=false"
+        }
     }
     throw $Failure
 }
