@@ -219,12 +219,15 @@ if ($ActiveAgents -ne 0 -or $ActiveWorkCount -ne 0) {
 }
 Write-Host "P6_UPG_04_GATEWAY_IDLE=PASS"
 
-$StateDbPaths = @(
-    (Join-Path $HermesHome "state.db"),
-    (Join-Path $CompanionHome "state.db")
-)
+$StateDbPaths = New-Object System.Collections.Generic.List[string]
+$StateDbPaths.Add((Join-Path $HermesHome "state.db"))
+$ProfilesRoot = Join-Path $HermesHome "profiles"
+if (Test-Path -LiteralPath $ProfilesRoot -PathType Container) {
+    Get-ChildItem -LiteralPath $ProfilesRoot -Directory -ErrorAction SilentlyContinue |
+        ForEach-Object { $StateDbPaths.Add((Join-Path $_.FullName "state.db")) }
+}
 $StateDbPresent = 0
-foreach ($Db in $StateDbPaths) {
+foreach ($Db in @($StateDbPaths | Select-Object -Unique)) {
     if (Test-Path -LiteralPath $Db -PathType Leaf) {
         $StateDbPresent += 1
         $Item = Get-Item -LiteralPath $Db
