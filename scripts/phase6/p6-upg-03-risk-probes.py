@@ -52,16 +52,19 @@ def static_probe(repo_root: Path) -> int:
     return 0
 
 
-def worker_probe(repo_root: Path, runtime_venv: Path, runtime_site: Path) -> int:
-    # Parent-equivalent process: dependency-light interpreter with the runtime
-    # dependency path injected in-process, matching the reported PM topology.
+def worker_probe(
+    repo_root: Path,
+    runtime_site: Path,
+    *,
+    inject_runtime_site: bool = False,
+) -> int:
+    # Parent-equivalent process: the dependency-light interpreter can import
+    # Hermes because the parent process has repo + runtime site-packages on
+    # sys.path. The spawned restart-safe worker receives a sanitized env and
+    # exact-tag pin_hermes_tree_on_pythonpath(), which only restores repo_root.
     import cron.scheduler_worker_env as worker_env
     import croniter  # noqa: F401
     import ruamel.yaml  # noqa: F401
-    import pm.environments as environments
-
-    environments.selected_venv = lambda _root: runtime_venv
-    environments.site_packages = lambda _venv: runtime_site
 
     child_env = dict(os.environ)
     child_env.pop("PYTHONPATH", None)
@@ -69,6 +72,16 @@ def worker_probe(repo_root: Path, runtime_venv: Path, runtime_site: Path) -> int
     child_env.pop("VIRTUAL_ENV", None)
 
     child_env = worker_env.pin_hermes_tree_on_pythonpath(child_env, repo_root)
+
+    if inject_runtime_site:
+        existing = [
+            entry
+            for entry in child_env.get("PYTHONPATH", "").split(os.pathsep)
+            if entry
+        ]
+        child_env["PYTHONPATH"] = os.pathsep.join(
+            dict.fromkeys([*existing, str(runtime_site)])
+        )
 
     child = subprocess.run(
         [
@@ -89,6 +102,7 @@ def worker_probe(repo_root: Path, runtime_venv: Path, runtime_site: Path) -> int
     )
 
     emit("P6_UPG_03_WORKER_PARENT_IMPORTS", "PASS")
+    emit("P6_UPG_03_WORKER_RUNTIME_SITE_INJECTED", inject_runtime_site)
     emit("P6_UPG_03_WORKER_CHILD_RC", child.returncode)
 
     if child.stdout.strip():
@@ -149,8 +163,8 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", required=True, choices=("static", "worker", "integrity"))
     parser.add_argument("--repo-root")
-    parser.add_argument("--runtime-venv")
     parser.add_argument("--runtime-site")
+    parser.add_argument("--inject-runtime-site", action="store_true")
     parser.add_argument("--work-root")
     args = parser.parse_args()
 
@@ -160,12 +174,12 @@ def main() -> int:
         return static_probe(Path(args.repo_root).resolve())
 
     if args.mode == "worker":
-        if not args.repo_root or not args.runtime_venv or not args.runtime_site:
-            parser.error("worker requires --repo-root, --runtime-venv, and --runtime-site")
+        if not args.repo_root or not args.runtime_site:
+            parser.error("worker requires --repo-root and --runtime-site")
         return worker_probe(
             Path(args.repo_root).resolve(),
-            Path(args.runtime_venv).resolve(),
             Path(args.runtime_site).resolve(),
+            inject_runtime_site=args.inject_runtime_site,
         )
 
     if not args.work_root:
