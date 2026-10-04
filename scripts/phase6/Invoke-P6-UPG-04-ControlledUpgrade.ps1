@@ -125,6 +125,17 @@ function Get-LogOffsets([string[]]$Paths) {
     return $Offsets
 }
 
+function Get-StateDbPaths {
+    $Paths = New-Object System.Collections.Generic.List[string]
+    $Paths.Add((Join-Path $HermesHome "state.db"))
+    $ProfilesRoot = Join-Path $HermesHome "profiles"
+    if (Test-Path -LiteralPath $ProfilesRoot -PathType Container) {
+        Get-ChildItem -LiteralPath $ProfilesRoot -Directory -ErrorAction SilentlyContinue |
+            ForEach-Object { $Paths.Add((Join-Path $_.FullName "state.db")) }
+    }
+    return @($Paths | Select-Object -Unique)
+}
+
 $BackupRoot = $null
 $BackupInstallRoot = $null
 $BinBackup = $null
@@ -364,7 +375,7 @@ Write-Host "P6_UPG_04_GATEWAY_STOP_PASS=true"
 $GatewayStopped = $true
 
 try {
-foreach ($Db in @((Join-Path $HermesHome "state.db"), (Join-Path $CompanionHome "state.db"))) {
+foreach ($Db in @(Get-StateDbPaths)) {
     & $OldPython -B $StateGuard --mode sqlite-integrity --db $Db
     if ($LASTEXITCODE -ne 0) {
         Stop-P6 "offline pre-upgrade SQLite integrity check failed; installation was not changed."
@@ -390,10 +401,7 @@ if (Test-Path -LiteralPath $BinRoot -PathType Container) {
 $StateBackupRoot = Join-Path $BackupRoot "state-db"
 New-Item -ItemType Directory -Path $StateBackupRoot | Out-Null
 $StateBackupIndex = 0
-foreach ($Db in @(
-    (Join-Path $HermesHome "state.db"),
-    (Join-Path $CompanionHome "state.db")
-)) {
+foreach ($Db in @(Get-StateDbPaths)) {
     if (-not (Test-Path -LiteralPath $Db -PathType Leaf)) {
         continue
     }
@@ -526,7 +534,7 @@ Write-Host "P6_UPG_04_BACKUP_ROOT=$BackupRoot"
         Stop-P6 "source-completion-pending marker appeared after upgrade."
     }
 
-    foreach ($Db in @((Join-Path $HermesHome "state.db"), (Join-Path $CompanionHome "state.db"))) {
+    foreach ($Db in @(Get-StateDbPaths)) {
         & $NewPython -B $StateGuard --mode sqlite-integrity --db $Db
         if ($LASTEXITCODE -ne 0) {
             Stop-P6 "post-restart SQLite integrity check failed."
