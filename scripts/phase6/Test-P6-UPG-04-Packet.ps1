@@ -8,6 +8,7 @@ Set-StrictMode -Version Latest
 
 $ExpectedBranch = "feature/p6-upg-04-controlled-production-upgrade"
 $ExpectedArtifactHash = "21edb9cf49eb6e2724852dc090f755cf38564db5026ab4d0b3814f34c0b355e4"
+$ExpectedInstallerHash = "0a80dfeb7434229933bac32e73140d10086dff81bd84b156e71be9abc87cddf2"
 
 function Stop-P6([string]$Message) {
     throw "STOP: $Message"
@@ -63,9 +64,15 @@ foreach ($RequiredText in @(
     'P6-UPG-04-PRODUCTION-UPGRADE',
     'p6-upg-04-warmup-clearance.json',
     'qualified_fix_included',
+    'upstream_merged_commit',
+    'stable_release',
     'Invoke-P6Rollback',
+    'sqlite-backup',
+    'AllowEmergencyForceStop',
+    'P6_UPG_04_ROLLBACK_BLOCKED_LIVE_LISTENER=true',
     'v2026.9.24-orion-qualified-combined.patch',
-    'HERMES_UPDATE_COMMAND_USED=false'
+    'HERMES_UPDATE_COMMAND_USED=false',
+    $ExpectedInstallerHash
 )) {
     if (-not $ControlledText.Contains($RequiredText)) {
         Stop-P6 "controlled-upgrade guard text missing: $RequiredText"
@@ -74,6 +81,19 @@ foreach ($RequiredText in @(
 if ($ControlledText -match '(?im)&\s*hermes(?:\.exe)?\s+update\b') {
     Stop-P6 "controlled packet unexpectedly invokes hermes update."
 }
+
+$ForceStopMatches = @([regex]::Matches($ControlledText, '(?im)^\s*Stop-Process\b.*-Force\b'))
+if ($ForceStopMatches.Count -gt 1) {
+    Stop-P6 "controlled packet contains more than one force-stop site."
+}
+if ($ForceStopMatches.Count -eq 1) {
+    $GuardIndex = $ControlledText.IndexOf('if (-not $AllowEmergencyForceStop)')
+    $ForceIndex = $ControlledText.IndexOf($ForceStopMatches[0].Value)
+    if ($GuardIndex -lt 0 -or $GuardIndex -gt $ForceIndex) {
+        Stop-P6 "force-stop site is not behind the explicit emergency authorization guard."
+    }
+}
+Write-Host "P6_UPG_04_EMERGENCY_FORCE_STOP_STATIC_GUARD=PASS"
 Write-Host "P6_UPG_04_STATIC_GUARD_REVIEW=PASS"
 
 $Preview = @(
