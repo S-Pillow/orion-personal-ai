@@ -170,7 +170,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "STOP: disposable target clone failed."
 }
 
-git -C $Target -c core.autocrlf=false checkout --quiet $ExpectedCandidateCommit
+git -C $Target -c core.autocrlf=false -c advice.detachedHead=false checkout --quiet $ExpectedCandidateCommit
 if ($LASTEXITCODE -ne 0) {
     throw "STOP: disposable target checkout failed."
 }
