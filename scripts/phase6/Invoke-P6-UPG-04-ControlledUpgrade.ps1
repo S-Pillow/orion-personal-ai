@@ -60,6 +60,18 @@ function Wait-GatewayListenerCount([int]$ExpectedCount, [int]$TimeoutSeconds = 6
     return @(Get-NetTCPConnection -LocalPort $GatewayPort -State Listen -ErrorAction SilentlyContinue)
 }
 
+function Wait-ProcessGone([int]$ProcessId, [int]$TimeoutSeconds = 30) {
+    $Deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    do {
+        $Process = Get-CimInstance Win32_Process -Filter "ProcessId = $ProcessId" -ErrorAction SilentlyContinue
+        if ($null -eq $Process) {
+            return $true
+        }
+        Start-Sleep -Milliseconds 500
+    } while ((Get-Date) -lt $Deadline)
+    return $false
+}
+
 function Invoke-InstallerStage([string]$Installer, [string]$Stage, [string]$Home) {
     Write-Host "P6_UPG_04_INSTALLER_STAGE_BEGIN=$Stage"
     $Args = @(
@@ -381,6 +393,11 @@ Write-Host "P6_UPG_04_GATEWAY_STOP_PASS=true"
 $GatewayStopped = $true
 
 try {
+if (-not (Wait-ProcessGone -ProcessId $OldGatewayPid -TimeoutSeconds 30)) {
+    Stop-P6 "old gateway released the listener but its process did not exit; source installation was not changed."
+}
+Write-Host "P6_UPG_04_OLD_GATEWAY_PROCESS_EXIT=PASS"
+
 foreach ($Db in @(Get-StateDbPaths)) {
     & $OldPython -B $StateGuard --mode sqlite-integrity --db $Db
     if ($LASTEXITCODE -ne 0) {
