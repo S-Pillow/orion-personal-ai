@@ -37,21 +37,35 @@ the gateway can run with runtime dependencies injected into its in-process
 base interpreter. v0.21.5's `cron/scheduler_worker_env.py` pins the repository
 root into `PYTHONPATH` but does not pin the selected runtime venv site-packages.
 
-The rehearsal creates a representative two-interpreter Windows topology:
+The exact v0.21.5 source shows a Windows legacy/base-interpreter topology:
 
-- dependency-light "store" interpreter;
-- runtime venv containing Hermes dependencies;
-- parent imports succeed with repo + runtime site-packages;
-- child worker env is constructed by the exact v0.21.5
-  `pin_hermes_tree_on_pythonpath()`;
-- the child attempts to import `ruamel.yaml`, `croniter`, and
-  `cron.scheduler`.
+- `hermes_cli.gateway_windows` can launch the gateway with a base Python while
+  setting `VIRTUAL_ENV=<repo>/venv` and a checkout `PYTHONPATH`;
+- `tools/environments/local_pythonpath.py` explicitly recognizes that exact
+  `<repo>/venv` producer shape and strips both the Hermes runtime
+  `Lib/site-packages` path and active-venv markers from child environments;
+- `cron/scheduler_worker_env.py` then counter-pins only the repository root,
+  leaving a restart-safe worker launched under the base interpreter without
+  third-party dependencies.
 
-A failing child is recorded as **TARGET RISK REPRODUCED**, not hidden. The
-rehearsal then applies the narrow proposed dependency-path repair only in the
-disposable clone and requires the same probe to pass. If this red→green occurs,
-the production migration is blocked until that extra compatibility delta is
-promoted and requalified.
+The rehearsal therefore builds the dependency venv at the exact target shape
+`<disposable-target>/venv`, uses a separate dependency-light interpreter to
+stand in for the base gateway interpreter, and proves:
+
+1. parent Hermes imports succeed when repo + `venv/Lib/site-packages` are active;
+2. exact v0.21.5 child sanitization + tree-only pinning causes the worker import
+   to fail for a missing third-party dependency;
+3. an exact-target compatibility transform that restores only the validated
+   `<repo>/venv/Lib/site-packages` path next to the tree makes the identical
+   child probe pass.
+
+This matches the principle of the newer upstream #122222/#122529 fix without
+copying its later PM-specific implementation into a tag that does not contain
+the PM package.
+
+A red→green result is recorded as **BLOCKED_WORKER_ENV**. The exact-target
+worker compatibility delta must then be promoted and requalified before any
+production migration.
 
 ### 2. Single scheduler ownership / duplicate delivery
 
