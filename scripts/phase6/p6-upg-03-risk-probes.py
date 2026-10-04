@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import os
 import sqlite3
 import subprocess
@@ -62,7 +63,22 @@ def worker_probe(
     # Hermes because the parent process has repo + runtime site-packages on
     # sys.path. The spawned restart-safe worker receives a sanitized env and
     # exact-tag pin_hermes_tree_on_pythonpath(), which only restores repo_root.
-    import cron.scheduler_worker_env as worker_env
+    # Load only the exact worker-env helper file. Importing it through
+    # "cron.scheduler_worker_env" executes cron/__init__.py first, which imports
+    # the full scheduler stack and makes this dependency-path probe depend on
+    # unrelated parent-runtime initialization.
+    worker_path = repo_root / "cron" / "scheduler_worker_env.py"
+    spec = importlib.util.spec_from_file_location(
+        "p6_upg_03_scheduler_worker_env",
+        worker_path,
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load worker-env helper: {worker_path}")
+    worker_env = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(worker_env)
+
+    # These imports prove the simulated parent/store interpreter can see the
+    # disposable runtime dependency tree before we sanitize the child env.
     import croniter  # noqa: F401
     import ruamel.yaml  # noqa: F401
 
