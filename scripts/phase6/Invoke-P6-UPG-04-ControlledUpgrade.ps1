@@ -326,6 +326,25 @@ $LogOffsets = Get-LogOffsets $LogPaths
 $OldHermesExe = Join-Path $InstalledHermesRoot "venv\Scripts\hermes.exe"
 $OldPython = Join-Path $InstalledHermesRoot "venv\Scripts\python.exe"
 
+$GatewayStatePath = Join-Path $HermesHome "gateway_state.json"
+if (-not (Test-Path -LiteralPath $GatewayStatePath -PathType Leaf)) {
+    Stop-P6 "gateway_state.json disappeared after preflight; do not stop the gateway."
+}
+try {
+    $GatewayRuntime = Get-Content -LiteralPath $GatewayStatePath -Raw | ConvertFrom-Json
+    $ActiveAgentsNow = [int]($GatewayRuntime.active_agents)
+    $ActiveWorkNow = @($GatewayRuntime.active_work | Where-Object { $null -ne $_ }).Count
+}
+catch {
+    Stop-P6 "gateway_state.json became unreadable after preflight; do not stop the gateway."
+}
+Write-Host "P6_UPG_04_PRESTOP_ACTIVE_AGENTS=$ActiveAgentsNow"
+Write-Host "P6_UPG_04_PRESTOP_ACTIVE_WORK_COUNT=$ActiveWorkNow"
+if ($ActiveAgentsNow -ne 0 -or $ActiveWorkNow -ne 0) {
+    Stop-P6 "gateway became busy after preflight; defer the upgrade."
+}
+Write-Host "P6_UPG_04_PRESTOP_IDLE_RECHECK=PASS"
+
 Write-Host "P6_UPG_04_GATEWAY_STOP_BEGIN=true"
 $env:HERMES_HOME = $HermesHome
 $env:HERMES_NONINTERACTIVE = "1"
