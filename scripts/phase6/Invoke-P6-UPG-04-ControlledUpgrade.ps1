@@ -141,6 +141,7 @@ $BackupInstallRoot = $null
 $BinBackup = $null
 $MutationStarted = $false
 $GatewayStopped = $false
+$StateSafetyStop = $false
 $OldGatewayPid = $null
 
 function Invoke-P6Rollback {
@@ -215,7 +216,12 @@ function Invoke-P6Rollback {
         }
 
         $OldHermesExe = Join-Path $InstalledHermesRoot "venv\Scripts\hermes.exe"
-        if (Test-Path -LiteralPath $OldHermesExe -PathType Leaf) {
+        if ($StateSafetyStop) {
+            Write-Host "P6_UPG_04_STATE_SAFETY_HOLD=true"
+            Write-Host "P6_UPG_04_ROLLBACK_GATEWAY_RESTORED=false"
+            Write-Host "P6_UPG_04_STATE_RECOVERY_REQUIRES_OPERATOR_REVIEW=true"
+        }
+        elseif (Test-Path -LiteralPath $OldHermesExe -PathType Leaf) {
             $env:HERMES_HOME = $HermesHome
             $env:HERMES_NONINTERACTIVE = "1"
             $env:HERMES_GATEWAY_INSTALL_START_ON_LOGIN = "0"
@@ -378,7 +384,8 @@ try {
 foreach ($Db in @(Get-StateDbPaths)) {
     & $OldPython -B $StateGuard --mode sqlite-integrity --db $Db
     if ($LASTEXITCODE -ne 0) {
-        Stop-P6 "offline pre-upgrade SQLite integrity check failed; installation was not changed."
+        $StateSafetyStop = $true
+        Stop-P6 "offline pre-upgrade SQLite integrity check failed; installation was not changed and the gateway will remain stopped for state review."
     }
 }
 Write-Host "P6_UPG_04_OFFLINE_PREUPGRADE_SQLITE=PASS"
@@ -537,7 +544,8 @@ Write-Host "P6_UPG_04_BACKUP_ROOT=$BackupRoot"
     foreach ($Db in @(Get-StateDbPaths)) {
         & $NewPython -B $StateGuard --mode sqlite-integrity --db $Db
         if ($LASTEXITCODE -ne 0) {
-            Stop-P6 "post-restart SQLite integrity check failed."
+            $StateSafetyStop = $true
+            Stop-P6 "post-restart SQLite integrity check failed; fail closed and do not restart against unverified state."
         }
     }
     Write-Host "P6_UPG_04_POSTRESTART_SQLITE=PASS"
@@ -557,10 +565,12 @@ Write-Host "P6_UPG_04_BACKUP_ROOT=$BackupRoot"
     $PostJobs = [int]$PostJobsLine.Split("=")[1]
     $PostColumns = @($PostColumnsLine.Substring($PostColumnsLine.IndexOf("=") + 1).Split(","))
     if ($PostJobs -ne 0 -or $PostRows -ne 0) {
-        Stop-P6 "cron logical counts changed across upgrade."
+        $StateSafetyStop = $true
+        Stop-P6 "cron logical counts changed across upgrade; fail closed for state review."
     }
     foreach ($Column in $RequiredPostColumns) {
         if ($Column -notin $PostColumns) {
+            $StateSafetyStop = $true
             Stop-P6 "required post-upgrade execution column missing: $Column"
         }
     }
@@ -624,16 +634,23 @@ catch {
         Invoke-P6Rollback
     }
     elseif ($GatewayStopped) {
-        try {
-            $env:HERMES_HOME = $HermesHome
-            $env:HERMES_NONINTERACTIVE = "1"
-            $env:HERMES_GATEWAY_INSTALL_START_ON_LOGIN = "0"
-            & $OldHermesExe gateway start
-            $RestoreListeners = Wait-GatewayListenerCount -ExpectedCount 1 -TimeoutSeconds 60
-            Write-Host "P6_UPG_04_PREMUTATION_GATEWAY_RESTORED=$($RestoreListeners.Count -eq 1)"
-        }
-        catch {
+        if ($StateSafetyStop) {
+            Write-Host "P6_UPG_04_STATE_SAFETY_HOLD=true"
             Write-Host "P6_UPG_04_PREMUTATION_GATEWAY_RESTORED=false"
+            Write-Host "P6_UPG_04_STATE_RECOVERY_REQUIRES_OPERATOR_REVIEW=true"
+        }
+        else {
+            try {
+                $env:HERMES_HOME = $HermesHome
+                $env:HERMES_NONINTERACTIVE = "1"
+                $env:HERMES_GATEWAY_INSTALL_START_ON_LOGIN = "0"
+                & $OldHermesExe gateway start
+                $RestoreListeners = Wait-GatewayListenerCount -ExpectedCount 1 -TimeoutSeconds 60
+                Write-Host "P6_UPG_04_PREMUTATION_GATEWAY_RESTORED=$($RestoreListeners.Count -eq 1)"
+            }
+            catch {
+                Write-Host "P6_UPG_04_PREMUTATION_GATEWAY_RESTORED=false"
+            }
         }
     }
     throw $Failure
