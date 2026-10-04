@@ -27,6 +27,7 @@ $ExpectedCompatFileHashes = @{
 $InstalledHermesPython = Join-Path $InstalledHermesRoot "venv\Scripts\python.exe"
 $StateProbe = Join-Path $RepoRoot "scripts\phase6\p6-04-production-state-probe.py"
 $RiskProbe = Join-Path $RepoRoot "scripts\phase6\p6-upg-03-risk-probes.py"
+$WorkerFix = Join-Path $RepoRoot "scripts\phase6\p6-upg-03-apply-v0215-windows-worker-env-fix.py"
 $CompatPatch = Join-Path $RepoRoot "compat\hermes\v2026.9.24-orion-minimal-compat.patch"
 
 function Get-KeyValue([string[]]$Output, [string]$Key) {
@@ -71,7 +72,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "STOP: P6-UPG-03 branch does not descend from qualified P6-UPG-02."
 }
 
-foreach ($Path in @($InstalledHermesPython, $SystemPython, $StateProbe, $RiskProbe, $CompatPatch)) {
+foreach ($Path in @($InstalledHermesPython, $SystemPython, $StateProbe, $RiskProbe, $WorkerFix, $CompatPatch)) {
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
         throw "STOP: required file missing: $Path"
     }
@@ -135,10 +136,17 @@ if ($null -eq $GatewayProcess -or -not $GatewayProcess.ExecutablePath) {
 
 $GatewayExe = [IO.Path]::GetFullPath([string]$GatewayProcess.ExecutablePath)
 $InstalledVenvExe = [IO.Path]::GetFullPath($InstalledHermesPython)
+$SystemPythonExe = [IO.Path]::GetFullPath($SystemPython)
 $GatewayUsesInstalledVenv = [string]::Equals($GatewayExe, $InstalledVenvExe, [StringComparison]::OrdinalIgnoreCase)
+$GatewayUsesSystemPython = [string]::Equals($GatewayExe, $SystemPythonExe, [StringComparison]::OrdinalIgnoreCase)
+$InstalledRuntimeSite = Join-Path $InstalledHermesRoot "venv\Lib\site-packages"
+$InstalledRuntimeSiteExists = Test-Path -LiteralPath $InstalledRuntimeSite -PathType Container
 
 Write-Host "P6_UPG_03_PRODUCTION_GATEWAY_PID=$GatewayPid"
+Write-Host "P6_UPG_03_PRODUCTION_GATEWAY_EXE_NAME=$([IO.Path]::GetFileName($GatewayExe))"
 Write-Host "P6_UPG_03_PRODUCTION_GATEWAY_USES_INSTALLED_VENV=$($GatewayUsesInstalledVenv.ToString().ToLowerInvariant())"
+Write-Host "P6_UPG_03_PRODUCTION_GATEWAY_USES_SYSTEM_PYTHON=$($GatewayUsesSystemPython.ToString().ToLowerInvariant())"
+Write-Host "P6_UPG_03_PRODUCTION_INSTALLED_RUNTIME_SITE_EXISTS=$($InstalledRuntimeSiteExists.ToString().ToLowerInvariant())"
 Write-Host "P6_UPG_03_PRODUCTION_BASELINE=PASS"
 
 $InstalledPy = (& $InstalledHermesPython -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')").Trim()
@@ -150,7 +158,7 @@ if ($InstalledPy -ne $SystemPy) {
 $Stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $WorkRoot = Join-Path $env:TEMP "orion-p6-upg-03-$Stamp"
 $Target = Join-Path $WorkRoot "target"
-$RuntimeVenv = Join-Path $WorkRoot "runtime-venv"
+$RuntimeVenv = Join-Path $Target "venv"
 $StoreVenv = Join-Path $WorkRoot "store-venv"
 $TestHome = Join-Path $WorkRoot "test-home"
 
@@ -249,9 +257,14 @@ if ($RedPass -eq "false" -and $RedMissing -eq "true") {
     $WorkerBlocked = $true
     Write-Host "P6_UPG_03_WORKER_ENV_TARGET_RISK_REPRODUCED=true"
 
+    & $RuntimePython -B $WorkerFix --candidate-root $Target
+    if ($LASTEXITCODE -ne 0) {
+        throw "STOP: exact-target worker-env compatibility transform failed."
+    }
+
     try {
         $env:PYTHONPATH = "$Target;$RuntimeSite"
-        $WorkerGreen = @(& $StorePython -B $RiskProbe --mode worker --repo-root $Target --runtime-site $RuntimeSite --inject-runtime-site 2>&1)
+        $WorkerGreen = @(& $StorePython -B $RiskProbe --mode worker --repo-root $Target --runtime-site $RuntimeSite 2>&1)
         $WorkerGreen | ForEach-Object { Write-Host $_ }
         if ($LASTEXITCODE -ne 0) {
             throw "STOP: managed-worker green probe harness itself failed."
@@ -266,7 +279,7 @@ if ($RedPass -eq "false" -and $RedMissing -eq "true") {
         throw "STOP: disposable worker-env repair did not make the child import path healthy."
     }
 
-    Write-Host "P6_UPG_03_WORKER_ENV_CAUSAL_FIX_PROOF=PASS"
+    Write-Host "P6_UPG_03_EXACT_TARGET_WORKER_ENV_FIX_PROOF=PASS"
 }
 elseif ($RedPass -eq "true") {
     Write-Host "P6_UPG_03_WORKER_ENV_TARGET_RISK_REPRODUCED=false"
@@ -350,7 +363,7 @@ Write-Host "P6_UPG_03_LIVE_REMINDER_RUN=false"
 
 if ($WorkerBlocked) {
     Write-Host "P6_UPG_03_VERDICT=BLOCKED_WORKER_ENV"
-    Write-Host "P6_UPG_03_NEXT=design_exact_target_worker_env_delta_then_requalify_before_production_upgrade"
+    Write-Host "P6_UPG_03_NEXT=promote_exact_v0215_windows_worker_env_delta_and_requalify"
 }
 else {
     Write-Host "P6_UPG_03_VERDICT=PASS"
