@@ -53,12 +53,7 @@ def static_probe(repo_root: Path) -> int:
     return 0
 
 
-def worker_probe(
-    repo_root: Path,
-    runtime_site: Path,
-    *,
-    inject_runtime_site: bool = False,
-) -> int:
+def worker_probe(repo_root: Path, runtime_site: Path) -> int:
     # Parent-equivalent process: the dependency-light interpreter can import
     # Hermes because the parent process has repo + runtime site-packages on
     # sys.path. The spawned restart-safe worker receives a sanitized env and
@@ -89,16 +84,6 @@ def worker_probe(
 
     child_env = worker_env.pin_hermes_tree_on_pythonpath(child_env, repo_root)
 
-    if inject_runtime_site:
-        existing = [
-            entry
-            for entry in child_env.get("PYTHONPATH", "").split(os.pathsep)
-            if entry
-        ]
-        child_env["PYTHONPATH"] = os.pathsep.join(
-            dict.fromkeys([*existing, str(runtime_site)])
-        )
-
     child = subprocess.run(
         [
             sys.executable,
@@ -118,7 +103,6 @@ def worker_probe(
     )
 
     emit("P6_UPG_03_WORKER_PARENT_IMPORTS", "PASS")
-    emit("P6_UPG_03_WORKER_RUNTIME_SITE_INJECTED", inject_runtime_site)
     emit("P6_UPG_03_WORKER_CHILD_RC", child.returncode)
 
     if child.stdout.strip():
@@ -180,7 +164,6 @@ def main() -> int:
     parser.add_argument("--mode", required=True, choices=("static", "worker", "integrity"))
     parser.add_argument("--repo-root")
     parser.add_argument("--runtime-site")
-    parser.add_argument("--inject-runtime-site", action="store_true")
     parser.add_argument("--work-root")
     args = parser.parse_args()
 
@@ -195,7 +178,6 @@ def main() -> int:
         return worker_probe(
             Path(args.repo_root).resolve(),
             Path(args.runtime_site).resolve(),
-            inject_runtime_site=args.inject_runtime_site,
         )
 
     if not args.work_root:
