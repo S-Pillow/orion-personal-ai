@@ -1,6 +1,6 @@
 # P6-UPG-03 — Hermes v0.21.5 Disposable Full Migration Rehearsal
 
-Status: **PREPARED — DISPOSABLE ONLY**
+Status: **ACCEPTED — DISPOSABLE QUALIFICATION PASSED**
 
 Base Orion commit:
 
@@ -12,10 +12,13 @@ Target Hermes:
 - package `0.21.5`
 - commit `f97608f178d1ffeca59860195ab7da295f7c8e5f`
 
-Qualified Orion compatibility artifact:
+Qualified compatibility inputs:
 
-- `compat/hermes/v2026.9.24-orion-minimal-compat.patch`
-- SHA-256 `b0f0811f6411dff4d1faa0fbd19a04ad0414dfc3f846f25540dc75b4f8454d9c`
+- Orion P6-UPG-02 patch: `compat/hermes/v2026.9.24-orion-minimal-compat.patch`
+- P6-UPG-02 SHA-256: `b0f0811f6411dff4d1faa0fbd19a04ad0414dfc3f846f25540dc75b4f8454d9c`
+- Upstream worker fix backport: `compat/hermes/v2026.9.24-upstream-f57d235-worker-env.patch`
+- Combined immutable artifact: `compat/hermes/v2026.9.24-orion-qualified-combined.patch`
+- Combined SHA-256: `21edb9cf49eb6e2724852dc090f755cf38564db5026ab4d0b3814f34c0b355e4`
 
 This ticket does not authorize a production Hermes update, COMPANION mutation,
 gateway restart, live reminder, production pin change, or merge.
@@ -150,3 +153,43 @@ P6-UPG-03 remains disposable. Even a full PASS does not authorize:
 - stopping/restarting the production gateway;
 - running a live reminder;
 - merging the upgrade branch.
+
+
+## Acceptance record — 2026-10-04
+
+P6-UPG-03 passed on Orion branch head
+`e48074e2c490b88cb9b69c5c4b438306bc5835ca`.
+
+Accepted evidence:
+
+- production read-only baseline PASS; one gateway listener remained present;
+- gateway topology confirmed as system Python with installed Hermes runtime
+  site-packages present;
+- P6-UPG-02 qualified compatibility reproduced exactly;
+- reviewed upstream `f57d235` worker-env backport applied cleanly;
+- exact upstream `f57d235` regression set: **5 passed** with one non-blocking
+  test-thread warning;
+- Orion-relevant focused Windows/scheduler regression set:
+  **56 passed, 15 skipped**;
+- SQLite integrity-guard selftest PASS;
+- production cron logical state unchanged;
+- installed production Hermes unchanged;
+- gateway was not restarted;
+- no live reminder ran.
+
+Verdict emitted by the accepted rehearsal:
+
+`P6_UPG_03_VERDICT=PASS`
+
+Candidate:
+
+`V0215_PLUS_ORION_COMPAT_PLUS_UPSTREAM_F57D235`
+
+The earlier full-suite failures from Linux systemd/D-Bus and Buzz-specific test
+paths are not part of Orion's Windows upgrade acceptance surface and were not
+carried forward as blockers.
+
+P6-UPG-03 is closed. The next work unit is P6-UPG-04 controlled production
+upgrade review. P6-UPG-04 still requires separate explicit owner authorization
+before any production Hermes mutation, pin change, gateway stop/restart, or
+live reminder.
