@@ -90,9 +90,10 @@ def sqlite_integrity(path: Path) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", required=True, choices=("cron", "sqlite-integrity"))
+    parser.add_argument("--mode", required=True, choices=("cron", "sqlite-integrity", "sqlite-backup"))
     parser.add_argument("--home")
     parser.add_argument("--db")
+    parser.add_argument("--out")
     args = parser.parse_args()
 
     if args.mode == "cron":
@@ -101,8 +102,42 @@ def main() -> int:
         return cron_guard(Path(args.home).resolve())
 
     if not args.db:
-        parser.error("--db is required for sqlite-integrity mode")
-    return sqlite_integrity(Path(args.db))
+        parser.error("--db is required for sqlite modes")
+    if args.mode == "sqlite-integrity":
+        return sqlite_integrity(Path(args.db))
+
+    if not args.out:
+        parser.error("--out is required for sqlite-backup mode")
+
+    source = Path(args.db).resolve()
+    destination = Path(args.out).resolve()
+    emit("P6_UPG_04_SQLITE_BACKUP_SOURCE_NAME", source.name)
+    emit("P6_UPG_04_SQLITE_BACKUP_PRESENT", source.exists())
+    if not source.exists():
+        emit("P6_UPG_04_SQLITE_BACKUP", "NOT_PRESENT")
+        return 0
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.exists():
+        raise RuntimeError(f"backup destination already exists: {destination}")
+
+    source_uri = f"file:{source.as_posix()}?mode=ro"
+    src = sqlite3.connect(source_uri, uri=True, timeout=10)
+    try:
+        dst = sqlite3.connect(destination)
+        try:
+            src.backup(dst)
+            dst.commit()
+            rows = [str(row[0]) for row in dst.execute("PRAGMA integrity_check")]
+        finally:
+            dst.close()
+    finally:
+        src.close()
+
+    ok = rows == ["ok"]
+    emit("P6_UPG_04_SQLITE_BACKUP", "PASS" if ok else "FAIL")
+    emit("P6_UPG_04_SQLITE_BACKUP_INTEGRITY_ROW_COUNT", len(rows))
+    return 0 if ok else 2
 
 
 if __name__ == "__main__":
