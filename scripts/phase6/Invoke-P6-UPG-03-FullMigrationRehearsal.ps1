@@ -165,7 +165,7 @@ $TestHome = Join-Path $WorkRoot "test-home"
 New-Item -ItemType Directory -Force -Path @($WorkRoot, $TestHome) | Out-Null
 Write-Host "P6_UPG_03_WORK_ROOT=$WorkRoot"
 
-git -c core.autocrlf=false clone --quiet --no-hardlinks $CandidateRoot $Target
+git -c advice.detachedHead=false -c core.autocrlf=false clone --quiet --no-hardlinks $CandidateRoot $Target
 if ($LASTEXITCODE -ne 0) {
     throw "STOP: disposable target clone failed."
 }
