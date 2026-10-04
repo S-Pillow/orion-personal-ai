@@ -233,3 +233,127 @@ the latest stable release.
   preflight, then request explicit production authorization.
 
 This is a production safety gate, not a request for more exploratory testing.
+
+
+## Final preparation audit — 2026-10-04
+
+The packet was re-reviewed against the exact upstream sources and current issue
+state before being left for tomorrow.
+
+### Upstream decision evidence rechecked
+
+- Latest stable remains `v2026.9.24 / 0.21.5`, published 2026-09-24.
+- #131145 remains **OPEN / P1** on the exact 0.21.5 Windows line. The report
+  documents a boot where turn-machinery warm-up never completes, the bounded
+  gate releases anyway, the first inbound turn wedges before the provider call,
+  and gateway status can still look healthy.
+- PR #131148 is closed **unmerged**. Maintainer closure records that its first
+  unbounded-gate version created a larger availability failure; its second
+  commit restored the existing bounded behavior and left an empty net diff.
+  The maintainer explicitly left the underlying hang tracked in #131145.
+- PR #132700 is still an **open draft** and describes itself as only a
+  fail-loud/visibility change; it does not resolve the wedge root cause.
+- #129947 remains **OPEN / P1** (update can interrupt in-flight cron work).
+- #129171 remains **OPEN / P2** (Windows update can leave the gateway stopped).
+- #129990 remains **OPEN / P2** (stalled ticker ownership after abrupt
+  termination).
+- #110007 remains **OPEN / P2** (post-restart SQLite integrity gap).
+- #127284 remains **OPEN / P2** on the later source-completion architecture;
+  P6-UPG-04 retains only a defensive marker check for this pre-PM target.
+
+No local reproduction is required for those documented upstream defects to be
+treated as real production risks.
+
+### Exact installer contract rechecked
+
+The production packet is pinned to exact target commit
+`f97608f178d1ffeca59860195ab7da295f7c8e5f`.
+
+The exact target `scripts/install.ps1` was re-read and its SHA-256 independently
+verified as:
+
+`0a80dfeb7434229933bac32e73140d10086dff81bd84b156e71be9abc87cddf2`
+
+The exact stage manifest contains every stage used by the packet:
+
+- `repository`
+- `python`
+- `venv`
+- `dependencies`
+- `node-deps`
+- `platform-sdks`
+- `path`
+- `bootstrap-marker`
+
+The packet intentionally does not invoke `config-templates`, `configure`,
+or `gateway` installer stages. The gateway lifecycle remains an explicit
+operator-controlled boundary.
+
+The target `dependencies` stage first attempts `uv sync --extra all --locked`,
+then performs the vendor baseline-import gate. The `path` stage refreshes the
+managed Hermes launchers under `HERMES_HOME\bin`; the packet preserves that
+directory for rollback before running the stage. The `platform-sdks` stage
+reads profile `.env` only to determine which SDK imports are required and
+installs missing SDK packages into the shared Hermes venv; it does not rewrite
+the profile's secrets or config.
+
+### Compatibility artifact rechecked
+
+Combined artifact:
+
+`compat/hermes/v2026.9.24-orion-qualified-combined.patch`
+
+Independent SHA-256 recheck:
+
+`21edb9cf49eb6e2724852dc090f755cf38564db5026ab4d0b3814f34c0b355e4`
+
+The upstream-fixed `cron/scheduler_worker_env.py` content was independently
+re-hashed as:
+
+`18a2907456b8525eba7652f826c5812925773955484a07f6f665dfd42e388751`
+
+which matches the controlled packet's expected runtime hash.
+
+### Additional safety hardening completed
+
+The prepared scripts now also:
+
+- require the gateway to report zero active agents and zero active work in the
+  read-only preflight;
+- repeat that idle check immediately before stopping the gateway;
+- require exactly one Hermes gateway process and require it to own the one
+  listener;
+- require the old gateway process itself to exit, not merely release port 8642,
+  before any source replacement;
+- run fresh-connection SQLite integrity checks across the root home and every
+  profile state database;
+- create verified SQLite backup copies outside `HERMES_HOME` while the
+  gateway is offline, before replacing the installation;
+- preserve the complete old install and managed launcher directory;
+- fail closed rather than automatically restart a gateway after any detected
+  state-integrity or state-shape anomaly;
+- never force-kill a rollback listener by default. An emergency force-stop is
+  behind a separate `-AllowEmergencyForceStop` switch and refuses to kill a
+  process unless the listener owner is verified as a Hermes gateway;
+- require a provenance-complete warm-up clearance file naming either an
+  upstream merged commit or stable release, plus the Orion qualification
+  commit/evidence and exact candidate artifact hash.
+
+### Tomorrow operator sequence
+
+Tomorrow starts with evidence, not mutation:
+
+1. Re-check the latest stable Hermes release and #131145.
+2. Synchronize the P6-UPG-04 branch and run
+   `Test-P6-UPG-04-Packet.ps1`.
+3. Run `Invoke-P6-UPG-04-Preflight.ps1` in its default
+   `OPEN_UNRESOLVED` disposition.
+4. If #131145 is still unresolved for the candidate, stop with
+   `NO_GO_VENDOR_P1_WARMUP` and leave production on accepted v0.20.6.
+5. Only if a vendor-proven fix or newer stable resolves the blocker: reconcile
+   that concrete upstream change, requalify the candidate, create the bound
+   clearance artifact, rerun packet self-check + preflight, and then request
+   explicit owner authorization for production execution.
+
+There is intentionally no pre-authorized production mutation command in this
+document.
