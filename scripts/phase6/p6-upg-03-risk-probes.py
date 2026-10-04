@@ -147,6 +147,7 @@ def main() -> int:
     parser.add_argument("--repo-root")
     parser.add_argument("--runtime-venv")
     parser.add_argument("--runtime-site")
+    parser.add_argument("--work-root")
     args = parser.parse_args()
 
     if args.mode == "static":
@@ -163,7 +164,9 @@ def main() -> int:
             Path(args.runtime_site).resolve(),
         )
 
-    return integrity_selftest()
+    if not args.work_root:
+        parser.error("integrity requires --work-root")
+    return integrity_selftest(Path(args.work_root).resolve())
 
 
 if __name__ == "__main__":
