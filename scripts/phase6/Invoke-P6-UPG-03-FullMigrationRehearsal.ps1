@@ -159,7 +159,6 @@ $Stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $WorkRoot = Join-Path $env:TEMP "orion-p6-upg-03-$Stamp"
 $Target = Join-Path $WorkRoot "target"
 $RuntimeVenv = Join-Path $Target "venv"
-$StoreVenv = Join-Path $WorkRoot "store-venv"
 $TestHome = Join-Path $WorkRoot "test-home"
 
 New-Item -ItemType Directory -Force -Path @($WorkRoot, $TestHome) | Out-Null
@@ -209,13 +208,7 @@ Write-Host "P6_UPG_03_UPSTREAM_F57D235_BACKPORT_APPLIED=PASS"
 if ($LASTEXITCODE -ne 0) {
     throw "STOP: runtime venv creation failed."
 }
-& $SystemPython -m venv $StoreVenv
-if ($LASTEXITCODE -ne 0) {
-    throw "STOP: store-interpreter venv creation failed."
-}
-
 $RuntimePython = Join-Path $RuntimeVenv "Scripts\python.exe"
-$StorePython = Join-Path $StoreVenv "Scripts\python.exe"
 
 & $RuntimePython -m pip install --disable-pip-version-check --quiet --upgrade pip setuptools wheel
 if ($LASTEXITCODE -ne 0) {
@@ -246,23 +239,36 @@ if ($LASTEXITCODE -ne 0) {
     throw "STOP: SQLite integrity-guard selftest failed."
 }
 
-$OldPythonPath = $env:PYTHONPATH
+$UpstreamWorkerFixTests = @(
+    "tests/cron/test_restart_safe_worker.py::test_launch_external_worker_pin_extends_the_sanitized_env_not_os_environ",
+    "tests/cron/test_restart_safe_worker.py::test_pin_restores_activated_dependency_site_packages",
+    "tests/cron/test_restart_safe_worker.py::test_activated_dependency_site_packages_derives_from_sys_path",
+    "tests/cron/test_restart_safe_worker.py::test_activated_dependency_site_packages_excludes_own_purelib",
+    "tests/cron/test_restart_safe_worker.py::test_activated_dependency_site_packages_requires_real_venv"
+)
+
 try {
-    $env:PYTHONPATH = "$Target;$RuntimeSite"
-    $WorkerGreen = @(& $StorePython -B $RiskProbe --mode worker --repo-root $Target --runtime-site $RuntimeSite 2>&1)
-    $WorkerGreen | ForEach-Object { Write-Host $_ }
-    if ($LASTEXITCODE -ne 0) {
-        throw "STOP: patched-worker qualification probe failed."
+    $env:HERMES_HOME = $TestHome
+    $env:PYTHONPATH = $Target
+    $env:PYTHONDONTWRITEBYTECODE = "1"
+
+    Push-Location $Target
+    try {
+        & $RuntimePython -B -m pytest $UpstreamWorkerFixTests -q -p no:cacheprovider
+        $UpstreamWorkerFixExit = $LASTEXITCODE
+    }
+    finally {
+        Pop-Location
     }
 }
 finally {
+    $env:HERMES_HOME = $OldHome
     $env:PYTHONPATH = $OldPythonPath
+    $env:PYTHONDONTWRITEBYTECODE = $OldDontWrite
 }
 
-$GreenPass = Get-KeyValue $WorkerGreen "P6_UPG_03_WORKER_CHILD_IMPORTS_PASS"
-$GreenHasRuntime = Get-KeyValue $WorkerGreen "P6_UPG_03_WORKER_CHILD_HAS_RUNTIME_SITE"
-if ($GreenPass -ne "true" -or $GreenHasRuntime -ne "true") {
-    throw "STOP: upstream f57d235 backport did not produce a healthy external-worker dependency path."
+if ($UpstreamWorkerFixExit -ne 0) {
+    throw "STOP: upstream f57d235 regression tests failed."
 }
 
 Write-Host "P6_UPG_03_UPSTREAM_F57D235_BACKPORT_PROOF=PASS"
