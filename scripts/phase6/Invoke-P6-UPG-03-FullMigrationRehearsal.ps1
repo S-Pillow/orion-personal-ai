@@ -27,7 +27,6 @@ $ExpectedCompatFileHashes = @{
 $InstalledHermesPython = Join-Path $InstalledHermesRoot "venv\Scripts\python.exe"
 $StateProbe = Join-Path $RepoRoot "scripts\phase6\p6-04-production-state-probe.py"
 $RiskProbe = Join-Path $RepoRoot "scripts\phase6\p6-upg-03-risk-probes.py"
-$WorkerFix = Join-Path $RepoRoot "scripts\phase6\p6-upg-03-apply-worker-env-fix.py"
 $CompatPatch = Join-Path $RepoRoot "compat\hermes\v2026.9.24-orion-minimal-compat.patch"
 
 function Get-KeyValue([string[]]$Output, [string]$Key) {
@@ -72,7 +71,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "STOP: P6-UPG-03 branch does not descend from qualified P6-UPG-02."
 }
 
-foreach ($Path in @($InstalledHermesPython, $SystemPython, $StateProbe, $RiskProbe, $WorkerFix, $CompatPatch)) {
+foreach ($Path in @($InstalledHermesPython, $SystemPython, $StateProbe, $RiskProbe, $CompatPatch)) {
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
         throw "STOP: required file missing: $Path"
     }
@@ -232,7 +231,7 @@ if ($LASTEXITCODE -ne 0) {
 $OldPythonPath = $env:PYTHONPATH
 try {
     $env:PYTHONPATH = "$Target;$RuntimeSite"
-    $WorkerRed = @(& $StorePython -B $RiskProbe --mode worker --repo-root $Target --runtime-venv $RuntimeVenv --runtime-site $RuntimeSite 2>&1)
+    $WorkerRed = @(& $StorePython -B $RiskProbe --mode worker --repo-root $Target --runtime-site $RuntimeSite 2>&1)
     $WorkerRed | ForEach-Object { Write-Host $_ }
     if ($LASTEXITCODE -ne 0) {
         throw "STOP: managed-worker red probe harness itself failed."
@@ -250,14 +249,9 @@ if ($RedPass -eq "false" -and $RedMissing -eq "true") {
     $WorkerBlocked = $true
     Write-Host "P6_UPG_03_WORKER_ENV_TARGET_RISK_REPRODUCED=true"
 
-    & $RuntimePython -B $WorkerFix --candidate-root $Target
-    if ($LASTEXITCODE -ne 0) {
-        throw "STOP: disposable worker-env repair transform failed."
-    }
-
     try {
         $env:PYTHONPATH = "$Target;$RuntimeSite"
-        $WorkerGreen = @(& $StorePython -B $RiskProbe --mode worker --repo-root $Target --runtime-venv $RuntimeVenv --runtime-site $RuntimeSite 2>&1)
+        $WorkerGreen = @(& $StorePython -B $RiskProbe --mode worker --repo-root $Target --runtime-site $RuntimeSite --inject-runtime-site 2>&1)
         $WorkerGreen | ForEach-Object { Write-Host $_ }
         if ($LASTEXITCODE -ne 0) {
             throw "STOP: managed-worker green probe harness itself failed."
@@ -272,7 +266,7 @@ if ($RedPass -eq "false" -and $RedMissing -eq "true") {
         throw "STOP: disposable worker-env repair did not make the child import path healthy."
     }
 
-    Write-Host "P6_UPG_03_DISPOSABLE_WORKER_FIX_PROOF=PASS"
+    Write-Host "P6_UPG_03_WORKER_ENV_CAUSAL_FIX_PROOF=PASS"
 }
 elseif ($RedPass -eq "true") {
     Write-Host "P6_UPG_03_WORKER_ENV_TARGET_RISK_REPRODUCED=false"
@@ -356,7 +350,7 @@ Write-Host "P6_UPG_03_LIVE_REMINDER_RUN=false"
 
 if ($WorkerBlocked) {
     Write-Host "P6_UPG_03_VERDICT=BLOCKED_WORKER_ENV"
-    Write-Host "P6_UPG_03_NEXT=promote_and_requalify_worker_env_delta_before_production_upgrade"
+    Write-Host "P6_UPG_03_NEXT=design_exact_target_worker_env_delta_then_requalify_before_production_upgrade"
 }
 else {
     Write-Host "P6_UPG_03_VERDICT=PASS"
