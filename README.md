@@ -188,28 +188,33 @@ P5-02O rollback capture:
 
 The P5-02Q edit, P5-02R restore, P5-02T first production move, P5-02U move-source restore, P5-02V protected-delete source qualification, P5-02W installed-disabled qualification, P5-02X protected target deletion, and P5-02Y exact audited recovery cleanup are accepted. The controlled Phase 5 canary transaction/recovery chain is closed; no further Phase 5 mutation is authorized by that closure.
 
+### Phase 6 — P6-05 reminder CRUD/HUD correction written; final qualification pending
 
-### Phase 6 — reminder architecture discovery accepted; implementation not started
+Phase 6 has advanced beyond discovery while preserving the P6-01 ownership decision: **Hermes remains the authoritative reminder scheduler and durable job owner.** Orion must not add a second scheduler, timer daemon, watcher, or scheduler-owning service.
 
-P6-01 Reminder Scheduler Ownership & Installed Hermes Capability Discovery is complete.
+Current Phase 6 checkpoint:
 
-Architecture decision:
+- P6-02 froze the bounded native-adapter contract around accepted Hermes `tools.cronjob_tools.cronjob()` with explicit COMPANION `HERMES_HOME`, native structured responses, ownership filtering, no generic cron proxy, and no implicit/manual `run` path;
+- the accepted Hermes production baseline remains tag `v2026.8.27`, package `0.20.6`, commit `5fc308a70719a83cccdbba4c0e39c23f5a8239d5`;
+- P6-03/P6-04/P6-04A established the reminder durability/evidence compatibility baseline used by current operator work; they do not authorize a second Orion scheduler;
+- P6-UPG-04 remains parked behind a separate upstream/vendor blocker and is not required for P6-05 reminder CRUD/HUD completion;
+- P6-05 repository implementation exists locally on `feature/p6-05-reminder-crud-hud` at base HEAD `69309e1559428ffee0455ed9f476222600e392a4`, across exactly twelve working-tree paths, and is not yet committed;
+- P6-05 provides a fourth HUD workspace (`CONVERSATION | REMINDERS | SYSTEM | MEMORY`), bounded list/get/create/pause/resume/cancel routes, exact history correlation, same-origin mutation checks, Orion-owned reminder filtering, browser-safe projection, and fail-closed adapter availability;
+- final review found four contract gaps: missing Hermes version gate, reminder reads incorrectly coupled to conversation-gateway online state, unsupported prose schedule examples, and missing explicit native delivery intent;
+- the 2026-10-05 semantic correction was successfully written locally: Hermes version `0.20.6` is now hard-gated alongside commit identity, create binds native `deliver="discord"` and verifies the returned job preserved it, the HUD advertises only proven `30m` / `every 30m` examples, reminder refresh occurs before the conversation `if (online)` branch, and scheduler active/inactive state is shown independently;
+- after that correction, Python compile passed, frontend-hardening passed **28/28**, and the reminder suite passed **36/36**;
+- the remaining blocker is one stale static Phase 3 test, `test_status_observations_sync_before_online_branch`, which still requires `syncSystemWorkspace();` to be immediately adjacent to `if (online) {`; the corrected architecture intentionally inserts `await refreshReminders();` between them;
+- that remaining edit is test-only: preserve the original Phase 3 ordering contract while asserting `bridge -> credential -> syncSystemWorkspace -> refreshReminders -> if (online)`;
+- no production reminder was created, no Hermes reminder `run` was invoked, no COMPANION configuration was changed, no Hermes restart was performed, and P6-06 live reminder acceptance has not started.
 
-- native Hermes is the authoritative reminder scheduler;
-- Orion must not introduce a second general scheduler, timer daemon, or scheduler-owning service;
-- the accepted Hermes scheduler is gateway-owned and already provides one-shot/recurring jobs, persistent `jobs.json`, duplicate-suppression claims/fences, durable execution history, restart recovery, Discord/local delivery, and script/no-agent scheduling;
-- Orion work should be a bounded adapter/projection/evidence layer around supported Hermes surfaces.
+Durable continuation record:
 
-P6-01 also identified the remaining Orion-specific gaps that must drive P6-02 through P6-07:
+- `docs/phase6/p6-05-correction-resume-plan-2026-10-05.md`
+- `scripts/phase6/Invoke-P6-05-FinalizeCorrection.ps1`
 
-- corrupt-but-repairable `jobs.json` shapes may be auto-rewritten without preserving the exact pre-repair artifact;
-- missed one-shots outside Hermes' 120-second grace window are retired with an operator-visible diagnostic rather than fired late;
-- the durable execution ledger does not persist scheduled fire time or delivery outcome as execution columns;
-- HUD reminder state still needs a truthful read-only projection from durable Hermes evidence;
-- local-trigger work should reuse Hermes script/no-agent/monitor mechanisms rather than create a second watcher/scheduler;
-- live reminder acceptance, restart/manual-off behavior, delivery failure, duplicate suppression, and recovery remain unimplemented and must be proven separately.
+The prepared finalization script is a resume/final-gate tool, not another source-correction script. It verifies the exact branch/head, accepted Hermes pin, twelve-path scope, and already-written semantic correction; repairs only the stale Phase 3 test using a function-scoped AST edit; runs the targeted/focused/full HUD regression gates; checks `git diff --check`; rechecks scope; and writes a final report. It does not commit, push, merge, deploy, restart Hermes, create/run a reminder, or modify COMPANION configuration.
 
-Phase 6 preparation proceeds ticket-by-ticket. P6-02 is design/contract work first; no reminder implementation is authorized by P6-01 alone.
+P6-06 remains separate. Actual Discord delivery, manual-off missed-reminder behavior, restart/interrupted-run truth, duplicate suppression, delivery failure, sibling failure isolation, and corruption-preservation acceptance still require explicit live qualification. The accepted COMPANION state historically has no configured Discord home channel, so an exact destination must be qualified/configured separately before live Discord acceptance; P6-05 must not invent one.
 
 ## Accepted manual-off lifecycle
 
@@ -314,14 +319,17 @@ Reference/code-donor fork. Reuse only proven patterns that still close a current
 
 Current accepted repository/runtime checkpoint:
 
-- `main` includes merged PR #52 / P5-03C reconnect-hydration qualification;
-- Phase 5 is effectively closed for the vault-action/reconnect track;
-- Phase 4 remains intentionally parked by owner decision at the bounded live voice acceptance gate; no speech-stack redesign is authorized;
-- P6-01 reminder discovery is complete and selected native Hermes as scheduler owner;
-- Phase 6 implementation has not started;
-- the next planned work unit is P6-02 Reminder Contract & Hermes Adapter Design, followed by bounded P6-03 through P6-07 work only after ticket-specific authorization;
-- Persistent Goal Mode remains deferred/discussion-only and must not be implemented as a second autonomous runtime, scheduler, memory system, or approval path.
+- `main` now carries the 2026-10-05 P6-05 handoff documentation and finalization tooling; the actual twelve-file P6-05 implementation remains local/uncommitted on `feature/p6-05-reminder-crud-hud`;
+- local P6-05 base HEAD remains `69309e1559428ffee0455ed9f476222600e392a4`; accepted Hermes remains `v2026.8.27` / `0.20.6` / `5fc308a70719a83cccdbba4c0e39c23f5a8239d5`;
+- the semantic source correction has already been written and must **not** be regenerated or reapplied;
+- current verified correction results are Python compile PASS, frontend-hardening **28/28**, reminder suite **36/36**;
+- exactly one known gate remains before final review: repair the stale `test_status_observations_sync_before_online_branch` assertion so it tests ordering rather than adjacency;
+- next session should run `scripts/phase6/Invoke-P6-05-FinalizeCorrection.ps1`, which performs only that bounded test repair if needed and then runs the focused **98-test** gate plus full HUD Python discovery;
+- after a green finalization gate, inspect the final twelve-file diff and request separate authorization before committing the P6-05 implementation;
+- P6-06 live reminder acceptance remains separate and has not started; live Discord delivery requires explicit destination qualification/configuration under separate authorization;
+- Phase 4 remains parked at the bounded live voice acceptance gate;
+- Persistent Goal Mode remains deferred/discussion-only and must not become a second autonomous runtime, scheduler, memory system, or approval path.
 
 The safe project-status shorthand is:
 
-> Phase 3 presentation foundation accepted; Phase 4 voice acceptance parked; Phase 5 vault-action/reconnect track closed through P5-03C; Phase 6 reminder discovery complete with native Hermes selected as scheduler owner; next work is P6-02 design/contract preparation, not reminder implementation.
+> Phase 3 presentation foundation accepted; Phase 4 voice acceptance parked; Phase 5 vault-action/reconnect track closed through P5-03C; Phase 6 has advanced through the accepted reminder durability/error-evidence baseline; P6-05 repository implementation and semantic correction are written locally, with one stale Phase 3 test contract plus final qualification remaining; P6-06 live reminder acceptance has not started.
