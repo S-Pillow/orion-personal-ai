@@ -61,16 +61,13 @@ diff --git a/hud/orion_hud_bridge.py b/hud/orion_hud_bridge.py
 diff --git a/hud/static/app.js b/hud/static/app.js
 --- a/hud/static/app.js
 +++ b/hud/static/app.js
-@@ -126,6 +126,7 @@
-   actionProjection: null,
+@@ -127,4 +127,5 @@
    actionEvidence: [],
    reminderBusy: false,
 +  reminderMutationBlocked: false,
    provenance: createProvenanceState(),
  };
- 
-@@ -369,6 +370,39 @@
-   ui.reminderFormStatus.dataset.tone = tone;
+@@ -370,4 +371,37 @@
  }
  
 +function syncReminderMutationControls() {
@@ -108,9 +105,7 @@ diff --git a/hud/static/app.js b/hud/static/app.js
 +
  function formatReminderTimestamp(value) {
    const raw = String(value || "").trim();
-   if (!raw) return "ΓÇö";
-@@ -507,7 +541,11 @@
-   button,
+@@ -508,5 +542,9 @@
  ) {
    const reminderId = String(reminder?.id || "");
 -  if (!reminderId || state.reminderBusy) return;
@@ -121,17 +116,13 @@ diff --git a/hud/static/app.js b/hud/static/app.js
 +  ) return;
  
    if (
-     action === "cancel" &&
-@@ -520,6 +558,7 @@
- 
+@@ -521,4 +559,5 @@
    state.reminderBusy = true;
    button.disabled = true;
 +  syncReminderMutationControls();
  
    try {
-     if (action === "cancel") {
-@@ -544,13 +583,20 @@
- 
+@@ -545,11 +584,18 @@
      await refreshReminders();
    } catch (error) {
 -    setReminderWorkspaceStatus(
@@ -154,9 +145,7 @@ diff --git a/hud/static/app.js b/hud/static/app.js
 +    syncReminderMutationControls();
    }
  }
- 
-@@ -749,6 +795,9 @@
-   try {
+@@ -750,4 +796,7 @@
      const payload = await api("/api/orion/reminders");
      renderReminders(payload);
 +    state.reminderMutationBlocked = false;
@@ -164,34 +153,27 @@ diff --git a/hud/static/app.js b/hud/static/app.js
 +    return true;
    } catch (error) {
      const unavailable = error?.status === 503;
- 
-@@ -764,13 +813,14 @@
-         ? "Reminder controls are unavailable in this bridge host."
+@@ -765,4 +814,5 @@
          : "Unable to refresh reminders.",
      );
 +    return false;
    }
  }
- 
- async function submitReminder(event) {
+@@ -771,5 +821,5 @@
    event.preventDefault();
  
 -  if (state.reminderBusy) return;
 +  if (state.reminderBusy || state.reminderMutationBlocked) return;
  
    const body = {
-     title: ui.reminderTitleInput.value.trim(),
-@@ -787,7 +837,7 @@
-   }
+@@ -788,5 +838,5 @@
  
    state.reminderBusy = true;
 -  ui.reminderCreateButton.disabled = true;
 +  syncReminderMutationControls();
  
    setReminderFormStatus(
-     "Creating with Hermes...",
-@@ -809,13 +859,19 @@
- 
+@@ -810,11 +860,17 @@
      await refreshReminders();
    } catch (error) {
 -    setReminderFormStatus(
@@ -214,7 +196,6 @@ diff --git a/hud/static/app.js b/hud/static/app.js
 +    syncReminderMutationControls();
    }
  }
- 
 diff --git a/hud/reminder_adapter.py b/hud/reminder_adapter.py
 --- a/hud/reminder_adapter.py
 +++ b/hud/reminder_adapter.py
