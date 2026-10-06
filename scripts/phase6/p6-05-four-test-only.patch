@@ -1,0 +1,89 @@
+diff --git a/hud/tests/test_phase3_composition.py b/hud/tests/test_phase3_composition.py
+--- a/hud/tests/test_phase3_composition.py
++++ b/hud/tests/test_phase3_composition.py
+@@ -20,10 +20,12 @@ TARGET = (HUD_ROOT / "static" / "target-layout.css").read_text(
+ 
+ class Phase3CompositionContractTests(unittest.TestCase):
+     def test_exact_workspace_set_remains(self):
+-        self.assertEqual(INDEX.count("data-workspace-target="), 3)
+-        self.assertEqual(INDEX.count("data-workspace-pane="), 3)
++        expected = ("conversation", "reminders", "system", "memory")
+ 
+-        for value in ("conversation", "system", "memory"):
++        self.assertEqual(INDEX.count("data-workspace-target="), len(expected))
++        self.assertEqual(INDEX.count("data-workspace-pane="), len(expected))
++
++        for value in expected:
+             self.assertIn(
+                 'data-workspace-target="{}"'.format(value),
+                 INDEX,
+diff --git a/hud/tests/test_phase3_memory_lens.py b/hud/tests/test_phase3_memory_lens.py
+--- a/hud/tests/test_phase3_memory_lens.py
++++ b/hud/tests/test_phase3_memory_lens.py
+@@ -124,10 +124,27 @@ class Phase3MemoryLensContractTests(unittest.TestCase):
+         self.assertNotIn('method="post"', memory_section.group(0).lower())
+ 
+     def test_memory_workspace_uses_reference_shell_and_responsive_width(self):
+-        self.assertIn(".memory-workspace {", TARGET)
+-        self.assertIn("width:var(--center-width);", TARGET)
++        workspace_rule = re.search(
++            r"(?s)([^{}]*\.memory-workspace[^{}]*)\{([^{}]*)\}",
++            TARGET,
++        )
++        self.assertIsNotNone(workspace_rule)
++        self.assertIn(
++            "width:var(--center-width);",
++            workspace_rule.group(2),
++        )
++
+         self.assertIn("@media (max-width: 520px)", TARGET)
+-        self.assertIn("width:calc(100% - 16px);", TARGET)
++        mobile = TARGET.split("@media (max-width: 520px)", 1)[1]
++        mobile_workspace_rule = re.search(
++            r"(?s)([^{}]*\.memory-workspace[^{}]*)\{([^{}]*)\}",
++            mobile,
++        )
++        self.assertIsNotNone(mobile_workspace_rule)
++        self.assertIn(
++            "width:calc(100% - 16px);",
++            mobile_workspace_rule.group(2),
++        )
+ 
+     def test_existing_typed_and_system_surfaces_remain_present(self):
+         for token in (
+diff --git a/hud/tests/test_phase3_provenance.py b/hud/tests/test_phase3_provenance.py
+--- a/hud/tests/test_phase3_provenance.py
++++ b/hud/tests/test_phase3_provenance.py
+@@ -263,10 +263,11 @@ class Phase3ProvenanceAuthorityContractTests(unittest.TestCase):
+         )
+ 
+     def test_p3_04_does_not_add_a_workspace(self):
+-        self.assertEqual(
+-            INDEX.count("data-workspace-target="),
+-            3,
++        self.assertNotIn(
++            'data-workspace-target="provenance"',
++            INDEX,
+         )
++        self.assertNotIn('data-workspace-pane="provenance"', INDEX)
+ 
+ 
+ if __name__ == "__main__":
+diff --git a/hud/tests/test_ui_convergence_summon.py b/hud/tests/test_ui_convergence_summon.py
+--- a/hud/tests/test_ui_convergence_summon.py
++++ b/hud/tests/test_ui_convergence_summon.py
+@@ -26,13 +26,10 @@ class UIConvergenceSummonContractTests(unittest.TestCase):
+         )
+         self.assertIn("const summonController = installSummonController({", APP)
+ 
+-    def test_summon_is_presentation_overlay_not_fourth_workspace(self):
+-        self.assertEqual(INDEX.count("data-workspace-target="), 3)
+-        self.assertEqual(INDEX.count("data-workspace-pane="), 3)
++    def test_summon_is_presentation_overlay_not_workspace(self):
+         self.assertIn('id="summonPanel"', INDEX)
+         self.assertNotIn('data-workspace-target="summon"', INDEX)
+         self.assertNotIn('data-workspace-pane="summon"', INDEX)
+-        self.assertIn('id="summonPanel"', INDEX)
+ 
+     def test_shell_has_accessible_bounded_visible_controls(self):
+         for element_id in (
