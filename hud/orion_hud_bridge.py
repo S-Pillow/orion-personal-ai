@@ -5,7 +5,9 @@ This process is intentionally a presentation/control client for the accepted
 Hermes API server. It does not start, stop, supervise, install, update, or kill
 Hermes, Ollama, iai, or any Windows task/service.
 
-Standard-library only so Phase 2A adds no runtime dependency.
+The bridge code remains standard-library only. P6-05 reminder CRUD optionally
+loads the accepted Hermes native reminder modules when the bridge is hosted by
+the accepted Hermes Python environment.
 """
 
 from __future__ import annotations
@@ -33,7 +35,16 @@ from action_projection import (
     project_transcript_payload,
 )
 
-BRIDGE_VERSION = "2a-0.3-p5-03a2"
+from reminder_adapter import (
+    ReminderAdapterError,
+    ReminderAdapterUnavailable,
+    ReminderContractError,
+    ReminderInputError,
+    ReminderNotFound,
+    build_runtime_reminder_adapter,
+)
+
+BRIDGE_VERSION = "2a-0.4-p6-05"
 DEFAULT_BIND_HOST = "127.0.0.1"
 DEFAULT_BIND_PORT = 8765
 DEFAULT_HERMES_URL = "http://127.0.0.1:8642"
@@ -74,6 +85,7 @@ class BridgeState:
     api_key: str
     ui_cookie: str
     static_root: Path
+    reminder_adapter: Any | None = None
 
 
 def _is_loopback_host(host: str) -> bool:
@@ -350,6 +362,78 @@ class OrionHandler(BaseHTTPRequestHandler):
             return
         self._send_bytes(status, data, content_type)
 
+    def _reminder_operation(
+        self,
+        operation: str,
+        *args: Any,
+        success_status: int = 200,
+        **kwargs: Any,
+    ) -> None:
+        adapter = self.state.reminder_adapter
+
+        if adapter is None:
+            self._send_json(
+                503,
+                {
+                    "error": "reminders_unavailable",
+                    "authority": "hermes",
+                },
+            )
+            return
+
+        mutation = operation in {
+            "create_reminder",
+            "pause_reminder",
+            "resume_reminder",
+            "cancel_reminder",
+        }
+
+        def failure_payload(error_code: str) -> dict[str, Any]:
+            payload: dict[str, Any] = {"error": error_code}
+            if mutation:
+                payload["mutation_outcome"] = "uncertain"
+            return payload
+
+        try:
+            result = getattr(adapter, operation)(*args, **kwargs)
+        except ReminderInputError as exc:
+            self._send_json(
+                400,
+                {
+                    "error": "invalid_reminder_request",
+                    "message": str(exc),
+                },
+            )
+            return
+        except ReminderNotFound:
+            self._send_json(404, {"error": "reminder_not_found"})
+            return
+        except ReminderAdapterUnavailable:
+            payload = failure_payload("reminders_unavailable")
+            payload["authority"] = "hermes"
+            self._send_json(503, payload)
+            return
+        except ReminderContractError:
+            self._send_json(
+                502,
+                failure_payload("hermes_reminder_contract_error"),
+            )
+            return
+        except ReminderAdapterError:
+            self._send_json(
+                502,
+                failure_payload("hermes_reminder_adapter_error"),
+            )
+            return
+        except Exception:
+            self._send_json(
+                500,
+                failure_payload("reminder_bridge_internal_error"),
+            )
+            return
+
+        self._send_json(success_status, result)
+
     def do_GET(self) -> None:  # noqa: N802
         if not self._request_host_guard():
             return
@@ -374,6 +458,46 @@ class OrionHandler(BaseHTTPRequestHandler):
 
         if path == "/api/orion/status":
             self._handle_status()
+            return
+
+        if path == "/api/orion/reminders":
+            self._reminder_operation("list_reminders")
+            return
+
+        match = re.fullmatch(
+            r"/api/orion/reminders/([^/]+)/runs",
+            path,
+        )
+        if match:
+            reminder_id = match.group(1)
+            if not self._valid_id(reminder_id):
+                self._send_json(
+                    400,
+                    {"error": "invalid_reminder_id"},
+                )
+                return
+            self._reminder_operation(
+                "reminder_runs",
+                reminder_id,
+            )
+            return
+
+        match = re.fullmatch(
+            r"/api/orion/reminders/([^/]+)",
+            path,
+        )
+        if match:
+            reminder_id = match.group(1)
+            if not self._valid_id(reminder_id):
+                self._send_json(
+                    400,
+                    {"error": "invalid_reminder_id"},
+                )
+                return
+            self._reminder_operation(
+                "get_reminder",
+                reminder_id,
+            )
             return
 
         fixed = {
@@ -572,6 +696,13 @@ class OrionHandler(BaseHTTPRequestHandler):
                     "credentials_available": bool(self.state.api_key),
                     "detailed": detailed,
                 },
+                "reminders": {
+                    "authority": "hermes",
+                    "scheduler_owner": "hermes",
+                    "adapter_available": (
+                        self.state.reminder_adapter is not None
+                    ),
+                },
             },
         )
 
@@ -588,6 +719,54 @@ class OrionHandler(BaseHTTPRequestHandler):
             self._send_json(404, {"error": "not_found"})
             return
         if not self._api_guard(mutation=True):
+            return
+
+        if path == "/api/orion/reminders":
+            body = self._read_json()
+            if body is None:
+                return
+            self._reminder_operation(
+                "create_reminder",
+                body,
+                success_status=201,
+            )
+            return
+
+        match = re.fullmatch(
+            r"/api/orion/reminders/([^/]+)/(pause|resume)",
+            path,
+        )
+        if match:
+            reminder_id, action = match.groups()
+
+            if not self._valid_id(reminder_id):
+                self._send_json(
+                    400,
+                    {"error": "invalid_reminder_id"},
+                )
+                return
+
+            body = self._read_json()
+            if body is None:
+                return
+
+            if body:
+                self._send_json(
+                    400,
+                    {"error": "reminder_action_body_must_be_empty"},
+                )
+                return
+
+            operation = (
+                "pause_reminder"
+                if action == "pause"
+                else "resume_reminder"
+            )
+
+            self._reminder_operation(
+                operation,
+                reminder_id,
+            )
             return
 
         if path == "/api/orion/sessions":
@@ -655,6 +834,65 @@ class OrionHandler(BaseHTTPRequestHandler):
             return
 
         self._send_json(404, {"error": "operation_not_allowlisted"})
+
+    def do_DELETE(self) -> None:  # noqa: N802
+        self.close_connection = True
+
+        if not self._request_host_guard():
+            return
+
+        path = urlparse(self.path).path
+
+        if not path.startswith("/api/orion/"):
+            self._send_json(404, {"error": "not_found"})
+            return
+
+        if not self._api_guard(mutation=True):
+            return
+
+        match = re.fullmatch(
+            r"/api/orion/reminders/([^/]+)",
+            path,
+        )
+
+        if not match:
+            self._send_json(
+                404,
+                {"error": "operation_not_allowlisted"},
+            )
+            return
+
+        reminder_id = match.group(1)
+
+        if not self._valid_id(reminder_id):
+            self._send_json(
+                400,
+                {"error": "invalid_reminder_id"},
+            )
+            return
+
+        raw_length = self.headers.get("Content-Length", "0")
+
+        try:
+            length = int(raw_length)
+        except ValueError:
+            self._send_json(
+                400,
+                {"error": "invalid_content_length"},
+            )
+            return
+
+        if length != 0:
+            self._send_json(
+                400,
+                {"error": "delete_body_must_be_empty"},
+            )
+            return
+
+        self._reminder_operation(
+            "cancel_reminder",
+            reminder_id,
+        )
 
     def _proxy_stream(self, session_id: str, text: str) -> None:
         try:
@@ -801,11 +1039,21 @@ def build_state(args: argparse.Namespace) -> BridgeState:
     env_path = Path(args.hermes_env).expanduser() if args.hermes_env else None
     key = load_hermes_api_key(env_path)
     static_root = Path(__file__).resolve().parent / "static"
+
+    reminder_adapter = None
+    try:
+        reminder_adapter = build_runtime_reminder_adapter()
+    except ReminderAdapterUnavailable:
+        # The conversation HUD remains available. Reminder routes fail closed
+        # until the bridge is hosted in the accepted Hermes environment.
+        reminder_adapter = None
+
     return BridgeState(
         target=target,
         api_key=key,
         ui_cookie=secrets.token_urlsafe(32),
         static_root=static_root,
+        reminder_adapter=reminder_adapter,
     )
 
 
@@ -832,6 +1080,11 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Orion HUD Phase 2A: http://{args.host}:{args.port}")
     print(f"Hermes target: http://{state.target.host}:{state.target.port}")
     print(f"Hermes credentials available: {bool(state.api_key)}")
+    print(
+        "Reminder adapter available: "
+        f"{state.reminder_adapter is not None}"
+    )
+    print("Reminder scheduler authority: HERMES")
     print("Lifecycle authority: NONE (foreground bridge only)")
     try:
         server.serve_forever(poll_interval=0.25)

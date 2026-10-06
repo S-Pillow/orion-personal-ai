@@ -41,6 +41,17 @@ const ui = {
   coreDetail: $("coreDetail"),
   workspaceShell: $("workspaceShell"),
   workspaceContext: $("workspaceContext"),
+  reminderAuthorityBadge: $("reminderAuthorityBadge"),
+  reminderWorkspaceStatus: $("reminderWorkspaceStatus"),
+  reminderCreateForm: $("reminderCreateForm"),
+  reminderTitleInput: $("reminderTitleInput"),
+  reminderMessageInput: $("reminderMessageInput"),
+  reminderScheduleInput: $("reminderScheduleInput"),
+  reminderCreateButton: $("reminderCreateButton"),
+  reminderFormStatus: $("reminderFormStatus"),
+  reminderRefreshButton: $("reminderRefreshButton"),
+  reminderCount: $("reminderCount"),
+  reminderList: $("reminderList"),
   workspaceOrigin: $("workspaceOrigin"),
   workspaceProvider: $("workspaceProvider"),
   workspaceModel: $("workspaceModel"),
@@ -114,6 +125,8 @@ const state = {
   approvalEvent: null,
   actionProjection: null,
   actionEvidence: [],
+  reminderBusy: false,
+  reminderMutationBlocked: false,
   provenance: createProvenanceState(),
 };
 
@@ -344,6 +357,522 @@ function arrayFrom(payload, keys) {
 
 function extractId(payload) {
   return String(payload?.session?.id || payload?.id || payload?.session_id || "");
+}
+
+
+function setReminderWorkspaceStatus(message, tone = "neutral") {
+  ui.reminderWorkspaceStatus.textContent = String(message || "");
+  ui.reminderWorkspaceStatus.dataset.tone = tone;
+}
+
+function setReminderFormStatus(message, tone = "neutral") {
+  ui.reminderFormStatus.textContent = String(message || "");
+  ui.reminderFormStatus.dataset.tone = tone;
+}
+
+function syncReminderMutationControls() {
+  ui.reminderCreateButton.disabled =
+    state.reminderBusy || state.reminderMutationBlocked;
+}
+
+function reminderMutationOutcomeIsUncertain(error) {
+  if (error?.payload?.mutation_outcome === "uncertain") {
+    return true;
+  }
+
+  if (
+    error?.status === 503 &&
+    error?.payload?.error === "reminders_unavailable"
+  ) {
+    return false;
+  }
+
+  return !Number.isInteger(error?.status) || error.status >= 500;
+}
+
+async function reconcileUncertainReminderMutation(label) {
+  state.reminderMutationBlocked = true;
+  syncReminderMutationControls();
+
+  const reconciled = await refreshReminders();
+  const message = reconciled
+    ? `${label} outcome uncertain // Hermes state refreshed; verify before retrying`
+    : `${label} outcome uncertain // Hermes state not confirmed; do not retry until confirmed`;
+
+  setReminderWorkspaceStatus(message, "error");
+  return message;
+}
+
+function formatReminderTimestamp(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "—";
+
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return raw;
+
+  return date.toLocaleString([], {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
+function renderReminderEmpty(message) {
+  ui.reminderList.replaceChildren();
+
+  const empty = document.createElement("div");
+  empty.className = "reminder-empty";
+  empty.textContent = message;
+
+  ui.reminderList.append(empty);
+  ui.reminderCount.textContent = "0";
+}
+
+function appendReminderFact(list, label, value) {
+  const row = document.createElement("div");
+  const term = document.createElement("dt");
+  const detail = document.createElement("dd");
+
+  term.textContent = label;
+  detail.textContent = String(value || "—");
+
+  row.append(term, detail);
+  list.append(row);
+}
+
+function reminderButton(label, action, reminderId) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "reminder-action";
+  button.textContent = label;
+  button.dataset.reminderAction = action;
+  button.dataset.reminderId = reminderId;
+  return button;
+}
+
+function renderReminderRuns(container, payload) {
+  container.replaceChildren();
+
+  const runs = Array.isArray(payload?.runs)
+    ? payload.runs
+    : [];
+
+  if (!runs.length) {
+    const empty = document.createElement("div");
+    empty.className = "reminder-run-empty";
+    empty.textContent = "No durable execution evidence yet.";
+    container.append(empty);
+    return;
+  }
+
+  for (const run of runs.slice(0, 10)) {
+    const item = document.createElement("div");
+    item.className = "reminder-run";
+
+    const status = document.createElement("strong");
+    status.textContent =
+      String(run?.status || "unknown").toUpperCase();
+
+    const when = document.createElement("span");
+    when.textContent =
+      formatReminderTimestamp(
+        run?.finished_at ||
+        run?.started_at ||
+        run?.claimed_at ||
+        run?.scheduled_at,
+      );
+
+    const detail = document.createElement("span");
+    const parts = [];
+
+    if (run?.delivery_outcome) {
+      parts.push(`delivery ${run.delivery_outcome}`);
+    }
+
+    if (run?.error_class) {
+      parts.push(`error ${run.error_class}`);
+    }
+
+    detail.textContent =
+      parts.length
+        ? parts.join(" // ")
+        : "No additional terminal detail.";
+
+    item.append(status, when, detail);
+    container.append(item);
+  }
+}
+
+async function loadReminderRuns(
+  reminderId,
+  container,
+  button,
+) {
+  button.disabled = true;
+  button.textContent = "LOADING";
+
+  try {
+    const payload = await api(
+      `/api/orion/reminders/${encodeURIComponent(reminderId)}/runs`,
+    );
+    renderReminderRuns(container, payload);
+    container.hidden = false;
+    button.textContent = "HIDE HISTORY";
+    button.dataset.historyOpen = "true";
+  } catch (error) {
+    renderReminderRuns(container, { runs: [] });
+
+    const failure = document.createElement("div");
+    failure.className = "reminder-run-error";
+    failure.textContent =
+      `History unavailable: ${error.message}`;
+
+    container.append(failure);
+    container.hidden = false;
+    button.textContent = "HIDE HISTORY";
+    button.dataset.historyOpen = "true";
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function performReminderAction(
+  reminder,
+  action,
+  button,
+) {
+  const reminderId = String(reminder?.id || "");
+  if (
+    !reminderId ||
+    state.reminderBusy ||
+    state.reminderMutationBlocked
+  ) return;
+
+  if (
+    action === "cancel" &&
+    !window.confirm(
+      `Cancel reminder "${String(reminder?.title || reminderId)}"?`,
+    )
+  ) {
+    return;
+  }
+
+  state.reminderBusy = true;
+  button.disabled = true;
+  syncReminderMutationControls();
+
+  try {
+    if (action === "cancel") {
+      await api(
+        `/api/orion/reminders/${encodeURIComponent(reminderId)}`,
+        { method: "DELETE" },
+      );
+    } else {
+      await api(
+        `/api/orion/reminders/${encodeURIComponent(reminderId)}/${action}`,
+        {
+          method: "POST",
+          body: JSON.stringify({}),
+        },
+      );
+    }
+
+    setReminderWorkspaceStatus(
+      `Hermes ${action} accepted // refreshing authority`,
+      "success",
+    );
+
+    await refreshReminders();
+  } catch (error) {
+    if (reminderMutationOutcomeIsUncertain(error)) {
+      const label =
+        action.charAt(0).toUpperCase() + action.slice(1);
+      await reconcileUncertainReminderMutation(label);
+    } else {
+      setReminderWorkspaceStatus(
+        `${action} failed // ${error.message}`,
+        "error",
+      );
+    }
+  } finally {
+    state.reminderBusy = false;
+    button.disabled = false;
+    syncReminderMutationControls();
+  }
+}
+
+function renderReminders(payload) {
+  const reminders = Array.isArray(payload?.reminders)
+    ? payload.reminders
+    : [];
+
+  ui.reminderList.replaceChildren();
+  ui.reminderCount.textContent = String(reminders.length);
+
+  const authority = String(
+    payload?.authority || "hermes"
+  ).toUpperCase();
+
+  ui.reminderAuthorityBadge.textContent =
+    `${authority} AUTHORITATIVE`;
+
+  let schedulerLabel = "scheduler state unknown";
+  let schedulerTone = "neutral";
+
+  if (payload?.scheduler_active === true) {
+    schedulerLabel = "scheduler active";
+    schedulerTone = "success";
+  } else if (payload?.scheduler_active === false) {
+    schedulerLabel = "scheduler inactive";
+    schedulerTone = "offline";
+  }
+
+  setReminderWorkspaceStatus(
+    `${reminders.length} Orion reminder${
+      reminders.length === 1 ? "" : "s"
+    } observed from Hermes // ${schedulerLabel}`,
+    schedulerTone,
+  );
+
+  if (!reminders.length) {
+    renderReminderEmpty("No Orion reminders observed.");
+    return;
+  }
+
+  for (const reminder of reminders) {
+    const reminderId = String(reminder?.id || "");
+    if (!reminderId) continue;
+
+    const entry = document.createElement("article");
+    entry.className = "reminder-entry";
+    entry.dataset.reminderState =
+      String(reminder?.state || "unknown");
+    entry.dataset.reminderAttention =
+      String(reminder?.attention || "none");
+
+    const header = document.createElement("div");
+    header.className = "reminder-entry-header";
+
+    const titleWrap = document.createElement("div");
+
+    const stateBadge = document.createElement("span");
+    stateBadge.className = "reminder-state";
+    stateBadge.textContent =
+      String(reminder?.state || "unknown").toUpperCase();
+
+    const title = document.createElement("h2");
+    title.textContent =
+      String(reminder?.title || "Untitled reminder");
+
+    titleWrap.append(stateBadge, title);
+
+    if (
+      reminder?.attention &&
+      reminder.attention !== "none"
+    ) {
+      const attention = document.createElement("span");
+      attention.className = "reminder-attention";
+      attention.textContent =
+        String(reminder.attention).toUpperCase();
+      header.append(titleWrap, attention);
+    } else {
+      header.append(titleWrap);
+    }
+
+    const facts = document.createElement("dl");
+    facts.className = "reminder-facts";
+
+    appendReminderFact(
+      facts,
+      "Schedule",
+      reminder?.schedule,
+    );
+    appendReminderFact(
+      facts,
+      "Next",
+      formatReminderTimestamp(
+        reminder?.next_scheduled_time,
+      ),
+    );
+    appendReminderFact(
+      facts,
+      "Last run",
+      reminder?.last_run_outcome || "not observed",
+    );
+    appendReminderFact(
+      facts,
+      "Delivery",
+      reminder?.delivery_outcome || "not observed",
+    );
+
+    if (reminder?.error_class) {
+      appendReminderFact(
+        facts,
+        "Error class",
+        reminder.error_class,
+      );
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "reminder-actions";
+
+    const enabled = Boolean(reminder?.enabled);
+    const stateAction = enabled ? "pause" : "resume";
+
+    const stateButton = reminderButton(
+      enabled ? "PAUSE" : "RESUME",
+      stateAction,
+      reminderId,
+    );
+
+    const historyButton = reminderButton(
+      "HISTORY",
+      "history",
+      reminderId,
+    );
+
+    const cancelButton = reminderButton(
+      "CANCEL",
+      "cancel",
+      reminderId,
+    );
+    cancelButton.classList.add("danger");
+
+    const history = document.createElement("div");
+    history.className = "reminder-runs";
+    history.hidden = true;
+
+    stateButton.addEventListener("click", () => {
+      performReminderAction(
+        reminder,
+        stateAction,
+        stateButton,
+      );
+    });
+
+    cancelButton.addEventListener("click", () => {
+      performReminderAction(
+        reminder,
+        "cancel",
+        cancelButton,
+      );
+    });
+
+    historyButton.addEventListener("click", async () => {
+      if (
+        historyButton.dataset.historyOpen === "true"
+      ) {
+        history.hidden = true;
+        historyButton.dataset.historyOpen = "false";
+        historyButton.textContent = "HISTORY";
+        return;
+      }
+
+      await loadReminderRuns(
+        reminderId,
+        history,
+        historyButton,
+      );
+    });
+
+    actions.append(
+      stateButton,
+      historyButton,
+      cancelButton,
+    );
+
+    entry.append(
+      header,
+      facts,
+      actions,
+      history,
+    );
+
+    ui.reminderList.append(entry);
+  }
+}
+
+async function refreshReminders() {
+  try {
+    const payload = await api("/api/orion/reminders");
+    renderReminders(payload);
+    state.reminderMutationBlocked = false;
+    syncReminderMutationControls();
+    return true;
+  } catch (error) {
+    const unavailable = error?.status === 503;
+
+    setReminderWorkspaceStatus(
+      unavailable
+        ? "Reminder adapter unavailable // Hermes remains scheduler authority"
+        : `Reminder refresh failed // ${error.message}`,
+      unavailable ? "offline" : "error",
+    );
+
+    renderReminderEmpty(
+      unavailable
+        ? "Reminder controls are unavailable in this bridge host."
+        : "Unable to refresh reminders.",
+    );
+    return false;
+  }
+}
+
+async function submitReminder(event) {
+  event.preventDefault();
+
+  if (state.reminderBusy || state.reminderMutationBlocked) return;
+
+  const body = {
+    title: ui.reminderTitleInput.value.trim(),
+    message: ui.reminderMessageInput.value.trim(),
+    schedule: ui.reminderScheduleInput.value.trim(),
+  };
+
+  if (!body.title || !body.message || !body.schedule) {
+    setReminderFormStatus(
+      "Title, reminder text, and schedule are required.",
+      "error",
+    );
+    return;
+  }
+
+  state.reminderBusy = true;
+  syncReminderMutationControls();
+
+  setReminderFormStatus(
+    "Creating with Hermes...",
+    "working",
+  );
+
+  try {
+    await api("/api/orion/reminders", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+
+    ui.reminderCreateForm.reset();
+
+    setReminderFormStatus(
+      "Reminder created. Hermes is authoritative.",
+      "success",
+    );
+
+    await refreshReminders();
+  } catch (error) {
+    if (reminderMutationOutcomeIsUncertain(error)) {
+      const message =
+        await reconcileUncertainReminderMutation("Create");
+      setReminderFormStatus(message, "error");
+    } else {
+      setReminderFormStatus(
+        `Create failed: ${error.message}`,
+        "error",
+      );
+    }
+  } finally {
+    state.reminderBusy = false;
+    syncReminderMutationControls();
+  }
 }
 
 function messageText(message) {
@@ -1301,6 +1830,8 @@ async function refreshStatus(loadCurrentSession = false) {
     ui.credentialValue.textContent = payload?.hermes?.credentials_available ? "available" : "missing";
     syncSystemWorkspace();
 
+    await refreshReminders();
+
     if (online) {
       await Promise.all([
         refreshDiscovery(),
@@ -1327,14 +1858,20 @@ async function refreshStatus(loadCurrentSession = false) {
           setCore("READY", "Hermes link online // persistent session transport available");
         }
       }
-    } else if (!state.streaming) {
-      setCore("OFFLINE", "Manual-off preserved // HUD did not start Hermes");
+    } else {
+      if (!state.streaming) {
+        setCore("OFFLINE", "Manual-off preserved // HUD did not start Hermes");
+      }
     }
   } catch (error) {
     setHermesOnline(false);
     ui.hermesValue.textContent = "unavailable";
     ui.workspaceReadiness.textContent = "unavailable";
     syncSystemWorkspace();
+    setReminderWorkspaceStatus(
+      "Bridge unavailable // reminder state not refreshed",
+      "error",
+    );
     if (!state.streaming) setCore("ERROR", `Bridge status failed: ${error.message}`);
   }
 }
@@ -1665,6 +2202,15 @@ async function stopRun() {
     updateRunControls();
   }
 }
+
+ui.reminderCreateForm.addEventListener(
+  "submit",
+  submitReminder,
+);
+ui.reminderRefreshButton.addEventListener(
+  "click",
+  refreshReminders,
+);
 
 ui.newSession.addEventListener("click", createSession);
 ui.composer.addEventListener("submit", sendMessage);

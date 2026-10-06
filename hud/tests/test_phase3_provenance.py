@@ -264,10 +264,11 @@ class Phase3ProvenanceAuthorityContractTests(unittest.TestCase):
         )
 
     def test_p3_04_does_not_add_a_workspace(self):
-        self.assertEqual(
-            INDEX.count("data-workspace-target="),
-            3,
+        self.assertNotIn(
+            'data-workspace-target="provenance"',
+            INDEX,
         )
+        self.assertNotIn('data-workspace-pane="provenance"', INDEX)
 
 
 if __name__ == "__main__":

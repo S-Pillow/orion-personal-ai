@@ -22,6 +22,13 @@
         aria-pressed="true"
       >CONVERSATION</button>
       <button
+        id="workspaceRemindersButton"
+        class="workspace-tab"
+        type="button"
+        data-workspace-target="reminders"
+        aria-pressed="false"
+      >REMINDERS</button>
+      <button
         id="workspaceSystemButton"
         class="workspace-tab"
         type="button"
@@ -334,6 +341,133 @@
             </div>
           </form>
         </div>
+
+        <section
+          class="workspace-pane reminder-workspace"
+          data-workspace-pane="reminders"
+          aria-labelledby="workspaceRemindersButton"
+          hidden
+        >
+          <div class="workspace-heading reminder-heading">
+            <div>
+              <span class="workspace-kicker">REMINDER CONTROL</span>
+              <h1>Scheduled with Hermes</h1>
+              <p>
+                Hermes owns scheduling and durable execution state. Orion
+                creates, pauses, resumes, cancels, and projects only
+                Orion-owned reminders.
+              </p>
+            </div>
+            <span
+              id="reminderAuthorityBadge"
+              class="workspace-badge"
+            >HERMES AUTHORITATIVE</span>
+          </div>
+
+          <div
+            id="reminderWorkspaceStatus"
+            class="reminder-workspace-status"
+            data-tone="neutral"
+            role="status"
+            aria-live="polite"
+          >Checking reminder authority...</div>
+
+          <div class="reminder-layout">
+            <form
+              id="reminderCreateForm"
+              class="reminder-create-panel"
+              autocomplete="off"
+            >
+              <div class="reminder-section-label">NEW REMINDER</div>
+
+              <label class="reminder-field">
+                <span>Title</span>
+                <input
+                  id="reminderTitleInput"
+                  name="title"
+                  type="text"
+                  maxlength="96"
+                  required
+                  placeholder="Water the plants"
+                >
+              </label>
+
+              <label class="reminder-field">
+                <span>Reminder text</span>
+                <textarea
+                  id="reminderMessageInput"
+                  name="message"
+                  rows="4"
+                  maxlength="2000"
+                  required
+                  placeholder="Remind me to water the plants."
+                ></textarea>
+              </label>
+
+              <label class="reminder-field">
+                <span>Schedule</span>
+                <input
+                  id="reminderScheduleInput"
+                  name="schedule"
+                  type="text"
+                  maxlength="128"
+                  required
+                  placeholder="30m or every 30m"
+                >
+              </label>
+
+              <p class="reminder-form-note">
+                Reminder text is data, not authorization for tools or
+                external actions.
+              </p>
+
+              <div class="reminder-create-actions">
+                <button
+                  id="reminderCreateButton"
+                  class="primary-button"
+                  type="submit"
+                >CREATE REMINDER</button>
+              </div>
+
+              <div
+                id="reminderFormStatus"
+                class="reminder-form-status"
+                role="status"
+                aria-live="polite"
+              ></div>
+            </form>
+
+            <section
+              class="reminder-timeline-panel"
+              aria-label="Scheduled reminders"
+            >
+              <div class="reminder-list-heading">
+                <div>
+                  <span class="reminder-section-label">SCHEDULE</span>
+                  <strong>
+                    <span id="reminderCount">0</span>
+                    ORION REMINDERS
+                  </strong>
+                </div>
+                <button
+                  id="reminderRefreshButton"
+                  class="outline-button"
+                  type="button"
+                >REFRESH</button>
+              </div>
+
+              <div
+                id="reminderList"
+                class="reminder-list"
+                aria-live="polite"
+              >
+                <div class="reminder-empty">
+                  No Orion reminders observed yet.
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
 
         <section
           class="workspace-pane system-workspace"

@@ -64,6 +64,16 @@ class Phase3AdaptiveWorkspaceContractTests(unittest.TestCase):
         )
 
         self.assertIn(
+            'data-workspace-target="reminders"',
+            INDEX,
+        )
+
+        self.assertIn(
+            'data-workspace-pane="reminders"',
+            INDEX,
+        )
+
+        self.assertIn(
             'data-workspace-target="system"',
             INDEX,
         )
@@ -85,7 +95,7 @@ class Phase3AdaptiveWorkspaceContractTests(unittest.TestCase):
 
         self.assertEqual(
             INDEX.count("data-workspace-target="),
-            3,
+            4,
         )
 
     def test_existing_typed_conversation_controls_remain(self):
@@ -134,22 +144,51 @@ class Phase3AdaptiveWorkspaceContractTests(unittest.TestCase):
         )
 
     def test_status_observations_sync_before_online_branch(self):
-        expected = (
-            '    ui.bridgeValue.textContent = '
-            'payload?.bridge?.status || "online";\n'
-            '    ui.credentialValue.textContent = '
-            'payload?.hermes?.credentials_available '
-            '? "available" : "missing";\n'
-            '    syncSystemWorkspace();\n'
-            '\n'
-            '    if (online) {\n'
-        )
+        start = APP.index("async function refreshStatus")
+        end = APP.index("function parseSSEFrame", start)
+        refresh = APP[start:end]
 
-        self.assertIn(expected, APP)
+        bridge = (
+            'ui.bridgeValue.textContent = '
+            'payload?.bridge?.status || "online";'
+        )
+        credential = (
+            "ui.credentialValue.textContent = "
+            'payload?.hermes?.credentials_available ? "available" : "missing";'
+        )
+        sync = "syncSystemWorkspace();"
+        reminder_refresh = "await refreshReminders();"
+        online_branch = "if (online) {"
+
+        for token in (
+            bridge,
+            credential,
+            sync,
+            reminder_refresh,
+            online_branch,
+        ):
+            with self.subTest(token=token):
+                self.assertIn(token, refresh)
+
+        self.assertLess(refresh.index(bridge), refresh.index(credential))
+        self.assertLess(refresh.index(credential), refresh.index(sync))
+        self.assertLess(
+            refresh.index(sync),
+            refresh.index(reminder_refresh),
+        )
+        self.assertLess(
+            refresh.index(reminder_refresh),
+            refresh.index(online_branch),
+        )
 
     def test_workspace_state_is_deterministic_and_testable(self):
         self.assertIn(
             '"conversation"',
+            WORKSPACE,
+        )
+
+        self.assertIn(
+            '"reminders"',
             WORKSPACE,
         )
 
@@ -180,7 +219,8 @@ class Phase3AdaptiveWorkspaceContractTests(unittest.TestCase):
 
     def test_nonconversation_workspaces_use_shared_center_geometry(self):
         self.assertIn(".system-workspace,", TARGET)
-        self.assertIn(".memory-workspace {", TARGET)
+        self.assertIn(".memory-workspace,", TARGET)
+        self.assertIn(".reminder-workspace {", TARGET)
         self.assertIn("width:var(--center-width);", TARGET)
 
     def test_approval_focus_does_not_duplicate_controls(self):
