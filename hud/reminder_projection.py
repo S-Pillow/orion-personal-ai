@@ -102,7 +102,12 @@ def project_reminder(
     if not job_id:
         raise ReminderProjectionError("reminder is missing native job_id")
 
-    enabled = bool(job.get("enabled", True))
+    raw_enabled = job.get("enabled", True)
+    if not isinstance(raw_enabled, bool):
+        raise ReminderProjectionError(
+            "reminder enabled field must be boolean"
+        )
+    enabled = raw_enabled
     state = str(
         job.get("state")
         or ("scheduled" if enabled else "paused")
@@ -156,6 +161,12 @@ def project_reminder_list(
     if not isinstance(jobs, list):
         raise ReminderProjectionError("native list is missing jobs array")
 
+    scheduler_active = native_payload.get("gateway_running")
+    if scheduler_active not in (True, False, None):
+        raise ReminderProjectionError(
+            "native scheduler state must be boolean or null"
+        )
+
     latest_map = latest_executions or {}
     projected: list[dict[str, Any]] = []
 
@@ -172,7 +183,7 @@ def project_reminder_list(
 
     return {
         "authority": "hermes",
-        "scheduler_active": native_payload.get("gateway_running"),
+        "scheduler_active": scheduler_active,
         "count": len(projected),
         "reminders": projected,
     }

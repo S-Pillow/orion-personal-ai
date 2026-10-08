@@ -63,9 +63,11 @@ class ReminderWorkspaceContractTests(unittest.TestCase):
 
     def test_frontend_uses_only_allowlisted_reminder_routes(self):
         self.assertIn(
-            'api("/api/orion/reminders")',
+            'const payload = await api("/api/orion/reminders", {',
             APP,
         )
+        self.assertIn('cache: "no-store"', APP)
+        self.assertIn('signal: controller.signal', APP)
         self.assertIn(
             'await api("/api/orion/reminders", {',
             APP,
@@ -155,7 +157,23 @@ class ReminderWorkspaceContractTests(unittest.TestCase):
             APP,
         )
         self.assertIn(
-            "const reconciled = await refreshReminders();",
+            "reconciliationToken: token",
+            APP,
+        )
+        self.assertIn(
+            "generation !== state.reminderReadGeneration",
+            APP,
+        )
+        self.assertIn(
+            "controller.abort();",
+            APP,
+        )
+        self.assertIn(
+            "readSequence !== state.reminderReadSequence",
+            APP,
+        )
+        self.assertIn(
+            "state.reminderUncertaintyToken !== reconciliationToken",
             APP,
         )
         self.assertIn(
@@ -168,6 +186,14 @@ class ReminderWorkspaceContractTests(unittest.TestCase):
         )
         self.assertIn(
             "state.reminderMutationBlocked",
+            APP,
+        )
+        self.assertIn(
+            '"—",',
+            APP,
+        )
+        self.assertIn(
+            "explicit Refresh required before retrying",
             APP,
         )
 

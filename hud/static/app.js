@@ -127,6 +127,11 @@ const state = {
   actionEvidence: [],
   reminderBusy: false,
   reminderMutationBlocked: false,
+  reminderReadGeneration: 0,
+  reminderReadSequence: 0,
+  reminderReadControllers: new Set(),
+  reminderUncertaintySequence: 0,
+  reminderUncertaintyToken: null,
   provenance: createProvenanceState(),
 };
 
@@ -371,8 +376,28 @@ function setReminderFormStatus(message, tone = "neutral") {
 }
 
 function syncReminderMutationControls() {
-  ui.reminderCreateButton.disabled =
+  const mutationDisabled =
     state.reminderBusy || state.reminderMutationBlocked;
+
+  ui.reminderCreateButton.disabled = mutationDisabled;
+  ui.reminderRefreshButton.disabled = state.reminderBusy;
+
+  for (const button of ui.reminderList.querySelectorAll(
+    '[data-reminder-action="pause"], ' +
+    '[data-reminder-action="resume"], ' +
+    '[data-reminder-action="cancel"]',
+  )) {
+    button.disabled = mutationDisabled;
+  }
+}
+
+function invalidateReminderReads() {
+  state.reminderReadGeneration += 1;
+  for (const controller of state.reminderReadControllers) {
+    controller.abort();
+  }
+  state.reminderReadControllers.clear();
+  return state.reminderReadGeneration;
 }
 
 function reminderMutationOutcomeIsUncertain(error) {
@@ -391,10 +416,15 @@ function reminderMutationOutcomeIsUncertain(error) {
 }
 
 async function reconcileUncertainReminderMutation(label) {
+  const token = ++state.reminderUncertaintySequence;
+  state.reminderUncertaintyToken = token;
   state.reminderMutationBlocked = true;
+  invalidateReminderReads();
   syncReminderMutationControls();
 
-  const reconciled = await refreshReminders();
+  const reconciled = await refreshReminders({
+    reconciliationToken: token,
+  });
   const message = reconciled
     ? `${label} outcome uncertain // Hermes state refreshed; verify before retrying`
     : `${label} outcome uncertain // Hermes state not confirmed; do not retry until confirmed`;
@@ -416,7 +446,7 @@ function formatReminderTimestamp(value) {
   });
 }
 
-function renderReminderEmpty(message) {
+function renderReminderEmpty(message, countText = "0") {
   ui.reminderList.replaceChildren();
 
   const empty = document.createElement("div");
@@ -424,7 +454,7 @@ function renderReminderEmpty(message) {
   empty.textContent = message;
 
   ui.reminderList.append(empty);
-  ui.reminderCount.textContent = "0";
+  ui.reminderCount.textContent = countText;
 }
 
 function appendReminderFact(list, label, value) {
@@ -556,6 +586,7 @@ async function performReminderAction(
     return;
   }
 
+  invalidateReminderReads();
   state.reminderBusy = true;
   button.disabled = true;
   syncReminderMutationControls();
@@ -576,6 +607,7 @@ async function performReminderAction(
       );
     }
 
+    invalidateReminderReads();
     setReminderWorkspaceStatus(
       `Hermes ${action} accepted // refreshing authority`,
       "success",
@@ -588,6 +620,7 @@ async function performReminderAction(
         action.charAt(0).toUpperCase() + action.slice(1);
       await reconcileUncertainReminderMutation(label);
     } else {
+      invalidateReminderReads();
       setReminderWorkspaceStatus(
         `${action} failed // ${error.message}`,
         "error",
@@ -791,14 +824,68 @@ function renderReminders(payload) {
   }
 }
 
-async function refreshReminders() {
+async function refreshReminders({ reconciliationToken = null } = {}) {
+  const generation = state.reminderReadGeneration;
+  const isReconciliation = Number.isInteger(reconciliationToken);
+
+  if (state.reminderMutationBlocked && !isReconciliation) {
+    setReminderWorkspaceStatus(
+      "Mutation outcome uncertain // explicit Refresh required before retrying",
+      "error",
+    );
+    syncReminderMutationControls();
+    return false;
+  }
+
+  const readSequence = ++state.reminderReadSequence;
+  const controller = new AbortController();
+  state.reminderReadControllers.add(controller);
+
   try {
-    const payload = await api("/api/orion/reminders");
+    const payload = await api("/api/orion/reminders", {
+      cache: "no-store",
+      signal: controller.signal,
+    });
+
+    if (generation !== state.reminderReadGeneration) {
+      return false;
+    }
+    if (!isReconciliation && readSequence !== state.reminderReadSequence) {
+      return false;
+    }
+    if (
+      isReconciliation &&
+      state.reminderUncertaintyToken !== reconciliationToken
+    ) {
+      return false;
+    }
+
     renderReminders(payload);
-    state.reminderMutationBlocked = false;
+
+    if (isReconciliation) {
+      state.reminderMutationBlocked = false;
+      state.reminderUncertaintyToken = null;
+    }
+
     syncReminderMutationControls();
     return true;
   } catch (error) {
+    if (error?.name === "AbortError") {
+      return false;
+    }
+    if (generation !== state.reminderReadGeneration) {
+      return false;
+    }
+    if (!isReconciliation && readSequence !== state.reminderReadSequence) {
+      return false;
+    }
+    if (
+      isReconciliation &&
+      state.reminderUncertaintyToken !== reconciliationToken
+    ) {
+      return false;
+    }
+
     const unavailable = error?.status === 503;
 
     setReminderWorkspaceStatus(
@@ -812,8 +899,12 @@ async function refreshReminders() {
       unavailable
         ? "Reminder controls are unavailable in this bridge host."
         : "Unable to refresh reminders.",
+      "—",
     );
+    syncReminderMutationControls();
     return false;
+  } finally {
+    state.reminderReadControllers.delete(controller);
   }
 }
 
@@ -836,6 +927,7 @@ async function submitReminder(event) {
     return;
   }
 
+  invalidateReminderReads();
   state.reminderBusy = true;
   syncReminderMutationControls();
 
@@ -852,6 +944,7 @@ async function submitReminder(event) {
 
     ui.reminderCreateForm.reset();
 
+    invalidateReminderReads();
     setReminderFormStatus(
       "Reminder created. Hermes is authoritative.",
       "success",
@@ -864,6 +957,7 @@ async function submitReminder(event) {
         await reconcileUncertainReminderMutation("Create");
       setReminderFormStatus(message, "error");
     } else {
+      invalidateReminderReads();
       setReminderFormStatus(
         `Create failed: ${error.message}`,
         "error",
@@ -2209,7 +2303,12 @@ ui.reminderCreateForm.addEventListener(
 );
 ui.reminderRefreshButton.addEventListener(
   "click",
-  refreshReminders,
+  () => {
+    const reconciliationToken = state.reminderMutationBlocked
+      ? state.reminderUncertaintyToken
+      : null;
+    void refreshReminders({ reconciliationToken });
+  },
 );
 
 ui.newSession.addEventListener("click", createSession);

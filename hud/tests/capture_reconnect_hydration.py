@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
+import threading
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
-from probe_reconnect_hydration import ReconnectFixture
+from probe_reconnect_hydration import ReconnectFixture, bridge
 
 
 OUT = Path("p5-03c-artifacts")
@@ -64,6 +65,88 @@ def new_page(browser, fixture, **storage):
     page.goto(fixture.origin, wait_until="networkidle")
     wait_ready(page)
     return page
+
+
+class ReminderRaceAdapter:
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._block_next_list = False
+        self._fail_following_list = False
+        self.stale_read_started = threading.Event()
+        self.release_stale_read = threading.Event()
+        self.stale_read_finished = threading.Event()
+        self.reconciliation_failed = threading.Event()
+        self.reminders = []
+
+    def arm_stale_read(self):
+        with self._lock:
+            self._block_next_list = True
+            self._fail_following_list = True
+        self.stale_read_started.clear()
+        self.release_stale_read.clear()
+        self.stale_read_finished.clear()
+        self.reconciliation_failed.clear()
+
+    @staticmethod
+    def _payload(reminders):
+        return {
+            "authority": "hermes",
+            "scheduler_active": True,
+            "count": len(reminders),
+            "reminders": [dict(item) for item in reminders],
+        }
+
+    def list_reminders(self):
+        with self._lock:
+            if self._block_next_list:
+                self._block_next_list = False
+                role = "stale"
+                snapshot = [dict(item) for item in self.reminders]
+            elif self._fail_following_list:
+                self._fail_following_list = False
+                role = "reconciliation_failure"
+                snapshot = []
+            else:
+                role = "normal"
+                snapshot = [dict(item) for item in self.reminders]
+
+        if role == "stale":
+            self.stale_read_started.set()
+            try:
+                if not self.release_stale_read.wait(timeout=10):
+                    raise RuntimeError("fixture stale read was not released")
+                return self._payload(snapshot)
+            finally:
+                self.stale_read_finished.set()
+
+        if role == "reconciliation_failure":
+            self.reconciliation_failed.set()
+            raise bridge.ReminderAdapterUnavailable(
+                "fixture reconciliation unavailable"
+            )
+
+        return self._payload(snapshot)
+
+    def create_reminder(self, body):
+        reminder = {
+            "id": "race_1",
+            "title": str(body["title"]),
+            "summary": str(body["title"]),
+            "schedule": str(body["schedule"]),
+            "next_scheduled_time": None,
+            "state": "scheduled",
+            "enabled": True,
+            "last_run_at": None,
+            "last_run_outcome": None,
+            "delivery_outcome": None,
+            "error_class": None,
+            "attention": "none",
+        }
+        with self._lock:
+            self.reminders = [reminder]
+        raise bridge.ReminderContractError(
+            "fixture post-mutation outcome uncertainty"
+        )
 
 
 def run_matrix() -> dict:
@@ -266,6 +349,68 @@ def run_matrix() -> dict:
             assert poisoned["approvalVisible"] is False
             assert poisoned["locator"] is None
             results["rc10_poison"] = poisoned
+            page.close()
+
+            # P6-05: a stale GET that began before an uncertain mutation cannot
+            # clear the retry block after the designated reconciliation fails.
+            reminder_adapter = ReminderRaceAdapter()
+            fixture.orion.state.reminder_adapter = reminder_adapter
+            fixture.set_scenario("ordinary")
+            page = new_page(browser, fixture)
+            page.locator('[data-workspace-target="reminders"]').click()
+            page.wait_for_function(
+                "() => !document.querySelector('[data-workspace-pane=\"reminders\"]')?.hidden"
+            )
+            page.wait_for_function(
+                "() => document.querySelector('#reminderCount')?.textContent === '0'"
+            )
+
+            reminder_adapter.arm_stale_read()
+            page.locator("#reminderRefreshButton").click()
+            assert reminder_adapter.stale_read_started.wait(timeout=5)
+
+            page.locator("#reminderTitleInput").fill("Race proof")
+            page.locator("#reminderMessageInput").fill("Do not duplicate this reminder")
+            page.locator("#reminderScheduleInput").fill("30m")
+            page.locator("#reminderCreateButton").click()
+
+            assert reminder_adapter.reconciliation_failed.wait(timeout=5)
+            page.wait_for_function(
+                "() => document.querySelector('#reminderWorkspaceStatus')?.textContent.includes('not confirmed')"
+            )
+            assert page.locator("#reminderCreateButton").is_disabled()
+            assert page.locator("#reminderCount").text_content() == "—"
+
+            reminder_adapter.release_stale_read.set()
+            assert reminder_adapter.stale_read_finished.wait(timeout=5)
+
+            page.evaluate(
+                "() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))"
+            )
+            assert page.locator("#reminderCreateButton").is_disabled()
+            assert page.locator("#reminderCount").text_content() == "—"
+            assert "not confirmed" in page.locator(
+                "#reminderWorkspaceStatus"
+            ).text_content()
+
+            with page.expect_response(
+                lambda response: (
+                    response.request.method == "GET"
+                    and response.url.endswith("/api/orion/reminders")
+                    and response.status == 200
+                )
+            ):
+                page.locator("#reminderRefreshButton").click()
+
+            page.wait_for_function(
+                "() => document.querySelector('#reminderCount')?.textContent === '1' "
+                "&& !document.querySelector('#reminderCreateButton')?.disabled"
+            )
+            results["p6_05_uncertain_stale_read"] = {
+                "count": page.locator("#reminderCount").text_content(),
+                "create_disabled": page.locator("#reminderCreateButton").is_disabled(),
+                "status": page.locator("#reminderWorkspaceStatus").text_content(),
+            }
             page.close()
 
             browser.close()

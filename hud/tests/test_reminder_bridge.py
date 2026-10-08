@@ -6,6 +6,8 @@ import sys
 import threading
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 
 HUD_ROOT = Path(__file__).resolve().parents[1]
@@ -405,6 +407,21 @@ class ReminderBridgeTests(unittest.TestCase):
             payload["error"],
             "reminders_unavailable",
         )
+
+    def test_unexpected_adapter_initialization_failure_keeps_hud_available(self):
+        args = SimpleNamespace(
+            host=bridge.DEFAULT_BIND_HOST,
+            port=bridge.DEFAULT_BIND_PORT,
+            hermes_url=bridge.DEFAULT_HERMES_URL,
+            hermes_env="",
+        )
+        with patch(
+            "orion_hud_bridge.build_runtime_reminder_adapter",
+            side_effect=OSError("unreadable optional adapter state"),
+        ):
+            state = bridge.build_state(args)
+        self.assertIsNone(state.reminder_adapter)
+        self.assertEqual(state.target.host, "127.0.0.1")
 
     def test_unlisted_reminder_operation_stays_blocked(self):
         before = list(self.fixture.adapter.calls)

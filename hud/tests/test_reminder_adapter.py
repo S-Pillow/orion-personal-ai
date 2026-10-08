@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import importlib.machinery
 import json
 import sys
 import unittest
+from types import ModuleType
 from unittest.mock import patch
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -20,7 +22,10 @@ from reminder_adapter import (  # noqa: E402
     ReminderContractError,
     ReminderInputError,
     ReminderNotFound,
+    _assert_module_provenance,
+    read_git_head,
     read_hermes_project_version,
+    validate_hermes_compatibility,
 )
 from reminder_projection import (  # noqa: E402
     ORION_REMINDER_PREFIX,
@@ -305,6 +310,203 @@ class ReminderAdapterTests(unittest.TestCase):
             result["runs"][0]["delivery_outcome"],
             "delivered",
         )
+
+
+    def test_create_rejects_mismatched_native_job_ids(self):
+        original = self.adapter._cronjob
+
+        def mismatch(*, action, **kwargs):
+            payload = json.loads(original(action=action, **kwargs))
+            if action == "create":
+                payload["job_id"] = "different_job"
+            return json.dumps(payload)
+
+        self.adapter._cronjob = mismatch
+        with self.assertRaises(ReminderContractError):
+            self.create()
+
+    def test_pause_rejects_mismatched_returned_job_id(self):
+        created = self.create()
+        original = self.adapter._cronjob
+
+        def mismatch(*, action, **kwargs):
+            payload = json.loads(original(action=action, **kwargs))
+            if action == "pause" and isinstance(payload.get("job"), dict):
+                payload["job"]["job_id"] = "different_job"
+            return json.dumps(payload)
+
+        self.adapter._cronjob = mismatch
+        with self.assertRaises(ReminderContractError):
+            self.adapter.pause_reminder(created["id"])
+
+    def test_resume_rejects_mismatched_returned_job_id(self):
+        created = self.create()
+        original = self.adapter._cronjob
+
+        def mismatch(*, action, **kwargs):
+            payload = json.loads(original(action=action, **kwargs))
+            if action == "resume" and isinstance(payload.get("job"), dict):
+                payload["job"]["job_id"] = "different_job"
+            return json.dumps(payload)
+
+        self.adapter._cronjob = mismatch
+        with self.assertRaises(ReminderContractError):
+            self.adapter.resume_reminder(created["id"])
+
+
+class ReminderCompatibilityGateTests(unittest.TestCase):
+    @staticmethod
+    def write_qualified_sources(root: Path) -> None:
+        (root / "cron").mkdir(parents=True)
+        (root / "tools").mkdir(parents=True)
+        (root / "agent" / "monitoring").mkdir(parents=True)
+        (root / "cron" / "jobs.py").write_text(
+            "def _parse_jobs_bytes(raw):\n    return {}, False\n"
+            "def _parse_jobs_file(path):\n    return _parse_jobs_bytes(path.read_bytes())\n"
+            "def _preserve_jobs_bytes_before_repair(path, raw, reason):\n    return path\n"
+            "def load_jobs():\n"
+            "    _preserve_jobs_bytes_before_repair(None, b'', 'repair')\n"
+            "    _preserve_jobs_bytes_before_repair(None, b'', 'bare-list')\n"
+            "    return []\n",
+            encoding="utf-8",
+        )
+        (root / "cron" / "executions.py").write_text(
+            "def _initialize_schema(conn):\n"
+            "    conn.execute('scheduled_at TEXT delivery_outcome TEXT error_class TEXT')\n"
+            "    conn.execute('ALTER TABLE executions ADD COLUMN scheduled_at TEXT')\n"
+            "    conn.execute('ALTER TABLE executions ADD COLUMN delivery_outcome TEXT')\n"
+            "    conn.execute('ALTER TABLE executions ADD COLUMN error_class TEXT')\n"
+            "def create_execution(job_id, *, source, scheduled_at=None):\n    return {}\n"
+            "def finish_execution(execution_id, *, success, delivery_outcome=None):\n"
+            "    classify_cron_error('x')\n"
+            "    sql = 'delivery_outcome error_class'\n"
+            "def recover_interrupted_executions():\n"
+            "    classify_cron_error('x')\n"
+            "    sql = 'error_class'\n",
+            encoding="utf-8",
+        )
+        (root / "cron" / "scheduler.py").write_text(
+            "def tick():\n    create_execution('x', source='builtin', scheduled_at='now')\n",
+            encoding="utf-8",
+        )
+        (root / "cron" / "error_classification.py").write_text(
+            "def classify_cron_error(raw):\n    return 'unknown'\n",
+            encoding="utf-8",
+        )
+        (root / "agent" / "monitoring" / "cron_health.py").write_text(
+            "from cron.error_classification import classify_cron_error\n",
+            encoding="utf-8",
+        )
+
+    def test_compatibility_gate_accepts_qualified_structural_capabilities(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.write_qualified_sources(root)
+            validate_hermes_compatibility(root)
+
+    def test_compatibility_gate_rejects_missing_error_class_evidence(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.write_qualified_sources(root)
+            path = root / "cron" / "executions.py"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace("error_class", "legacy_error"),
+                encoding="utf-8",
+            )
+            with self.assertRaises(ReminderAdapterUnavailable):
+                validate_hermes_compatibility(root)
+
+    def test_compatibility_gate_rejects_missing_scheduled_at_evidence(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.write_qualified_sources(root)
+            path = root / "cron" / "executions.py"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(
+                    "scheduled_at=None",
+                    "legacy_schedule=None",
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaises(ReminderAdapterUnavailable):
+                validate_hermes_compatibility(root)
+
+    def test_compatibility_gate_rejects_incomplete_corruption_preservation(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.write_qualified_sources(root)
+            path = root / "cron" / "jobs.py"
+            text = path.read_text(encoding="utf-8")
+            text = text.replace(
+                "    _preserve_jobs_bytes_before_repair(None, b'', 'bare-list')\n",
+                "",
+            )
+            path.write_text(text, encoding="utf-8")
+            with self.assertRaises(ReminderAdapterUnavailable):
+                validate_hermes_compatibility(root)
+
+    def test_compatibility_gate_rejects_duplicated_monitoring_classifier(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.write_qualified_sources(root)
+            path = root / "agent" / "monitoring" / "cron_health.py"
+            path.write_text(
+                path.read_text(encoding="utf-8")
+                + "def classify_cron_error(raw):\n    return 'duplicate'\n",
+                encoding="utf-8",
+            )
+            with self.assertRaises(ReminderAdapterUnavailable):
+                validate_hermes_compatibility(root)
+
+    def test_module_provenance_accepts_module_inside_root(self):
+        with TemporaryDirectory() as accepted_tmp:
+            accepted = Path(accepted_tmp)
+            source = accepted / "executions.py"
+            source.write_text("value = 1\n", encoding="utf-8")
+            module = ModuleType("cron.executions")
+            module.__file__ = str(source)
+            module.__spec__ = importlib.machinery.ModuleSpec(
+                "cron.executions",
+                loader=None,
+                origin=str(source),
+            )
+            _assert_module_provenance(module, accepted, "cron.executions")
+
+    def test_module_provenance_rejects_cached_module_outside_root(self):
+        with TemporaryDirectory() as accepted_tmp, TemporaryDirectory() as other_tmp:
+            accepted = Path(accepted_tmp)
+            other = Path(other_tmp)
+            source = other / "executions.py"
+            source.write_text("value = 1\n", encoding="utf-8")
+            module = ModuleType("cron.executions")
+            module.__file__ = str(source)
+            module.__spec__ = importlib.machinery.ModuleSpec(
+                "cron.executions",
+                loader=None,
+                origin=str(source),
+            )
+            with self.assertRaises(ReminderAdapterUnavailable):
+                _assert_module_provenance(module, accepted, "cron.executions")
+
+    def test_git_metadata_read_error_is_adapter_unavailable(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            git_dir = root / ".git"
+            git_dir.mkdir()
+            (git_dir / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf-8")
+            ref = git_dir / "refs" / "heads" / "main"
+            ref.parent.mkdir(parents=True)
+            ref.write_text(EXPECTED_HERMES_HEAD + "\n", encoding="utf-8")
+            original = Path.read_text
+
+            def fail_ref(path, *args, **kwargs):
+                if path == ref:
+                    raise OSError("denied")
+                return original(path, *args, **kwargs)
+
+            with patch.object(Path, "read_text", autospec=True, side_effect=fail_ref):
+                with self.assertRaises(ReminderAdapterUnavailable):
+                    read_git_head(root)
 
 
 if __name__ == "__main__":

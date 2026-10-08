@@ -1043,9 +1043,10 @@ def build_state(args: argparse.Namespace) -> BridgeState:
     reminder_adapter = None
     try:
         reminder_adapter = build_runtime_reminder_adapter()
-    except ReminderAdapterUnavailable:
-        # The conversation HUD remains available. Reminder routes fail closed
-        # until the bridge is hosted in the accepted Hermes environment.
+    except Exception:
+        # Reminder initialization is optional to the conversation HUD. Any
+        # adapter-side failure fails reminder routes closed without taking down
+        # the existing conversation transport.
         reminder_adapter = None
 
     return BridgeState(

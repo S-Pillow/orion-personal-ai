@@ -133,6 +133,19 @@ class ReminderProjectionTests(unittest.TestCase):
                 "name": "foreign",
             })
 
+    def test_enabled_must_be_native_boolean(self):
+        with self.assertRaises(ReminderProjectionError):
+            project_reminder(self.native_job(enabled="false"))
+
+    def test_scheduler_active_must_be_boolean_or_null(self):
+        payload = {
+            "success": True,
+            "gateway_running": "false",
+            "jobs": [self.native_job()],
+        }
+        with self.assertRaises(ReminderProjectionError):
+            project_reminder_list(payload)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
