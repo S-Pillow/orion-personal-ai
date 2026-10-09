@@ -20,10 +20,12 @@ TARGET = (HUD_ROOT / "static" / "target-layout.css").read_text(
 
 class Phase3CompositionContractTests(unittest.TestCase):
     def test_exact_workspace_set_remains(self):
-        self.assertEqual(INDEX.count("data-workspace-target="), 3)
-        self.assertEqual(INDEX.count("data-workspace-pane="), 3)
+        expected = ("conversation", "reminders", "system", "memory")
 
-        for value in ("conversation", "system", "memory"):
+        self.assertEqual(INDEX.count("data-workspace-target="), len(expected))
+        self.assertEqual(INDEX.count("data-workspace-pane="), len(expected))
+
+        for value in expected:
             self.assertIn(
                 'data-workspace-target="{}"'.format(value),
                 INDEX,
