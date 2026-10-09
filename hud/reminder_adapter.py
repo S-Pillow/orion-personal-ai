@@ -9,6 +9,7 @@ from __future__ import annotations
 import ast
 import importlib
 import json
+from datetime import datetime
 import os
 import re
 import sys
@@ -30,6 +31,15 @@ EXPECTED_HERMES_VERSION = "0.20.6"
 REMINDER_DELIVERY_TARGET = "discord"
 REMINDER_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,160}$")
 _CREATE_FIELDS = frozenset({"title", "message", "schedule"})
+_MISSED_ONESHOT_HEADER = (
+    "# Cron job removed before firing (run time outside grace window)"
+)
+_MISSED_ONESHOT_FIELDS = {
+    "- job id: ": "job_id",
+    "- name: ": "name",
+    "- scheduled run time: ": "scheduled_at",
+    "- removed at: ": "removed_at",
+}
 
 
 class ReminderAdapterError(RuntimeError):
@@ -421,6 +431,55 @@ def _validate_id(value: str) -> str:
     return value
 
 
+def _parse_missed_oneshot_diagnostic(
+    path: Path,
+    *,
+    expected_job_id: str,
+) -> dict[str, str] | None:
+    '''Parse only Hermes' exact durable stale-one-shot diagnostic shape.'''
+    try:
+        if path.is_symlink() or not path.is_file():
+            return None
+        raw = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return None
+
+    if not raw.startswith(_MISSED_ONESHOT_HEADER + "\n"):
+        return None
+
+    fields: dict[str, str] = {}
+    for line in raw.splitlines():
+        for prefix, key in _MISSED_ONESHOT_FIELDS.items():
+            if line.startswith(prefix):
+                fields[key] = line[len(prefix):].strip()
+                break
+
+    job_id = fields.get("job_id", "")
+    name = fields.get("name", "")
+    scheduled_at = fields.get("scheduled_at", "")
+    removed_at = fields.get("removed_at", "")
+
+    if job_id != expected_job_id or not REMINDER_ID_RE.fullmatch(job_id):
+        return None
+    if not name.startswith(ORION_REMINDER_PREFIX):
+        return None
+    if not scheduled_at or not removed_at:
+        return None
+
+    try:
+        datetime.fromisoformat(scheduled_at)
+        datetime.fromisoformat(removed_at)
+    except ValueError:
+        return None
+
+    return {
+        "job_id": job_id,
+        "name": name,
+        "scheduled_at": scheduled_at,
+        "removed_at": removed_at,
+    }
+
+
 def _clean_text(
     value: Any,
     *,
@@ -460,6 +519,7 @@ class ReminderAdapter:
         cronjob_fn: Callable[..., str],
         latest_executions_fn: Callable[[list[str]], Mapping[str, Mapping[str, Any]]],
         list_executions_fn: Callable[..., list[dict[str, Any]]],
+        cron_output_dir_fn: Callable[[], Path] | None = None,
         hermes_head: str = EXPECTED_HERMES_HEAD,
         hermes_version: str = EXPECTED_HERMES_VERSION,
     ) -> None:
@@ -476,6 +536,7 @@ class ReminderAdapter:
         self._cronjob = cronjob_fn
         self._latest_executions = latest_executions_fn
         self._list_executions = list_executions_fn
+        self._cron_output_dir = cron_output_dir_fn
         self.hermes_head = hermes_head.lower()
         self.hermes_version = normalized_version
 
@@ -516,6 +577,121 @@ class ReminderAdapter:
             raise ReminderContractError("Hermes reminder list shape drifted")
         return payload
 
+    def _missed_oneshots(self) -> dict[str, dict[str, str]]:
+        '''Reconstruct retired one-shots from Hermes' own durable diagnostics.'''
+        if self._cron_output_dir is None:
+            return {}
+
+        try:
+            root = _resolved(Path(self._cron_output_dir()))
+        except Exception as exc:
+            raise ReminderAdapterUnavailable(
+                "Hermes cron output directory is unavailable"
+            ) from exc
+
+        if not root.exists():
+            return {}
+        if not root.is_dir():
+            raise ReminderAdapterUnavailable(
+                "Hermes cron output path is not a directory"
+            )
+
+        records: dict[str, dict[str, str]] = {}
+
+        try:
+            job_dirs = list(root.iterdir())
+        except OSError as exc:
+            raise ReminderAdapterUnavailable(
+                "Hermes cron output directory cannot be read"
+            ) from exc
+
+        for job_dir in job_dirs:
+            try:
+                if (
+                    job_dir.is_symlink()
+                    or not job_dir.is_dir()
+                    or not REMINDER_ID_RE.fullmatch(job_dir.name)
+                ):
+                    continue
+                files = sorted(
+                    (
+                        candidate
+                        for candidate in job_dir.glob("*.md")
+                        if not candidate.is_symlink()
+                    ),
+                    key=lambda candidate: candidate.name,
+                    reverse=True,
+                )
+            except OSError:
+                continue
+
+            for candidate in files:
+                record = _parse_missed_oneshot_diagnostic(
+                    candidate,
+                    expected_job_id=job_dir.name,
+                )
+                if record is None:
+                    continue
+
+                prior = records.get(record["job_id"])
+                if (
+                    prior is None
+                    or record["removed_at"] > prior["removed_at"]
+                ):
+                    records[record["job_id"]] = record
+                break
+
+        return records
+
+    @staticmethod
+    def _project_missed_oneshot(record: Mapping[str, str]) -> dict[str, Any]:
+        try:
+            projected = project_reminder(
+                {
+                    "job_id": record["job_id"],
+                    "name": record["name"],
+                    "schedule": record["scheduled_at"],
+                    "next_run_at": None,
+                    "last_run_at": None,
+                    "last_status": "missed",
+                    "enabled": False,
+                    "state": "missed",
+                },
+                latest_execution=None,
+            )
+        except (KeyError, ReminderProjectionError) as exc:
+            raise ReminderContractError(
+                "Hermes missed-reminder diagnostic shape drifted"
+            ) from exc
+
+        projected["attention"] = "missed"
+        projected["mutable"] = False
+        projected["retired_at"] = record["removed_at"]
+        return projected
+
+    @staticmethod
+    def _project_missed_history(record: Mapping[str, str]) -> dict[str, Any]:
+        job_id = record["job_id"]
+        removed_at = record["removed_at"]
+        return {
+            "authority": "hermes",
+            "reminder_id": job_id,
+            "count": 1,
+            "runs": [
+                {
+                    "id": f"missed:{job_id}:{removed_at}",
+                    "job_id": job_id,
+                    "scheduled_at": record["scheduled_at"],
+                    "claimed_at": None,
+                    "started_at": None,
+                    "finished_at": removed_at,
+                    "status": "missed",
+                    "delivery_outcome": None,
+                    "error_class": "missed_schedule",
+                }
+            ],
+        }
+
     @staticmethod
     def _project_mutation_job(job: Mapping[str, Any]) -> dict[str, Any]:
         """Project an already-mutated Hermes job without auxiliary reads."""
@@ -551,15 +727,39 @@ class ReminderAdapter:
         latest = dict(self._latest_executions(ids)) if ids else {}
 
         try:
-            return project_reminder_list(
+            projected = project_reminder_list(
                 payload,
                 latest_executions=latest,
             )
         except ReminderProjectionError as exc:
             raise ReminderContractError(str(exc)) from exc
 
+        active_ids = {
+            str(item.get("id") or "")
+            for item in projected.get("reminders", [])
+            if isinstance(item, Mapping)
+        }
+
+        for job_id, record in self._missed_oneshots().items():
+            if job_id in active_ids:
+                continue
+            projected["reminders"].append(
+                self._project_missed_oneshot(record)
+            )
+
+        projected["count"] = len(projected["reminders"])
+        return projected
+
     def get_reminder(self, reminder_id: str) -> dict[str, Any]:
-        job = self._owned_native_job(reminder_id)
+        reminder_id = _validate_id(reminder_id)
+        try:
+            job = self._owned_native_job(reminder_id)
+        except ReminderNotFound:
+            record = self._missed_oneshots().get(reminder_id)
+            if record is None:
+                raise
+            return self._project_missed_oneshot(record)
+
         native_id = str(job["job_id"])
         latest = dict(self._latest_executions([native_id]))
         try:
@@ -694,7 +894,15 @@ class ReminderAdapter:
         *,
         limit: int = 50,
     ) -> dict[str, Any]:
-        job = self._owned_native_job(reminder_id)
+        reminder_id = _validate_id(reminder_id)
+        try:
+            job = self._owned_native_job(reminder_id)
+        except ReminderNotFound:
+            record = self._missed_oneshots().get(reminder_id)
+            if record is None:
+                raise
+            return self._project_missed_history(record)
+
         native_id = str(job["job_id"])
 
         try:
@@ -790,10 +998,12 @@ def build_runtime_reminder_adapter(
 
         latest_executions = getattr(executions_module, "latest_executions")
         list_executions = getattr(executions_module, "list_executions")
+        cron_output_dir = getattr(jobs_module, "get_cron_output_dir")
         cronjob = getattr(cronjob_module, "cronjob")
         if not all(callable(item) for item in (
             latest_executions,
             list_executions,
+            cron_output_dir,
             cronjob,
         )):
             raise ReminderAdapterUnavailable(
@@ -822,6 +1032,7 @@ def build_runtime_reminder_adapter(
         cronjob_fn=cronjob,
         latest_executions_fn=latest_executions,
         list_executions_fn=list_executions,
+        cron_output_dir_fn=cron_output_dir,
         hermes_head=head,
         hermes_version=version,
     )

@@ -749,6 +749,7 @@ function renderReminders(payload) {
     actions.className = "reminder-actions";
 
     const enabled = Boolean(reminder?.enabled);
+    const mutable = reminder?.mutable !== false;
     const stateAction = enabled ? "pause" : "resume";
 
     const stateButton = reminderButton(
@@ -807,11 +808,13 @@ function renderReminders(payload) {
       );
     });
 
-    actions.append(
-      stateButton,
-      historyButton,
-      cancelButton,
-    );
+    if (mutable) {
+      actions.append(stateButton);
+    }
+    actions.append(historyButton);
+    if (mutable) {
+      actions.append(cancelButton);
+    }
 
     entry.append(
       header,

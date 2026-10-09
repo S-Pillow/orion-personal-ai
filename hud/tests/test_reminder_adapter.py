@@ -118,6 +118,10 @@ class FakeCron:
 class ReminderAdapterTests(unittest.TestCase):
     def setUp(self):
         self.cron = FakeCron()
+        self.output_tmp = TemporaryDirectory()
+        self.addCleanup(self.output_tmp.cleanup)
+        self.output_root = Path(self.output_tmp.name) / "cron-output"
+        self.output_root.mkdir(parents=True)
         self.execution_rows = {
             "orion_1": [{
                 "id": "exec_1",
@@ -147,6 +151,7 @@ class ReminderAdapterTests(unittest.TestCase):
             cronjob_fn=self.cron,
             latest_executions_fn=latest,
             list_executions_fn=history,
+            cron_output_dir_fn=lambda: self.output_root,
             hermes_head=EXPECTED_HERMES_HEAD,
             hermes_version=EXPECTED_HERMES_VERSION,
         )
@@ -158,9 +163,99 @@ class ReminderAdapterTests(unittest.TestCase):
             "schedule": "30m",
         })
 
+    def write_missed_diagnostic(
+        self,
+        *,
+        job_id="retired_1",
+        title="Missed dentist",
+        scheduled_at="2026-10-05T14:00:00+00:00",
+        removed_at="2026-10-05T14:03:00+00:00",
+    ):
+        directory = self.output_root / job_id
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / "2026-10-05_14-03-00.md"
+        path.write_text(
+            "# Cron job removed before firing (run time outside grace window)\n\n"
+            f"- job id: {job_id}\n"
+            f"- name: {ORION_REMINDER_PREFIX}{title}\n"
+            f"- scheduled run time: {scheduled_at}\n"
+            "- grace window: 120s\n"
+            f"- removed at: {removed_at}\n\n"
+            "This one-shot was retired without firing.\n",
+            encoding="utf-8",
+        )
+        return path
+
     def test_list_hides_unrelated_hermes_jobs(self):
         result = self.adapter.list_reminders()
         self.assertEqual(result["count"], 0)
+
+    def test_retired_missed_oneshot_reconstructed_in_list(self):
+        self.write_missed_diagnostic()
+
+        result = self.adapter.list_reminders()
+
+        self.assertEqual(result["count"], 1)
+        reminder = result["reminders"][0]
+        self.assertEqual(reminder["id"], "retired_1")
+        self.assertEqual(reminder["title"], "Missed dentist")
+        self.assertEqual(reminder["state"], "missed")
+        self.assertEqual(reminder["attention"], "missed")
+        self.assertFalse(reminder["enabled"])
+        self.assertFalse(reminder["mutable"])
+        self.assertEqual(
+            reminder["retired_at"],
+            "2026-10-05T14:03:00+00:00",
+        )
+
+    def test_retired_missed_oneshot_get_is_read_only(self):
+        self.write_missed_diagnostic(job_id="retired_2")
+
+        reminder = self.adapter.get_reminder("retired_2")
+        self.assertEqual(reminder["state"], "missed")
+        self.assertFalse(reminder["mutable"])
+
+        with self.assertRaises(ReminderNotFound):
+            self.adapter.pause_reminder("retired_2")
+        self.assertNotIn(
+            "pause",
+            [action for action, _kwargs in self.cron.calls],
+        )
+
+    def test_retired_missed_oneshot_history_projects_durable_miss(self):
+        self.write_missed_diagnostic(job_id="retired_3")
+
+        history = self.adapter.reminder_runs("retired_3")
+
+        self.assertEqual(history["count"], 1)
+        run = history["runs"][0]
+        self.assertEqual(run["job_id"], "retired_3")
+        self.assertEqual(run["status"], "missed")
+        self.assertEqual(run["error_class"], "missed_schedule")
+        self.assertEqual(
+            run["scheduled_at"],
+            "2026-10-05T14:00:00+00:00",
+        )
+        self.assertEqual(
+            run["finished_at"],
+            "2026-10-05T14:03:00+00:00",
+        )
+
+    def test_active_job_wins_over_retired_diagnostic_duplicate(self):
+        created = self.create()
+        self.write_missed_diagnostic(
+            job_id=created["id"],
+            title="Old retired copy",
+        )
+
+        result = self.adapter.list_reminders()
+
+        self.assertEqual(result["count"], 1)
+        reminder = result["reminders"][0]
+        self.assertEqual(reminder["id"], created["id"])
+        self.assertEqual(reminder["title"], "Water plants")
+        self.assertEqual(reminder["state"], "scheduled")
+        self.assertNotEqual(reminder.get("mutable"), False)
 
     def test_create_uses_narrow_native_shape(self):
         reminder = self.create()

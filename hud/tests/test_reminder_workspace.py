@@ -86,6 +86,21 @@ class ReminderWorkspaceContractTests(unittest.TestCase):
             APP,
         )
 
+    def test_retired_missed_reminders_are_history_only(self):
+        self.assertIn(
+            "const mutable = reminder?.mutable !== false;",
+            APP,
+        )
+        self.assertIn(
+            "if (mutable) {\n      actions.append(stateButton);\n    }",
+            APP,
+        )
+        self.assertIn(
+            "if (mutable) {\n      actions.append(cancelButton);\n    }",
+            APP,
+        )
+        self.assertIn("actions.append(historyButton);", APP)
+
     def test_no_manual_run_control_exists(self):
         self.assertNotIn(
             'data-reminder-action="run"',
