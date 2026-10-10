@@ -642,7 +642,7 @@ class OrionHandler(BaseHTTPRequestHandler):
             if body is None:
                 return
             choice = body.get("choice")
-            if choice not in APPROVAL_CHOICES:
+            if not isinstance(choice, str) or choice not in APPROVAL_CHOICES:
                 self._send_json(
                     400,
                     {
