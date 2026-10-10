@@ -110,6 +110,9 @@ if (ui.sceneEnvironment && ORION_ENVIRONMENT_DATA_URI) {
 const state = {
   sessionId: localStorage.getItem("orion.hermesSession") || "",
   activeRunId: "",
+  // A matching browser locator may block competing turns while reconnect
+  // status is unresolved, but it never proves a run is active or grants STOP.
+  reconnectInterlockRunId: "",
   streaming: false,
   approvalEvent: null,
   actionProjection: null,
@@ -125,6 +128,14 @@ function readRunLocator(sessionId = state.sessionId) {
   return parseRunLocator(raw, sessionId);
 }
 
+function armReconnectInterlockFromLocator() {
+  if (!state.sessionId || state.activeRunId) return false;
+  const locator = readRunLocator();
+  if (!locator) return false;
+  state.reconnectInterlockRunId = locator.runId;
+  return true;
+}
+
 function rememberRunLocator(sessionId, runId) {
   const encoded = encodeRunLocator(sessionId, runId);
   if (!encoded) return false;
@@ -135,6 +146,7 @@ function rememberRunLocator(sessionId, runId) {
 function clearRunLocator(expectedRunId = "") {
   if (!expectedRunId) {
     sessionStorage.removeItem(RUN_LOCATOR_KEY);
+    state.reconnectInterlockRunId = "";
     return;
   }
   const current = parseRunLocator(
@@ -142,6 +154,9 @@ function clearRunLocator(expectedRunId = "") {
   );
   if (current?.runId === expectedRunId) {
     sessionStorage.removeItem(RUN_LOCATOR_KEY);
+    if (state.reconnectInterlockRunId === expectedRunId) {
+      state.reconnectInterlockRunId = "";
+    }
   }
 }
 
@@ -287,7 +302,8 @@ function setHermesOnline(online, degraded = false) {
 
 function updateRunControls() {
   const running = Boolean(state.activeRunId);
-  const busy = state.streaming || running;
+  const reconnectBlocked = Boolean(state.reconnectInterlockRunId);
+  const busy = state.streaming || running || reconnectBlocked;
   ui.composer.dataset.runState = running ? "running" : "idle";
   ui.stopButton.disabled = !running;
   ui.stopButton.hidden = !running;
@@ -928,7 +944,15 @@ async function reconcileReconnectState() {
 
   const locator = readRunLocator();
   if (!locator) {
+    if (state.reconnectInterlockRunId) {
+      state.reconnectInterlockRunId = "";
+      updateRunControls();
+    }
     return false;
+  }
+  if (!state.activeRunId) {
+    armReconnectInterlockFromLocator();
+    updateRunControls();
   }
   const isCurrent = () => {
     const current = readRunLocator();
@@ -947,30 +971,44 @@ async function reconcileReconnectState() {
   } catch (error) {
     if (!isCurrent()) return false;
     const expired = error?.status === 404 || error?.status === 410;
-    // An expired run must not retain a STOP target. Transient failures keep
-    // the last observed target to prevent starting a competing turn while
-    // its status is unknown. Keep the locator through hydration for guards.
+    // A 404/410 is authoritative negative evidence for this run locator.
+    // Other lookup failures are uncertainty, not evidence that the run ended.
+    // Preserve an already-authoritative STOP target; on a fresh reload keep
+    // only the locator-derived interlock so competing turns remain blocked
+    // without granting STOP or active-run authority.
     if (expired) {
       state.activeRunId = "";
+      state.reconnectInterlockRunId = "";
+      updateRunControls();
+    } else if (!state.activeRunId) {
+      state.reconnectInterlockRunId = locator.runId;
       updateRunControls();
     }
     await refreshActionEvidence();
     if (!isCurrent()) return false;
-    if (expired) clearRunLocator(locator.runId);
-    if (state.actionProjection?.durability === "completed_record") {
+
+    if (expired) {
+      clearRunLocator(locator.runId);
+      if (state.actionProjection?.durability === "completed_record") {
+        return true;
+      }
+      renderReconnectUnavailable(
+        "run_locator_expired_without_persisted_action_result",
+        locator.runId,
+      );
+      setCore(
+        "READY",
+        "Reconnect: run expired // protected action outcome unavailable",
+      );
       return true;
     }
-    renderReconnectUnavailable(
-      expired
-        ? "run_locator_expired_without_persisted_action_result"
-        : "run_status_unavailable",
-      locator.runId,
-    );
+
+    if (state.actionProjection?.durability !== "completed_record") {
+      renderReconnectUnavailable("run_status_unavailable", locator.runId);
+    }
     setCore(
-      "READY",
-      expired
-        ? "Reconnect: run expired // protected action outcome unavailable"
-        : "Reconnect: run status unavailable // protected action outcome unavailable",
+      "DEGRADED",
+      "Reconnect: run status unavailable // new turns blocked until run state is authoritative",
     );
     return true;
   }
@@ -986,6 +1024,7 @@ async function reconcileReconnectState() {
   );
 
   if (observed.kind === "active") {
+    state.reconnectInterlockRunId = "";
     state.activeRunId = locator.runId;
     hideApproval();
     renderReconnectUnavailable(
@@ -1000,6 +1039,7 @@ async function reconcileReconnectState() {
     return true;
   }
 
+  state.reconnectInterlockRunId = "";
   state.activeRunId = "";
   updateRunControls();
 
@@ -1091,7 +1131,11 @@ async function loadMessages() {
 }
 
 async function createSession() {
-  if (state.streaming || state.activeRunId) return;
+  if (
+    state.streaming ||
+    state.activeRunId ||
+    state.reconnectInterlockRunId
+  ) return;
   try {
     setCore("LINKING", "Creating persisted Hermes session...");
     const payload = await api("/api/orion/sessions", {
@@ -1648,7 +1692,11 @@ async function streamTurn(input) {
 
 async function sendMessage(event) {
   event.preventDefault();
-  if (state.streaming || state.activeRunId) return;
+  if (
+    state.streaming ||
+    state.activeRunId ||
+    state.reconnectInterlockRunId
+  ) return;
   const input = ui.messageInput.value.trim();
   if (!input) return;
   if (!state.sessionId) {
@@ -1688,6 +1736,9 @@ async function sendMessage(event) {
         "Hermes stream ended before terminal run state // approval controls withheld",
       );
     }
+    if (unterminatedRunId) {
+      armReconnectInterlockFromLocator();
+    }
     updateRunControls();
     await loadMessages();
     await reconcileReconnectState();
@@ -1718,6 +1769,15 @@ ui.newSession.addEventListener("click", createSession);
 ui.composer.addEventListener("submit", sendMessage);
 ui.stopButton.addEventListener("click", stopRun);
 ui.sessionSelect.addEventListener("change", async () => {
+  if (
+    state.streaming ||
+    state.activeRunId ||
+    state.reconnectInterlockRunId
+  ) {
+    ui.sessionSelect.value = state.sessionId;
+    updateRunControls();
+    return;
+  }
   state.sessionId = ui.sessionSelect.value;
   clearRunLocator();
   clearActionProjection();
@@ -1768,6 +1828,7 @@ formatClock();
 setInterval(formatClock, 1000);
 clearActivity();
 syncSessionLabels();
+armReconnectInterlockFromLocator();
 updateRunControls();
 refreshStatus(true);
 setInterval(refreshStatus, 15000);
