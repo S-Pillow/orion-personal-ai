@@ -7,6 +7,9 @@ const ACTIVE_RUN_STATUSES = new Set([
   "queued",
   "running",
   "in_progress",
+  // Accepted Hermes/P5 compatibility states that still represent live work.
+  "waiting_for_approval",
+  "stopping",
 ]);
 const TERMINAL_RUN_STATUSES = new Set([
   "completed",

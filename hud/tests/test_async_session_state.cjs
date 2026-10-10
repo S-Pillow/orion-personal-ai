@@ -23,8 +23,9 @@ function deferred() {
 function harness(names, overrides = {}) {
   const calls = [];
   const state = {
-    sessionId: "session_1", activeRunId: "", streaming: false,
-    approvalEvent: null, actionProjection: null, actionEvidence: [],
+    sessionId: "session_1", activeRunId: "", reconnectInterlockRunId: "",
+    streaming: false, approvalEvent: null, actionProjection: null,
+    actionEvidence: [],
     historyRequestId: 0, evidenceRequestId: 0, reconnectRequestId: 0,
   };
   let locator = { sessionId: "session_1", runId: "run_1" };
@@ -56,7 +57,8 @@ function harness(names, overrides = {}) {
   });
   const reconnect = fs.readFileSync(path.join(__dirname, "../static/reconnect-state.js"), "utf8")
     .replaceAll("export const ", "const ").replaceAll("export function ", "function ");
-  vm.runInContext(reconnect + "\n" + names.map(functionSource).join("\n"), context);
+  const sources = [...new Set(["armReconnectInterlockFromLocator", ...names])];
+  vm.runInContext(reconnect + "\n" + sources.map(functionSource).join("\n"), context);
   return { context, state, calls };
 }
 
@@ -114,6 +116,10 @@ for (const fails of [false, true]) {
     const response = deferred();
     const { context, state, calls } = harness(["reconcileReconnectState"], { api: () => response.promise });
     const pending = context.reconcileReconnectState();
+    // The reconnect interlock intentionally updates controls before the
+    // status await. This race assertion is about *late* stale writes, so
+    // discard that expected pre-await control effect before superseding it.
+    calls.length = 0;
     state.streaming = true;
     state.activeRunId = "run_new";
     state.approvalEvent = { run_id: "run_new" };
@@ -142,6 +148,40 @@ test("transient reconnect failure retains the last active target for STOP", asyn
   state.activeRunId = "run_1";
   await context.reconcileReconnectState();
   assert.equal(state.activeRunId, "run_1");
+  assert.equal(state.reconnectInterlockRunId, "");
+});
+
+test("fresh reload locator blocks competing turns on transient status failure without granting STOP", async () => {
+  const { context, state, calls } = harness(
+    ["reconcileReconnectState", "updateRunControls", "sendMessage"],
+    {
+      api: async () => {
+        throw Object.assign(new Error("offline"), { status: 502 });
+      },
+    },
+  );
+  assert.equal(state.activeRunId, "");
+  assert.equal(state.reconnectInterlockRunId, "");
+  assert.equal(context.armReconnectInterlockFromLocator(), true);
+  context.updateRunControls();
+
+  assert.equal(state.reconnectInterlockRunId, "run_1");
+  assert.equal(context.ui.sendButton.disabled, true);
+  assert.equal(context.ui.newSession.disabled, true);
+  assert.equal(context.ui.sessionSelect.disabled, true);
+  assert.equal(context.ui.stopButton.disabled, true);
+  assert.equal(context.ui.stopButton.hidden, true);
+
+  await context.reconcileReconnectState();
+  assert.equal(state.activeRunId, "");
+  assert.equal(state.reconnectInterlockRunId, "run_1");
+  assert.equal(context.ui.sendButton.disabled, true);
+  assert.equal(context.ui.stopButton.disabled, true);
+
+  context.ui.messageInput.value = "competing turn";
+  await context.sendMessage({ preventDefault() {} });
+  assert.equal(state.streaming, false);
+  assert.equal(calls.includes("streamTurn"), false);
 });
 
 test("older reconnect response cannot replace a newer terminal observation", async () => {
@@ -178,8 +218,10 @@ test("fresh active reconnect still adopts the matching run", async () => {
   const { context, state } = harness(["reconcileReconnectState"], {
     api: async () => ({ object: "orion.run_status", session_id: "session_1", run_id: "run_1", status: "running" }),
   });
+  state.reconnectInterlockRunId = "run_1";
   assert.equal(await context.reconcileReconnectState(), true);
   assert.equal(state.activeRunId, "run_1");
+  assert.equal(state.reconnectInterlockRunId, "");
 });
 
 test("newest evidence request wins for the same session", async () => {

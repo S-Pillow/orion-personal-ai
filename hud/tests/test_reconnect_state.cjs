@@ -72,22 +72,30 @@ test("poisoned or cross-session locator is rejected or reduced to identifiers", 
   );
 });
 
-test("authoritative matching active run can be adopted", () => {
-  const result = classifyReconnectRunStatus(
-    {
-      object: "orion.run_status",
-      run_id: "run_1",
-      session_id: "session_1",
-      status: "running",
-      action_state: "unobserved",
-    },
-    "session_1",
-    "run_1",
-  );
-  assert.equal(result.kind, "active");
-  assert.equal(result.runId, "run_1");
-  assert.equal(result.sessionId, "session_1");
-  assert.equal(result.status, "running");
+test("authoritative matching nonterminal Hermes statuses can be adopted", () => {
+  for (const status of [
+    "queued",
+    "running",
+    "in_progress",
+    "waiting_for_approval",
+    "stopping",
+  ]) {
+    const result = classifyReconnectRunStatus(
+      {
+        object: "orion.run_status",
+        run_id: "run_1",
+        session_id: "session_1",
+        status,
+        action_state: "unobserved",
+      },
+      "session_1",
+      "run_1",
+    );
+    assert.equal(result.kind, "active", status);
+    assert.equal(result.runId, "run_1", status);
+    assert.equal(result.sessionId, "session_1", status);
+    assert.equal(result.status, status);
+  }
 });
 
 test("terminal run is locator evidence not protected action success", () => {

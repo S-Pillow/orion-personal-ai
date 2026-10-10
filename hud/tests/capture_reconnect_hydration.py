@@ -126,6 +126,39 @@ def run_matrix() -> dict:
             results["rc03_active_run"] = active
             page.close()
 
+            # Fresh reload + transient run-status failure must fail safe without
+            # promoting a browser locator into STOP or active-run authority.
+            fixture.set_scenario("ordinary")
+            page = new_page(browser, fixture, run_id="run_transient")
+            transient = snapshot(page)
+            assert transient["activeRunId"] == ""
+            assert transient["reconnectInterlockRunId"] == "run_transient"
+            assert transient["sendDisabled"] is True
+            assert transient["newSessionDisabled"] is True
+            assert transient["sessionSelectDisabled"] is True
+            assert transient["stopDisabled"] is True
+            assert transient["stopHidden"] is True
+            assert transient["authorityState"] == "OBSERVE"
+            assert transient["coreState"] == "DEGRADED"
+            assert transient["locator"] is not None
+            results["fresh_reload_transient_interlock"] = transient
+            page.close()
+
+            # Accepted Hermes states waiting_for_approval and stopping are
+            # authoritative nonterminal run states, so they may promote the
+            # locator to active controls including STOP.
+            for run_id in ("run_waiting", "run_stopping"):
+                page = new_page(browser, fixture, run_id=run_id)
+                observed = snapshot(page)
+                assert observed["activeRunId"] == run_id
+                assert observed["reconnectInterlockRunId"] == ""
+                assert observed["sendDisabled"] is True
+                assert observed["stopDisabled"] is False
+                assert observed["stopHidden"] is False
+                assert observed["authorityState"] == "ASSIST"
+                results[f"authoritative_{run_id}"] = observed
+                page.close()
+
             # RC-04 prior/fake approval controls do not survive reload.
             fixture.set_scenario("ordinary")
             page = new_page(browser, fixture, poison=True)

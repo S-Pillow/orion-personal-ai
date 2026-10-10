@@ -34,7 +34,14 @@ window.__orionReconnectFixture = {
     return {
       sessionId: state.sessionId,
       activeRunId: state.activeRunId,
+      reconnectInterlockRunId: state.reconnectInterlockRunId,
       streaming: state.streaming,
+      sendDisabled: ui.sendButton.disabled,
+      newSessionDisabled: ui.newSession.disabled,
+      sessionSelectDisabled: ui.sessionSelect.disabled,
+      stopDisabled: ui.stopButton.disabled,
+      stopHidden: ui.stopButton.hidden,
+      authorityState: ui.authorityStatus.dataset.authorityState,
       approvalVisible: !ui.approvalPanel.classList.contains("hidden"),
       actionVisible: !ui.actionEvidencePanel.classList.contains("hidden"),
       actionState: ui.actionEvidencePanel.dataset.actionState,
@@ -195,6 +202,27 @@ class ReconnectHermesHandler(BaseHTTPRequestHandler):
                 "status": "completed",
                 "last_event": "run.completed",
             })
+            return
+        if path == "/v1/runs/run_waiting":
+            self._send(200, {
+                "object": "hermes.run",
+                "run_id": "run_waiting",
+                "session_id": "session_1",
+                "status": "waiting_for_approval",
+                "last_event": "approval.request",
+            })
+            return
+        if path == "/v1/runs/run_stopping":
+            self._send(200, {
+                "object": "hermes.run",
+                "run_id": "run_stopping",
+                "session_id": "session_1",
+                "status": "stopping",
+                "last_event": "run.stopping",
+            })
+            return
+        if path == "/v1/runs/run_transient":
+            self._send(502, {"error": "fixture_transient_run_status"})
             return
         if path == "/v1/runs/run_wrong_session":
             self._send(200, {
