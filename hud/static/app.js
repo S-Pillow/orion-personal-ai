@@ -1046,8 +1046,11 @@ async function reconcileReconnectState() {
   if (observed.kind === "terminal") {
     await refreshActionEvidence();
     if (!isCurrent()) return false;
+    // Authoritative terminal run state ends the locator's run-control role.
+    // Protected-action evidence remains a separate claim and may still be
+    // unavailable without keeping an already-terminal locator alive.
+    clearRunLocator(locator.runId);
     if (state.actionProjection?.durability === "completed_record") {
-      clearRunLocator(locator.runId);
       return true;
     }
     renderReconnectUnavailable(
@@ -1736,9 +1739,10 @@ async function sendMessage(event) {
         "Hermes stream ended before terminal run state // approval controls withheld",
       );
     }
-    if (unterminatedRunId) {
-      armReconnectInterlockFromLocator();
-    }
+    // A matching stream error may clear activeRunId while intentionally
+    // leaving the run locator. Arm from any remaining matching locator before
+    // controls are re-enabled or history/reconnect reconciliation can block.
+    armReconnectInterlockFromLocator();
     updateRunControls();
     await loadMessages();
     await reconcileReconnectState();
