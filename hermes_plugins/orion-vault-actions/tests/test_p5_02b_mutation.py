@@ -228,17 +228,24 @@ class DisposableMutationCandidateTests(unittest.TestCase):
         if not created:
             self.skipTest("Platform did not permit a parent symlink/junction fixture")
 
-        with patch.object(plugin, "DEFAULT_VAULT_ROOT", str(protected_vault)):
-            with patch.dict(os.environ, {
-                "ORION_VAULT_ROOT": str(alias_parent / "vault"),
-                "ORION_INBOX_ROOT": str(self.inbox),
-                plugin.RECOVERY_ROOT_ENV: str(self.recovery),
-                plugin.DISPOSABLE_MUTATION_FLAG: "1",
-            }):
-                with self.assertRaisesRegex(
-                    RuntimeError, "resolved_live_vault_overlap_rejected"
-                ):
-                    plugin._candidate_disposable_roots()
+        # Both the candidate and protected spelling may contain a parent alias.
+        # Windows temp roots can also use an 8.3 spelling that resolve expands.
+        for candidate, protected in (
+            (alias_parent / "vault", protected_vault),
+            (protected_vault, alias_parent / "vault"),
+        ):
+            with self.subTest(candidate=candidate, protected=protected):
+                with patch.object(plugin, "DEFAULT_VAULT_ROOT", str(protected)):
+                    with patch.dict(os.environ, {
+                        "ORION_VAULT_ROOT": str(candidate),
+                        "ORION_INBOX_ROOT": str(self.inbox),
+                        plugin.RECOVERY_ROOT_ENV: str(self.recovery),
+                        plugin.DISPOSABLE_MUTATION_FLAG: "1",
+                    }):
+                        with self.assertRaisesRegex(
+                            RuntimeError, "resolved_live_vault_overlap_rejected"
+                        ):
+                            plugin._candidate_disposable_roots()
 
     def test_candidate_requires_recovery_root_disjoint_from_data_roots(self):
         nested = self.vault / "recovery"
