@@ -2,6 +2,7 @@
 
 const WORKSPACES = new Set([
   "conversation",
+  "reminders",
   "system",
   "memory",
 ]);

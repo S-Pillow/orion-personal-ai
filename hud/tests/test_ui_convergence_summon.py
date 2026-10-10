@@ -26,13 +26,10 @@ class UIConvergenceSummonContractTests(unittest.TestCase):
         )
         self.assertIn("const summonController = installSummonController({", APP)
 
-    def test_summon_is_presentation_overlay_not_fourth_workspace(self):
-        self.assertEqual(INDEX.count("data-workspace-target="), 3)
-        self.assertEqual(INDEX.count("data-workspace-pane="), 3)
+    def test_summon_is_presentation_overlay_not_workspace(self):
         self.assertIn('id="summonPanel"', INDEX)
         self.assertNotIn('data-workspace-target="summon"', INDEX)
         self.assertNotIn('data-workspace-pane="summon"', INDEX)
-        self.assertIn('id="summonPanel"', INDEX)
 
     def test_shell_has_accessible_bounded_visible_controls(self):
         for element_id in (

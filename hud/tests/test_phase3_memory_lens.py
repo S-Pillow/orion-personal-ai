@@ -125,10 +125,27 @@ class Phase3MemoryLensContractTests(unittest.TestCase):
         self.assertNotIn('method="post"', memory_section.group(0).lower())
 
     def test_memory_workspace_uses_reference_shell_and_responsive_width(self):
-        self.assertIn(".memory-workspace {", TARGET)
-        self.assertIn("width:var(--center-width);", TARGET)
+        workspace_rule = re.search(
+            r"(?s)([^{}]*\.memory-workspace[^{}]*)\{([^{}]*)\}",
+            TARGET,
+        )
+        self.assertIsNotNone(workspace_rule)
+        self.assertIn(
+            "width:var(--center-width);",
+            workspace_rule.group(2),
+        )
+
         self.assertIn("@media (max-width: 520px)", TARGET)
-        self.assertIn("width:calc(100% - 16px);", TARGET)
+        mobile = TARGET.split("@media (max-width: 520px)", 1)[1]
+        mobile_workspace_rule = re.search(
+            r"(?s)([^{}]*\.memory-workspace[^{}]*)\{([^{}]*)\}",
+            mobile,
+        )
+        self.assertIsNotNone(mobile_workspace_rule)
+        self.assertIn(
+            "width:calc(100% - 16px);",
+            mobile_workspace_rule.group(2),
+        )
 
     def test_existing_typed_and_system_surfaces_remain_present(self):
         for token in (
