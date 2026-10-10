@@ -114,6 +114,9 @@ const state = {
   approvalEvent: null,
   actionProjection: null,
   actionEvidence: [],
+  historyRequestId: 0,
+  evidenceRequestId: 0,
+  reconnectRequestId: 0,
   provenance: createProvenanceState(),
 };
 
@@ -284,13 +287,14 @@ function setHermesOnline(online, degraded = false) {
 
 function updateRunControls() {
   const running = Boolean(state.activeRunId);
+  const busy = state.streaming || running;
   ui.composer.dataset.runState = running ? "running" : "idle";
   ui.stopButton.disabled = !running;
   ui.stopButton.hidden = !running;
-  ui.sendButton.disabled = state.streaming;
+  ui.sendButton.disabled = busy;
   ui.sendButton.hidden = running;
-  ui.newSession.disabled = state.streaming;
-  ui.sessionSelect.disabled = state.streaming;
+  ui.newSession.disabled = busy;
+  ui.sessionSelect.disabled = busy;
   syncProvenancePresentation();
 }
 
@@ -549,8 +553,12 @@ function sessionTitle(item) {
 }
 
 async function refreshSessions({ loadCurrent = true } = {}) {
+  const requestedSessionId = state.sessionId;
   try {
     const payload = await api("/api/orion/sessions");
+    // A discovery response must not unlink a session selected or started since
+    // the request, nor replace controls belonging to a live streamed turn.
+    if (state.sessionId !== requestedSessionId || state.streaming) return;
     const sessions = arrayFrom(payload, ["sessions", "items", "data"]);
     const previous = state.sessionId;
     ui.sessionSelect.replaceChildren();
@@ -572,17 +580,21 @@ async function refreshSessions({ loadCurrent = true } = {}) {
       ui.sessionSelect.value = previous;
     } else if (previous) {
       state.sessionId = "";
+      state.activeRunId = "";
       clearRunLocator();
       clearActionProjection();
       hideApproval();
       state.provenance = createProvenanceState();
       syncProvenancePresentation();
       localStorage.removeItem("orion.hermesSession");
+      showTranscriptEmpty("Choose a conversation in Session, or use + to start a new one.");
+      updateRunControls();
     }
 
     syncSessionLabels();
     if (loadCurrent && state.sessionId) await loadMessages();
   } catch (error) {
+    if (state.sessionId !== requestedSessionId || state.streaming) return;
     ui.sessionMeta.textContent = `Session list unavailable: ${error.message}`;
   }
 }
@@ -909,6 +921,7 @@ function renderReconnectUnavailable(reason, runId = "") {
 }
 
 async function reconcileReconnectState() {
+  const requestId = ++state.reconnectRequestId;
   if (!state.sessionId || state.streaming || state.approvalEvent) {
     return false;
   }
@@ -917,6 +930,14 @@ async function reconcileReconnectState() {
   if (!locator) {
     return false;
   }
+  const isCurrent = () => {
+    const current = readRunLocator();
+    return requestId === state.reconnectRequestId
+      && state.sessionId === locator.sessionId
+      && !state.streaming && !state.approvalEvent
+      && current?.sessionId === locator.sessionId
+      && current?.runId === locator.runId;
+  };
 
   let payload;
   try {
@@ -924,11 +945,18 @@ async function reconcileReconnectState() {
       `/api/orion/runs/${encodeURIComponent(locator.runId)}`,
     );
   } catch (error) {
+    if (!isCurrent()) return false;
     const expired = error?.status === 404 || error?.status === 410;
+    // An expired run must not retain a STOP target. Transient failures keep
+    // the last observed target to prevent starting a competing turn while
+    // its status is unknown. Keep the locator through hydration for guards.
     if (expired) {
-      clearRunLocator(locator.runId);
+      state.activeRunId = "";
+      updateRunControls();
     }
     await refreshActionEvidence();
+    if (!isCurrent()) return false;
+    if (expired) clearRunLocator(locator.runId);
     if (state.actionProjection?.durability === "completed_record") {
       return true;
     }
@@ -947,7 +975,7 @@ async function reconcileReconnectState() {
     return true;
   }
 
-  if (state.sessionId !== locator.sessionId) {
+  if (!isCurrent()) {
     return false;
   }
 
@@ -977,6 +1005,7 @@ async function reconcileReconnectState() {
 
   if (observed.kind === "terminal") {
     await refreshActionEvidence();
+    if (!isCurrent()) return false;
     if (state.actionProjection?.durability === "completed_record") {
       clearRunLocator(locator.runId);
       return true;
@@ -992,8 +1021,9 @@ async function reconcileReconnectState() {
     return true;
   }
 
-  clearRunLocator(locator.runId);
   await refreshActionEvidence();
+  if (!isCurrent()) return false;
+  clearRunLocator(locator.runId);
   if (state.actionProjection?.durability === "completed_record") {
     return true;
   }
@@ -1009,6 +1039,8 @@ async function reconcileReconnectState() {
 }
 
 async function refreshActionEvidence() {
+  const requestId = ++state.evidenceRequestId;
+  if (state.streaming || state.approvalEvent) return;
   if (!state.sessionId) {
     clearActionProjection("No protected action evidence selected");
     return;
@@ -1019,6 +1051,7 @@ async function refreshActionEvidence() {
       `/api/orion/sessions/${encodeURIComponent(requestedSessionId)}/action-evidence`,
     );
     if (state.sessionId !== requestedSessionId) return;
+    if (requestId !== state.evidenceRequestId || state.streaming || state.approvalEvent) return;
     const items = arrayFrom(payload, ["items", "data"]);
     state.actionEvidence = items;
     const latest = items.length ? items[items.length - 1] : null;
@@ -1029,27 +1062,36 @@ async function refreshActionEvidence() {
     }
   } catch {
     if (state.sessionId === requestedSessionId) {
+      if (requestId !== state.evidenceRequestId || state.streaming || state.approvalEvent) return;
       clearActionProjection("Action evidence unavailable for selected session");
     }
   }
 }
 
 async function loadMessages() {
+  const requestId = ++state.historyRequestId;
+  const requestedSessionId = state.sessionId;
+  const isCurrent = () => requestId === state.historyRequestId
+    && state.sessionId === requestedSessionId && !state.streaming;
+  if (state.streaming) return;
   if (!state.sessionId) {
     showTranscriptEmpty("Choose a conversation in Session, or use + to start a new one.");
     clearActionProjection();
     return;
   }
   try {
-    const payload = await api(`/api/orion/sessions/${encodeURIComponent(state.sessionId)}/messages`);
+    const payload = await api(`/api/orion/sessions/${encodeURIComponent(requestedSessionId)}/messages`);
+    if (!isCurrent()) return;
     renderMessages(payload);
   } catch (error) {
+    if (!isCurrent()) return;
     showTranscriptEmpty(`Session history unavailable: ${error.message}`, "Unable to load this conversation");
   }
   await refreshActionEvidence();
 }
 
 async function createSession() {
+  if (state.streaming || state.activeRunId) return;
   try {
     setCore("LINKING", "Creating persisted Hermes session...");
     const payload = await api("/api/orion/sessions", {
@@ -1308,7 +1350,9 @@ async function refreshStatus(loadCurrentSession = false) {
       ]);
 
       if (!state.streaming && !state.approvalEvent) {
+        const selectedSessionId = state.sessionId;
         const reconnected = await reconcileReconnectState();
+        if (state.sessionId !== selectedSessionId || state.streaming || state.approvalEvent) return;
         if (reconnected) {
           return;
         }
@@ -1604,7 +1648,7 @@ async function streamTurn(input) {
 
 async function sendMessage(event) {
   event.preventDefault();
-  if (state.streaming) return;
+  if (state.streaming || state.activeRunId) return;
   const input = ui.messageInput.value.trim();
   if (!input) return;
   if (!state.sessionId) {
@@ -1613,6 +1657,10 @@ async function sendMessage(event) {
   }
 
   state.streaming = true;
+  // Invalidate pre-turn reads even if they arrive after this turn has ended.
+  state.historyRequestId += 1;
+  state.evidenceRequestId += 1;
+  state.reconnectRequestId += 1;
   state.activeRunId = "";
   hideApproval();
   updateRunControls();

@@ -251,6 +251,17 @@ class BridgeIntegrationTests(unittest.TestCase):
         self.assertIn(b"event: assistant.delta", data)
         self.assertIn(b"event: run.completed", data)
 
+    def test_approval_rejects_non_string_choices_without_upstream_call(self):
+        for choice in ([], {}, None, True, 1):
+            with self.subTest(choice=choice):
+                before = len(FakeHermesHandler.calls)
+                status, _, data = self.request(
+                    "POST", "/api/orion/runs/run_1/approval", {"choice": choice}
+                )
+                self.assertEqual(status, 400)
+                self.assertEqual(json.loads(data)["error"], "invalid_approval_choice")
+                self.assertEqual(len(FakeHermesHandler.calls), before)
+
     def test_unknown_proxy_surface_is_blocked(self):
         before = len(FakeHermesHandler.calls)
         status, _, data = self.request("GET", "/api/orion/arbitrary", origin=False)
