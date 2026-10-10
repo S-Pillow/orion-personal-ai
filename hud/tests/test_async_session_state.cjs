@@ -5,12 +5,15 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-const app = fs.readFileSync(path.join(__dirname, "../static/app.js"), "utf8");
+const app = fs.readFileSync(path.join(__dirname, "../static/app.js"), "utf8")
+  .replace(/\r\n/g, "\n");
 function functionSource(name) {
   const start = app.search(new RegExp(`^(?:async )?function ${name}\\(`, "m"));
   assert.ok(start >= 0, `missing ${name}`);
   const rest = app.slice(start);
-  return rest.slice(0, rest.indexOf("\n}\n") + 3);
+  const end = rest.indexOf("\n}\n");
+  assert.ok(end >= 0, `missing closing brace for ${name}`);
+  return rest.slice(0, end + 3);
 }
 function deferred() {
   let resolve, reject;
