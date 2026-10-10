@@ -1,4 +1,16 @@
 [CmdletBinding()]
-param([string]$ConfigPath = (Join-Path $PSScriptRoot 'orion-config.json'))
-& (Join-Path $PSScriptRoot 'Invoke-Orion.ps1') -Action preflight -ConfigPath $ConfigPath
+param([string]$ConfigPath)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
+    if ([string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+        throw "Unable to resolve Orion operator publication directory."
+    }
+    $ConfigPath = Join-Path $PSScriptRoot "orion-config.json"
+}
+
+$invokePath = Join-Path $PSScriptRoot "Invoke-Orion.ps1"
+& $invokePath -Action preflight -ConfigPath $ConfigPath
 exit $LASTEXITCODE

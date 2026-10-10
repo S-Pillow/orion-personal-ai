@@ -88,7 +88,7 @@ def verify_config(path):
     require(git_read("rev-parse", "HEAD") == PIN, "HERMES_PIN_MISMATCH")
     from hermes_provenance import verify_hermes_provenance
     provenance_ok, provenance_code = verify_hermes_provenance(
-        cfg["source"], PIN
+        cfg["source"], PIN, git_exe=git
     )
     require(provenance_ok, provenance_code)
     require((source / "hermes_cli" / "gateway_windows.py").is_file(), "HERMES_SOURCE_MISSING")

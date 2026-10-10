@@ -169,10 +169,12 @@ class TestCandidate2Integration(unittest.TestCase):
         self.assertIn("provenance_ok", text)
         self.assertIn("provenance_code", text)
 
-    def test_start_stop_wrappers_route_through_invoke(self):
+    def test_lifecycle_wrappers_route_through_invoke(self):
         for name, action in (
             ("Start-Orion.ps1", "start"),
             ("Stop-Orion.ps1", "stop"),
+            ("Recover-Orion-After-Restart.ps1", "recover"),
+            ("Test-Orion-Preflight.ps1", "preflight"),
         ):
             text = (PKG / name).read_text(encoding="utf-8")
             self.assertIn("param([string]$ConfigPath)", text)
@@ -184,6 +186,24 @@ class TestCandidate2Integration(unittest.TestCase):
                 "param([string]$ConfigPath = (Join-Path $PSScriptRoot",
                 text,
             )
+
+    def test_invoke_resolves_config_in_body(self):
+        text = (PKG / "Invoke-Orion.ps1").read_text(encoding="utf-8")
+        self.assertIn("IsNullOrWhiteSpace($ConfigPath)", text)
+        self.assertNotIn(
+            "[string]$ConfigPath = (Join-Path $PSScriptRoot",
+            text,
+        )
+
+    def test_git_runner_is_bounded_and_nonlocking(self):
+        text = (PKG / "hermes_provenance.py").read_text(encoding="utf-8")
+        self.assertIn("stdin=subprocess.DEVNULL", text)
+        self.assertIn("timeout=15", text)
+        self.assertIn('"GIT_OPTIONAL_LOCKS": "0"', text)
+        self.assertIn(
+            "git_exe=git",
+            (PKG / "orion.py").read_text(encoding="utf-8"),
+        )
 
     def test_stop_wrapper_does_not_create_parallel_shutdown_path(self):
         text = (PKG / "Stop-Orion.ps1").read_text(encoding="utf-8")
