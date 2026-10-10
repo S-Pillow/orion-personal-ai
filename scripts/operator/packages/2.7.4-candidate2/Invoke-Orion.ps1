@@ -2,10 +2,17 @@
 param(
     [Parameter(Mandatory=$true)]
     [ValidateSet('start','stop','recover','preflight')][string]$Action,
-    [string]$ConfigPath = (Join-Path $PSScriptRoot 'orion-config.json')
+    [string]$ConfigPath
 )
 Set-StrictMode -Version 3.0
 $ErrorActionPreference = 'Stop'
+
+if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
+    if ([string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+        throw 'Unable to resolve Orion operator publication directory.'
+    }
+    $ConfigPath = Join-Path $PSScriptRoot 'orion-config.json'
+}
 if (-not (Test-Path -LiteralPath $ConfigPath -PathType Leaf)) {
     throw 'Create orion-config.json from the example after checking Discover-Orion.ps1 output.'
 }

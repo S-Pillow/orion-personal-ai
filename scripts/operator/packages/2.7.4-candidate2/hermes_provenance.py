@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -92,13 +93,17 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def _git(source: Path, *args: str, binary: bool = False):
+def _git(source: Path, git_exe: str, *args: str, binary: bool = False):
     return subprocess.run(
-        ["git", "-C", str(source), *args],
+        [git_exe, "-C", str(source), *args],
+        stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=not binary,
         check=False,
+        timeout=15,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"},
     )
 
 
@@ -149,28 +154,39 @@ def verify_hermes_provenance(
     *,
     overlay=None,
     sidecars=None,
+    git_exe=None,
 ):
     source = Path(source)
     overlay = ACCEPTED_OVERLAY if overlay is None else overlay
     sidecars = ACCEPTED_SIDECARS if sidecars is None else sidecars
+    git_exe = git_exe or shutil.which("git.exe") or shutil.which("git")
+    if not git_exe:
+        return False, "GIT_EXE_NOT_FOUND"
 
     if not source.is_dir():
         return False, "HERMES_SOURCE_MISSING"
 
-    head = _git(source, "rev-parse", "HEAD")
+    try:
+        head = _git(source, git_exe, "rev-parse", "HEAD")
+    except (OSError, subprocess.TimeoutExpired):
+        return False, "HERMES_GIT_IDENTITY_FAILED"
     if head.returncode != 0:
         return False, "HERMES_GIT_IDENTITY_FAILED"
     if head.stdout.strip() != expected_pin:
         return False, "HERMES_PIN_MISMATCH"
 
-    status = _git(
-        source,
-        "status",
-        "--porcelain=v1",
-        "-z",
-        "--untracked-files=all",
-        binary=True,
-    )
+    try:
+        status = _git(
+            source,
+            git_exe,
+            "status",
+            "--porcelain=v1",
+            "-z",
+            "--untracked-files=all",
+            binary=True,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False, "HERMES_GIT_STATUS_FAILED"
     if status.returncode != 0:
         return False, "HERMES_GIT_STATUS_FAILED"
 
