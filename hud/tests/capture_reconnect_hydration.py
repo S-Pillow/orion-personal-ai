@@ -235,7 +235,13 @@ def run_matrix() -> dict:
             terminal_empty = snapshot(page)
             assert terminal_empty["actionState"] == "unavailable"
             assert terminal_empty["execution"] == "UNAVAILABLE"
-            assert terminal_empty["locator"] is not None
+            assert terminal_empty["locator"] is None
+            assert terminal_empty["reconnectInterlockRunId"] == ""
+            assert terminal_empty["sendDisabled"] is False
+            assert terminal_empty["newSessionDisabled"] is False
+            assert terminal_empty["sessionSelectDisabled"] is False
+            assert terminal_empty["stopDisabled"] is True
+            assert terminal_empty["stopHidden"] is True
             results["terminal_no_result"] = terminal_empty
             page.close()
 

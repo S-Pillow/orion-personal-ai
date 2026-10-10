@@ -36,7 +36,11 @@ function harness(names, overrides = {}) {
       newSession: {}, sessionSelect: {}, messageInput: { value: "hello" },
     },
     readRunLocator: () => locator,
-    clearRunLocator: () => { locator = null; calls.push("clearLocator"); },
+    clearRunLocator: () => {
+      locator = null;
+      state.reconnectInterlockRunId = "";
+      calls.push("clearLocator");
+    },
     renderMessages: (payload) => calls.push(payload),
     showTranscriptEmpty: (text) => calls.push(text),
     refreshActionEvidence: async () => {},
@@ -182,6 +186,76 @@ test("fresh reload locator blocks competing turns on transient status failure wi
   await context.sendMessage({ preventDefault() {} });
   assert.equal(state.streaming, false);
   assert.equal(calls.includes("streamTurn"), false);
+});
+
+test("stream error with a remaining locator keeps controls interlocked while history is pending", async () => {
+  const history = deferred();
+  const historyEntered = deferred();
+  let streamCalls = 0;
+  const { context, state } = harness(
+    ["sendMessage", "updateRunControls"],
+    {
+      streamTurn: async () => {
+        streamCalls += 1;
+        // Mirrors handleStreamEvent("error"): active run authority is cleared,
+        // while the matching run locator remains for authoritative reconcile.
+        state.activeRunId = "";
+      },
+      loadMessages: () => {
+        historyEntered.resolve();
+        return history.promise;
+      },
+      reconcileReconnectState: async () => false,
+    },
+  );
+
+  const pending = context.sendMessage({ preventDefault() {} });
+  await historyEntered.promise;
+
+  assert.equal(state.streaming, false);
+  assert.equal(state.activeRunId, "");
+  assert.equal(state.reconnectInterlockRunId, "run_1");
+  assert.equal(context.ui.sendButton.disabled, true);
+  assert.equal(context.ui.newSession.disabled, true);
+  assert.equal(context.ui.sessionSelect.disabled, true);
+  assert.equal(context.ui.stopButton.disabled, true);
+  assert.equal(context.ui.stopButton.hidden, true);
+
+  context.ui.messageInput.value = "competing turn";
+  await context.sendMessage({ preventDefault() {} });
+  assert.equal(streamCalls, 1);
+
+  history.resolve();
+  await pending;
+});
+
+test("authoritative terminal status clears locator even without completed action evidence", async () => {
+  const { context, state, calls } = harness(
+    ["reconcileReconnectState"],
+    {
+      api: async () => ({
+        object: "orion.run_status",
+        session_id: "session_1",
+        run_id: "run_1",
+        status: "completed",
+      }),
+      refreshActionEvidence: async () => {
+        state.actionProjection = null;
+      },
+    },
+  );
+  state.reconnectInterlockRunId = "run_1";
+
+  assert.equal(await context.reconcileReconnectState(), true);
+  assert.equal(state.activeRunId, "");
+  assert.equal(state.reconnectInterlockRunId, "");
+  assert.equal(context.readRunLocator(), null);
+  assert.equal(calls.includes("clearLocator"), true);
+
+  // The stale locator cannot re-arm a future interlock once terminal state
+  // was authoritative.
+  assert.equal(await context.reconcileReconnectState(), false);
+  assert.equal(state.reconnectInterlockRunId, "");
 });
 
 test("older reconnect response cannot replace a newer terminal observation", async () => {
