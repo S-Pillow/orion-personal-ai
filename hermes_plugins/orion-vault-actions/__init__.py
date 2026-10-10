@@ -1591,12 +1591,17 @@ def _candidate_disposable_roots() -> tuple[Path, Path, Path]:
     vault_real = vault.resolve(strict=True)
     inbox_real = inbox.resolve(strict=True)
     recovery_real = recovery.resolve(strict=True)
-    if windows_paths_overlap(str(vault_real), DEFAULT_VAULT_ROOT):
+    # Resolve both sides: protected paths may have parent aliases or Windows
+    # short names too. Comparing a canonical candidate to a raw protected
+    # spelling can miss that they refer to the same directory.
+    protected_vault = str(Path(DEFAULT_VAULT_ROOT).resolve(strict=False))
+    protected_inbox = str(Path(DEFAULT_INBOX_ROOT).resolve(strict=False))
+    if windows_paths_overlap(str(vault_real), protected_vault):
         raise RuntimeError("resolved_live_vault_overlap_rejected")
-    if windows_paths_overlap(str(inbox_real), DEFAULT_INBOX_ROOT):
+    if windows_paths_overlap(str(inbox_real), protected_inbox):
         raise RuntimeError("resolved_live_inbox_overlap_rejected")
-    if (windows_paths_overlap(str(recovery_real), DEFAULT_VAULT_ROOT)
-            or windows_paths_overlap(str(recovery_real), DEFAULT_INBOX_ROOT)):
+    if (windows_paths_overlap(str(recovery_real), protected_vault)
+            or windows_paths_overlap(str(recovery_real), protected_inbox)):
         raise RuntimeError("resolved_live_recovery_overlap_rejected")
     identities = {
         normalized_identity(vault_real),
