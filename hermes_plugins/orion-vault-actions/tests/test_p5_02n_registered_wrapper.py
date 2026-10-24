@@ -90,7 +90,8 @@ class GuardedRegistrationTests(unittest.TestCase):
         ctx = Context()
         plugin.register(ctx)
 
-        self.assertEqual(len(ctx.tools), 5)
+        self.assertEqual(len(ctx.tools), 6)
+        self.assertIn(plugin.RETRIEVE_TOOL, ctx.tools)
         self.assertEqual(
             set(ctx.hooks), {"pre_tool_call", "post_approval_response"}
         )
@@ -110,8 +111,8 @@ class GuardedRegistrationTests(unittest.TestCase):
         self.assertIs(parameters["additionalProperties"], False)
 
         manifest = (PLUGIN_DIR / "plugin.yaml").read_text(encoding="utf-8")
-        self.assertIn('version: "0.3.0"', manifest)
-        self.assertIn("guarded vault preview and apply plugin", manifest)
+        self.assertIn('version: "0.4.0"', manifest)
+        self.assertIn("native read-only vault retrieval", manifest)
 
     def test_non_enabled_and_invalid_modes_refuse_before_executor(self):
         note, preview = self._edit_preview()
