@@ -47,6 +47,7 @@ PREVIEW_EDIT_TOOL = "orion_vault_preview_edit"
 PREVIEW_MOVE_TOOL = "orion_vault_preview_move_draft"
 PREVIEW_DELETE_TOOL = "orion_vault_preview_delete"
 RECOMMEND_TOOL = "orion_vault_recommend_destination"
+RETRIEVE_TOOL = "orion_vault_retrieve"
 APPLY_TOOL = "orion_vault_apply_plan"
 
 IAI_MCP_SERVER = "iai-mcp"
@@ -454,6 +455,130 @@ def _recommend_destination_handler(ctx):
 
     return handle
 
+
+def _retrieve_vault_handler(ctx):
+    # Read-only semantic-to-authoritative vault retrieval using native iai ordering.
+    def handle(params: Dict[str, Any], **_: Any) -> str:
+        cue = params.get("cue")
+        if not isinstance(cue, str) or not cue.strip():
+            return _json({"success": False, "error": "cue_required", "mutation_performed": False})
+
+        cue = cue.strip()[:4000]
+        top = _safe_positive_int(params.get("top"), default=3, maximum=5)
+        max_chars = _safe_positive_int(
+            params.get("max_chars_per_source"), default=6000, maximum=12000
+        )
+        vault_root, _ = _roots()
+
+        try:
+            recall_envelope = ctx.call_mcp(
+                IAI_MCP_SERVER,
+                IAI_RECALL_TOOL,
+                {"cue": cue, "budget_tokens": 2000},
+                timeout=30,
+            )
+        except Exception:
+            return _json({"success": False, "error": "iai_recall_unavailable", "mutation_performed": False})
+
+        recall = _mcp_result_payload(recall_envelope)
+        if recall is None:
+            return _json({"success": False, "error": "iai_recall_invalid_response", "mutation_performed": False})
+
+        hits = [
+            hit for hit in (recall.get("hits") or [])
+            if isinstance(hit, dict) and str(hit.get("record_id") or "").strip()
+        ]
+        if not hits:
+            return _json({
+                "success": True,
+                "query": cue,
+                "native_recall_hit_count": 0,
+                "retrieval_count": 0,
+                "sources": [],
+                "mutation_performed": False,
+            })
+
+        try:
+            metadata_envelope = ctx.call_mcp(
+                IAI_MCP_SERVER,
+                IAI_TEMPORAL_RECALL_TOOL,
+                {"cue": cue, "limit": min(50, max(20, len(hits) * 4))},
+                timeout=30,
+            )
+        except Exception:
+            return _json({"success": False, "error": "iai_metadata_unavailable", "mutation_performed": False})
+
+        metadata = _mcp_result_payload(metadata_envelope)
+        if metadata is None:
+            return _json({"success": False, "error": "iai_metadata_invalid_response", "mutation_performed": False})
+
+        tags_by_id: Dict[str, list[str]] = {}
+        for item in metadata.get("hits") or []:
+            if not isinstance(item, dict):
+                continue
+            rid = str(item.get("id") or "").strip()
+            tags = item.get("tags")
+            if rid and isinstance(tags, list):
+                tags_by_id[rid] = [str(t) for t in tags if isinstance(t, str)]
+
+        try:
+            tag_index = _vault_doc_tag_index(vault_root)
+        except Exception as exc:
+            return _json({
+                "success": False,
+                "error": f"vault_index_unavailable:{type(exc).__name__}",
+                "mutation_performed": False,
+            })
+
+        sources = []
+        seen = set()
+        for native_rank, hit in enumerate(hits, start=1):
+            rid = str(hit.get("record_id") or "").strip()
+            for tag in [t for t in tags_by_id.get(rid, []) if t.startswith("doc:")]:
+                paths = tag_index.get(tag, [])
+                if len(paths) != 1:
+                    continue
+                relative = paths[0]
+                key = relative.casefold()
+                if key in seen:
+                    continue
+                try:
+                    path, normalized = _resolve_under_root(
+                        vault_root, relative, must_exist=True
+                    )
+                    _require_markdown(normalized)
+                    data, text = _read_utf8(path)
+                except Exception:
+                    continue
+
+                seen.add(key)
+                excerpt = text[:max_chars]
+                sources.append({
+                    "rank": len(sources) + 1,
+                    "source_relative_path": normalized,
+                    "source_sha256": _sha_bytes(data),
+                    "record_id": rid,
+                    "native_recall_rank": native_rank,
+                    "evidence_doc_tag": tag,
+                    "content": excerpt,
+                    "content_truncated": len(text) > len(excerpt),
+                    "content_chars_returned": len(excerpt),
+                    "content_chars_total": len(text),
+                })
+                break
+            if len(sources) >= top:
+                break
+
+        return _json({
+            "success": True,
+            "query": cue,
+            "native_recall_hit_count": len(hits),
+            "retrieval_count": len(sources),
+            "sources": sources,
+            "mutation_performed": False,
+        })
+
+    return handle
 
 def _remember_preview(
     token: str, plan: Dict[str, Any], *, diff: str, proposed_bytes: bytes
@@ -4962,6 +5087,33 @@ def register(ctx):
         },
     }
 
+    retrieve_schema = {
+        "name": RETRIEVE_TOOL,
+        "description": (
+            "Read-only Orion vault retrieval for questions about the user's notes, "
+            "documents, or vault. Uses native iai memory_recall ordering, resolves "
+            "recalled document tags to exactly one current contained Markdown source, "
+            "and returns bounded current source content with provenance. Use this when "
+            "the user asks what their notes or documents say about a topic. Performs "
+            "no vault or memory mutation."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "cue": {"type": "string"},
+                "top": {"type": "integer", "minimum": 1, "maximum": 5, "default": 3},
+                "max_chars_per_source": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 12000,
+                    "default": 6000,
+                },
+            },
+            "required": ["cue"],
+            "additionalProperties": False,
+        },
+    }
+
     apply_schema = {
         "name": APPLY_TOOL,
         "description": (
@@ -5003,6 +5155,12 @@ def register(ctx):
         toolset="orion_vault",
         schema=recommend_schema,
         handler=_recommend_destination_handler(ctx),
+    )
+    ctx.register_tool(
+        name=RETRIEVE_TOOL,
+        toolset="orion_vault",
+        schema=retrieve_schema,
+        handler=_retrieve_vault_handler(ctx),
     )
     ctx.register_tool(
         name=APPLY_TOOL,
