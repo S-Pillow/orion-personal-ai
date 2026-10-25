@@ -45,6 +45,13 @@ _MUTATION_RE = re.compile(
     r"(?i)\b(?:edit|delete|remove|move|rename|append|create|rewrite|update|change)\b"
     r".{0,40}\b(?:note|file|document|vault|markdown|md)\b"
 )
+_VAULT_EVIDENCE_QUERY_RE = re.compile(
+    r"(?i)(?:"
+    r"\b(?:my|our)\s+(?:notes?|vault|documents?|writings?)\b"
+    r"|\bwhat\s+(?:did|have)\s+i\s+(?:write|wrote|note|record|decide|say)\b"
+    r"|\bwhat\s+do\s+my\s+notes?\s+say\b"
+    r")"
+)
 
 _EXECUTOR = concurrent.futures.ThreadPoolExecutor(
     max_workers=1,
@@ -90,6 +97,18 @@ def _looks_like_followup(text: str) -> bool:
 
 def _looks_like_mutation_request(text: str) -> bool:
     return bool(_MUTATION_RE.search(text))
+
+
+def _needs_vault_status(text: str) -> bool:
+    """Whether a no-result/failure status is material to the user's turn.
+
+    Retrieval is attempted broadly for Companion recall, but negative status
+    context is only injected when the turn itself depends on personal-vault
+    evidence (or is a short conversational follow-up). Unrelated everyday
+    turns receive no vault context when recall is not relevant.
+    """
+
+    return bool(_VAULT_EVIDENCE_QUERY_RE.search(text)) or _looks_like_followup(text)
 
 
 def _recent_context(
@@ -347,6 +366,14 @@ def _evidence_context(
         return None
 
     payload = json.dumps(evidence, ensure_ascii=False, sort_keys=True)
+    # Keep note text inside the data envelope even if a note contains markup
+    # resembling our wrapper delimiter. JSON unicode escapes preserve the
+    # reference text while preventing literal tag termination in the prompt.
+    payload = (
+        payload.replace("&", "\\u0026")
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+    )
     return (
         "<orion_vault_context status=\"relevant\" trust=\"untrusted_reference_data\">\n"
         "The JSON below contains bounded excerpts from the user's authoritative "
@@ -387,8 +414,11 @@ def _pre_llm_call_handler(ctx: Any):
         if not cue:
             return None
 
+        status_needed = _needs_vault_status(text)
         precheck = _relevance_precheck(ctx, cue)
         if precheck.get("status") == "unavailable":
+            if not status_needed:
+                return None
             return {
                 "context": _status_context(
                     "unavailable",
@@ -396,6 +426,8 @@ def _pre_llm_call_handler(ctx: Any):
                 )
             }
         if precheck.get("status") != "candidate":
+            if not status_needed:
+                return None
             top_score = precheck.get("top_score")
             detail = (
                 f"top_recall_score={float(top_score):.3f}"
@@ -406,6 +438,8 @@ def _pre_llm_call_handler(ctx: Any):
 
         retrieval = _bounded_existing_retrieval(cue)
         if retrieval.get("status") != "retrieved":
+            if not status_needed:
+                return None
             return {
                 "context": _status_context(
                     "unavailable",
@@ -419,6 +453,8 @@ def _pre_llm_call_handler(ctx: Any):
             precheck.get("eligible_scores") or {},
         )
         if not context:
+            if not status_needed:
+                return None
             return {"context": _status_context("no_relevant", "no_mapped_sources")}
         return {"context": context}
 
