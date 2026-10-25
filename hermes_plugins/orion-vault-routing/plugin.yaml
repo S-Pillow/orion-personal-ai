@@ -1,0 +1,3 @@
+name: orion-vault-routing
+version: "0.1.0"
+description: "Orion authority-routing policy for personal durable vault knowledge. Establishes Orion vault retrieval as the primary read-only route while preserving generic Obsidian/file tools for explicit filesystem work and bounded fallback."
