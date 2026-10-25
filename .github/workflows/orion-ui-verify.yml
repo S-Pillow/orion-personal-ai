@@ -75,6 +75,7 @@ jobs:
           name: orion-ui-visual-artifacts
           path: ui-visual-artifacts/
           if-no-files-found: error
+          retention-days: 14
       - name: Enforce verification gates
         if: always()
         shell: bash
