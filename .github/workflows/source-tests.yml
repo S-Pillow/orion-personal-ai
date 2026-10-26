@@ -29,6 +29,8 @@ jobs:
         run: python -m unittest discover -s hud/tests -p "test_*.py" -v
       - name: Vault disposable tests
         run: python -m unittest discover -s hermes_plugins/orion-vault-actions/tests -p "test_*.py" -v
+      - name: DC-02 Markdown ingestion adapter tests
+        run: python -m unittest discover -s tests/dc02 -p "test_*.py" -v
       - name: Lifecycle provenance tests
         run: python -m unittest discover -s tests/operator -p "test_*.py" -v
       - name: Browser logic tests
