@@ -1,37 +1,46 @@
 """DC-02 deterministic pre-generation vault retrieval for the COMPANION profile.
 
-This plugin does not replace the authoritative retrieval backend. It performs a
-small iai relevance precheck, then invokes the already-registered read-only
-``orion_vault_retrieve`` handler and injects bounded reference evidence through
-Hermes ``pre_llm_call``.
+The model does not choose whether to retrieve. Before generation, Orion asks iai
+for semantic recall, accepts only memories originating from the accepted
+``vault-study`` ingestion session, resolves those recalled chunks uniquely
+against the current contained Markdown vault, and injects bounded excerpts as
+untrusted reference data.
 
-Vault excerpts are always framed as untrusted reference data, never instructions.
 No mutation capability is registered or invoked here.
 """
 
 from __future__ import annotations
 
 import concurrent.futures
+import hashlib
 import json
 import logging
+import os
 import re
+import stat
 import threading
+from pathlib import Path
 from typing import Any, Dict, Iterable
 
-PLUGIN_VERSION = "0.1.0"
-RETRIEVE_TOOL = "orion_vault_retrieve"
-RETRIEVE_TOOLSET = "orion_vault"
+PLUGIN_VERSION = "0.2.0"
 IAI_MCP_SERVER = "iai-mcp"
 IAI_RECALL_TOOL = "memory_recall"
 
 PRECHECK_TIMEOUT_SECONDS = 2
 RETRIEVAL_TIMEOUT_SECONDS = 8
-MIN_RECALL_SCORE = 0.50
+MIN_RECALL_SCORE = 0.50  # provisional until live vault-only calibration passes
+VAULT_STUDY_SESSION_ID = "vault-study"
+DEFAULT_VAULT_ROOT = r"C:\Personal\Me"
+
 MAX_QUERY_CHARS = 2200
 MAX_FOLLOWUP_CONTEXT_CHARS = 1200
 MAX_SOURCE_CHARS = 2000
 MAX_EVIDENCE_CHARS = 7000
 MAX_SOURCES = 3
+MAX_RECALL_CANDIDATES = 12
+MAX_VAULT_FILES = 5000
+MAX_SOURCE_FILE_BYTES = 2_000_000
+MIN_SURFACE_CHARS = 40
 
 logger = logging.getLogger(__name__)
 
@@ -42,9 +51,6 @@ _FOLLOWUP_RE = re.compile(
     r")"
 )
 
-# Only bypass automatic read-only recall when the user is actually asking Orion
-# to mutate note/file state. Mentioning a mutation verb as the subject of a
-# question ("What did I write about how to rename a note?") is still retrieval.
 _MUTATION_REQUEST_RE = re.compile(
     r"(?is)^\s*"
     r"(?:(?:please|kindly)\s+)?"
@@ -109,8 +115,6 @@ def _looks_like_mutation_request(text: str) -> bool:
 
 
 def _needs_vault_status(text: str) -> bool:
-    """Return whether negative vault status is material to this turn."""
-
     return bool(_VAULT_EVIDENCE_QUERY_RE.search(text)) or _looks_like_followup(text)
 
 
@@ -170,19 +174,43 @@ def _build_recall_cue(user_message: str, conversation_history: Any) -> str:
     return cue[:4000]
 
 
-def _score_map(payload: Dict[str, Any]) -> Dict[str, float]:
-    scores: Dict[str, float] = {}
-    for hit in payload.get("hits") or []:
+def _vault_hit_candidates(payload: Dict[str, Any]) -> tuple[list[Dict[str, Any]], Dict[str, float], float | None]:
+    candidates: list[Dict[str, Any]] = []
+    eligible_scores: Dict[str, float] = {}
+    vault_scores: list[float] = []
+
+    for native_rank, hit in enumerate(payload.get("hits") or [], start=1):
         if not isinstance(hit, dict):
             continue
+        if str(hit.get("session_id") or "").strip() != VAULT_STUDY_SESSION_ID:
+            continue
+
         record_id = str(hit.get("record_id") or "").strip()
+        surface = str(hit.get("literal_surface") or "")
         try:
             score = float(hit.get("score"))
         except (TypeError, ValueError):
             continue
-        if record_id:
-            scores[record_id] = score
-    return scores
+        if not record_id:
+            continue
+
+        vault_scores.append(score)
+        if score < MIN_RECALL_SCORE or len(surface.strip()) < MIN_SURFACE_CHARS:
+            continue
+
+        candidate = {
+            "record_id": record_id,
+            "score": score,
+            "literal_surface": surface,
+            "native_recall_rank": native_rank,
+        }
+        candidates.append(candidate)
+        eligible_scores[record_id] = score
+        if len(candidates) >= MAX_RECALL_CANDIDATES:
+            break
+
+    top_vault_score = max(vault_scores) if vault_scores else None
+    return candidates, eligible_scores, top_vault_score
 
 
 def _relevance_precheck(ctx: Any, cue: str) -> Dict[str, Any]:
@@ -203,71 +231,168 @@ def _relevance_precheck(ctx: Any, cue: str) -> Dict[str, Any]:
     if payload is None:
         return {"status": "unavailable", "error": "iai_recall_invalid_response"}
 
-    scores = _score_map(payload)
-    eligible = {
-        record_id: score
-        for record_id, score in scores.items()
-        if score >= MIN_RECALL_SCORE
-    }
-    if not eligible:
+    candidates, eligible_scores, top_vault_score = _vault_hit_candidates(payload)
+    if not candidates:
         return {
             "status": "no_relevant",
-            "top_score": max(scores.values()) if scores else None,
-            "scores": scores,
+            "top_score": top_vault_score,
+            "eligible_scores": {},
+            "eligible_hits": [],
         }
 
     return {
         "status": "candidate",
-        "scores": scores,
-        "eligible_scores": eligible,
-        "top_score": max(eligible.values()),
+        "eligible_scores": eligible_scores,
+        "eligible_hits": candidates,
+        "top_score": max(eligible_scores.values()),
     }
 
 
-def _get_retriever_handler():
-    """Resolve the existing Orion retrieval backend from Hermes' active profile."""
-
-    from tools.registry import registry
-
-    entry = registry.get_entry(RETRIEVE_TOOL)
-    if entry is None:
-        raise LookupError("orion_vault_retrieve_not_registered")
-    if entry.toolset != RETRIEVE_TOOLSET:
-        raise LookupError("orion_vault_retrieve_wrong_toolset")
-    if not callable(entry.handler):
-        raise LookupError("orion_vault_retrieve_handler_missing")
-    return entry.handler
-
-
-def _run_existing_retriever(cue: str) -> Dict[str, Any]:
-    handler = _get_retriever_handler()
-    raw = handler(
-        {
-            "cue": cue,
-            "top": MAX_SOURCES,
-            "max_chars_per_source": MAX_SOURCE_CHARS,
-        }
-    )
+def _is_reparse_point(path: Path) -> bool:
     try:
-        payload = json.loads(raw) if isinstance(raw, str) else raw
-    except json.JSONDecodeError:
-        return {"success": False, "error": "retriever_invalid_json"}
-    if isinstance(payload, dict):
-        return payload
-    return {"success": False, "error": "retriever_invalid_payload"}
+        info = os.lstat(path)
+    except OSError:
+        return True
+    if stat.S_ISLNK(info.st_mode):
+        return True
+    attrs = getattr(info, "st_file_attributes", 0)
+    flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+    return bool(attrs & flag)
 
 
-def _bounded_existing_retrieval(cue: str) -> Dict[str, Any]:
+def _vault_root() -> Path:
+    return Path(os.environ.get("ORION_VAULT_ROOT", DEFAULT_VAULT_ROOT))
+
+
+def _safe_markdown_files(root: Path) -> list[tuple[Path, str]]:
+    if not root.is_dir() or _is_reparse_point(root):
+        raise RuntimeError("vault_root_unavailable")
+
+    root_real = root.resolve(strict=True)
+    found: list[tuple[Path, str]] = []
+
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        current = Path(dirpath)
+        safe_dirs = []
+        for name in dirnames:
+            child = current / name
+            if _is_reparse_point(child):
+                continue
+            try:
+                child.resolve(strict=True).relative_to(root_real)
+            except (OSError, ValueError):
+                continue
+            safe_dirs.append(name)
+        dirnames[:] = safe_dirs
+
+        for name in filenames:
+            if not name.lower().endswith(".md"):
+                continue
+            path = current / name
+            if _is_reparse_point(path):
+                continue
+            try:
+                resolved = path.resolve(strict=True)
+                resolved.relative_to(root_real)
+                if resolved.stat().st_size > MAX_SOURCE_FILE_BYTES:
+                    continue
+                relative = resolved.relative_to(root_real).as_posix()
+            except (OSError, ValueError):
+                continue
+            found.append((resolved, relative))
+            if len(found) > MAX_VAULT_FILES:
+                raise RuntimeError("vault_file_limit_exceeded")
+
+    return found
+
+
+def _normalise_newlines(text: str) -> str:
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def _excerpt_around(text: str, surface: str) -> str:
+    normal_text = _normalise_newlines(text)
+    normal_surface = _normalise_newlines(surface)
+    index = normal_text.find(normal_surface)
+    if index < 0:
+        return ""
+    if len(normal_text) <= MAX_SOURCE_CHARS:
+        return normal_text
+    center = index + min(len(normal_surface), MAX_SOURCE_CHARS) // 2
+    start = max(0, center - MAX_SOURCE_CHARS // 2)
+    end = min(len(normal_text), start + MAX_SOURCE_CHARS)
+    start = max(0, end - MAX_SOURCE_CHARS)
+    return normal_text[start:end]
+
+
+def _resolve_current_vault_sources(eligible_hits: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
+    hits = [dict(hit) for hit in eligible_hits if isinstance(hit, dict)]
+    if not hits:
+        return {"status": "no_relevant", "sources": []}
+
+    files = _safe_markdown_files(_vault_root())
+    matches: Dict[str, list[Dict[str, Any]]] = {
+        str(hit["record_id"]): [] for hit in hits
+    }
+
+    for path, relative in files:
+        try:
+            data = path.read_bytes()
+            text = data.decode("utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        normal_text = _normalise_newlines(text)
+
+        for hit in hits:
+            record_id = str(hit["record_id"])
+            surface = str(hit.get("literal_surface") or "")
+            normal_surface = _normalise_newlines(surface)
+            if not normal_surface or normal_surface not in normal_text:
+                continue
+            matches[record_id].append(
+                {
+                    "source_relative_path": relative,
+                    "source_sha256": hashlib.sha256(data).hexdigest(),
+                    "record_id": record_id,
+                    "native_recall_rank": int(hit["native_recall_rank"]),
+                    "content": _excerpt_around(text, surface),
+                    "match_method": "vault_study_exact_surface",
+                }
+            )
+
+    sources: list[Dict[str, Any]] = []
+    seen_paths: set[str] = set()
+    for hit in hits:
+        record_id = str(hit["record_id"])
+        hit_matches = matches.get(record_id) or []
+        if len(hit_matches) != 1:
+            continue
+        source = hit_matches[0]
+        key = str(source["source_relative_path"]).casefold()
+        if key in seen_paths:
+            continue
+        seen_paths.add(key)
+        sources.append(source)
+        if len(sources) >= MAX_SOURCES:
+            break
+
+    return {
+        "status": "retrieved" if sources else "no_relevant",
+        "sources": sources,
+    }
+
+
+def _bounded_source_resolution(eligible_hits: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
     global _INFLIGHT
 
     with _INFLIGHT_LOCK:
         if _INFLIGHT is not None and not _INFLIGHT.done():
             return {"status": "unavailable", "error": "retrieval_busy"}
-        _INFLIGHT = _EXECUTOR.submit(_run_existing_retriever, cue)
+        _INFLIGHT = _EXECUTOR.submit(_resolve_current_vault_sources, list(eligible_hits))
         future = _INFLIGHT
 
     try:
-        result = future.result(timeout=RETRIEVAL_TIMEOUT_SECONDS)
+        return future.result(timeout=RETRIEVAL_TIMEOUT_SECONDS)
     except concurrent.futures.TimeoutError:
         return {"status": "unavailable", "error": "retrieval_timeout"}
     except Exception as exc:
@@ -280,25 +405,13 @@ def _bounded_existing_retrieval(cue: str) -> Dict[str, Any]:
             if _INFLIGHT is future and future.done():
                 _INFLIGHT = None
 
-    if result.get("success") is not True:
-        return {
-            "status": "unavailable",
-            "error": str(result.get("error") or "retrieval_failed"),
-        }
-    if result.get("mutation_performed") is not False:
-        return {
-            "status": "unavailable",
-            "error": "retriever_mutation_contract_violation",
-        }
-    return {"status": "retrieved", "result": result}
-
 
 def _status_context(status: str, detail: str = "") -> str:
     if status == "no_relevant":
         message = (
             "The automatic Orion vault check found no sufficiently relevant "
-            "note evidence to include for this turn. This does not prove that "
-            "the information does not exist in the vault."
+            "current note evidence to include for this turn. This does not prove "
+            "that the information does not exist in the vault."
         )
     else:
         message = (
@@ -356,6 +469,7 @@ def _evidence_context(
                 "source_sha256": sha256,
                 "record_id": record_id,
                 "recall_score": round(score, 6),
+                "source_match": str(source.get("match_method") or ""),
                 "content": content,
             }
         )
@@ -404,8 +518,6 @@ def _pre_llm_call_handler(ctx: Any):
         if not text:
             return None
 
-        # Actual note-mutation requests stay on the existing guarded workflow.
-        # Read-only questions *about* editing/deleting/renaming notes still recall.
         if _looks_like_mutation_request(text):
             return None
 
@@ -430,14 +542,14 @@ def _pre_llm_call_handler(ctx: Any):
                 return None
             top_score = precheck.get("top_score")
             detail = (
-                f"top_recall_score={float(top_score):.3f}"
+                f"top_vault_recall_score={float(top_score):.3f}"
                 if isinstance(top_score, (int, float))
-                else "no_scored_hits"
+                else "no_scored_vault_hits"
             )
             return {"context": _status_context("no_relevant", detail)}
 
-        retrieval = _bounded_existing_retrieval(cue)
-        if retrieval.get("status") != "retrieved":
+        retrieval = _bounded_source_resolution(precheck.get("eligible_hits") or [])
+        if retrieval.get("status") == "unavailable":
             if not status_needed:
                 return None
             return {
@@ -447,15 +559,19 @@ def _pre_llm_call_handler(ctx: Any):
                 )
             }
 
-        result = retrieval["result"]
         context = _evidence_context(
-            result.get("sources") or [],
+            retrieval.get("sources") or [],
             precheck.get("eligible_scores") or {},
         )
         if not context:
             if not status_needed:
                 return None
-            return {"context": _status_context("no_relevant", "no_mapped_sources")}
+            return {
+                "context": _status_context(
+                    "no_relevant",
+                    "no_unique_current_vault_source",
+                )
+            }
         return {"context": context}
 
     return handle
