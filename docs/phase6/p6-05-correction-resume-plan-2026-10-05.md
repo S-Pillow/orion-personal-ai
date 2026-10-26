@@ -1,16 +1,25 @@
 # P6-05 Reminder CRUD + HUD — Correction/Resume Plan
 
-Status: **IMPLEMENTATION WRITTEN LOCALLY / FINAL QUALIFICATION PENDING**
+Status: **SUPERSEDED BY QUALIFIED P6-05 IMPLEMENTATION / MERGE-INTEGRATION HANDOFF**
 
-Date: 2026-10-05
+Original date: 2026-10-05  
+Updated: 2026-10-06
 
-Accepted Orion repository base/head for the local P6-05 worktree:
+This document was the durable resume point while P6-05 was still being corrected. That correction cycle is now complete. Do not use the old finalization flow as the active P6-05 procedure.
 
-- repository: `D:\Orion\orion-personal-ai`
+The current handoff is:
+
+`docs/phase6/p6-05-merge-readiness-and-integration-plan-2026-10-06.md`
+
+## Final qualified implementation
+
+P6-05 is implemented on:
+
 - branch: `feature/p6-05-reminder-crud-hud`
-- commit: `69309e1559428ffee0455ed9f476222600e392a4`
+- qualified commit: `b255aeb4a86daa2fc2a54688a2cae7a4b9ec9456`
+- source parent: `69309e1559428ffee0455ed9f476222600e392a4`
 
-Accepted Hermes baseline:
+Accepted Hermes baseline remains:
 
 - tag: `v2026.8.27`
 - package: `0.20.6`
@@ -18,255 +27,92 @@ Accepted Hermes baseline:
 - profile: `companion`
 - COMPANION home: `%LOCALAPPDATA%\hermes\profiles\companion`
 
-This document is the durable resume point for P6-05 after the 2026-10-05 correction session.
+Final repository qualification passed:
 
-## 1. Architecture and authority boundary
+- reminder regression suite: **41/41**
+- full HUD regression suite: **244/244**
+- JavaScript syntax: PASS
+- Python compile checks: PASS
+- `git diff --check`: PASS
+- exact P6-05 scope: 16 files
+- local commit verification: PASS
+- feature-branch push and remote SHA verification: PASS
 
-The Phase 6 architecture remains unchanged:
+The final uncertainty-semantics correction prevents the HUD from encouraging a naïve repeat when a mutation may already have happened. Mutating 5xx outcomes are treated as uncertain, the HUD performs read-only reconciliation, and no automatic mutation retry is performed.
 
-- Hermes is the authoritative reminder scheduler and durable job owner.
-- Orion must not add a second general scheduler, timer daemon, background watcher, or scheduler-owning service.
-- Orion P6-05 is a bounded adapter, bridge, browser-safe projection, and HUD control surface over the accepted Hermes cron implementation.
-- The primary adapter seam remains the accepted P6-02 Candidate A contract: local invocation of `tools.cronjob_tools.cronjob()` with `HERMES_HOME` explicitly bound to the COMPANION profile.
-- Ordinary reminder CRUD may list, get, create, pause, resume, and cancel Orion-owned reminders only.
-- P6-05 must never expose or invoke Hermes `run` through the reminder UI/API.
-- Browser presentation is not durable authority.
-- Manual-off remains controlling: the HUD must not start Hermes and must not treat conversation-gateway offline state as proof that durable reminder state is unavailable.
+## Architecture retained
 
-No production reminder, live delivery, COMPANION configuration mutation, Hermes restart, or P6-06 acceptance is authorized by this plan.
+The accepted P6-05 boundary is unchanged:
 
-## 2. Work completed before the 2026-10-05 correction
+- Hermes owns reminder scheduling and durable job state.
+- Orion does not add a second scheduler or timer daemon.
+- Orion operates only on explicitly Orion-owned reminders.
+- reminder create/list/get/pause/resume/cancel are bounded operations;
+- no reminder `run` route or generic cron proxy exists;
+- browser presentation is not durable authority;
+- create binds native delivery intent `discord` without configuring a Discord destination;
+- actual live delivery remains P6-06 work under separate authorization.
 
-The P6-05 branch already contained the repository-only implementation across exactly twelve local working-tree paths:
+## Resolved correction items
 
-Tracked modifications:
+The former blockers in this document are resolved:
 
-- `hud/orion_hud_bridge.py`
-- `hud/static/app.js`
-- `hud/static/index.html`
-- `hud/static/target-layout.css`
-- `hud/static/workspace-state.js`
-- `hud/tests/test_phase3_workspace.py`
+- Hermes commit **and** project-version gate are present;
+- reminder refresh is independent of conversation-gateway online state;
+- schedule examples are limited to accepted parser forms;
+- explicit Discord delivery intent is bound;
+- the stale Phase 3 ordering test was repaired semantically;
+- four legacy tests that froze the pre-Reminder workspace shape were updated to preserve their real contracts;
+- post-mutation uncertainty behavior is explicitly handled and regression-tested.
 
-New files:
+Earlier brittle PowerShell/Python source-rewrite helpers are retired. Their failures were tooling failures, not P6-05 architectural failures.
 
-- `hud/reminder_adapter.py`
-- `hud/reminder_projection.py`
-- `hud/tests/test_reminder_adapter.py`
-- `hud/tests/test_reminder_bridge.py`
-- `hud/tests/test_reminder_projection.py`
-- `hud/tests/test_reminder_workspace.py`
+## Current blocker: branch topology
 
-Previously accepted repository-only gates established:
+P6-05 is not blocked on implementation quality. It is blocked from a **direct feature-branch merge** by repository history.
 
-- native structured Hermes CRUD adapter path;
-- strict Orion-owned reminder filtering and mutation ownership checks;
-- no generic cron proxy;
-- no manual `run` route;
-- exact reminder/run correlation;
-- same-origin mutation enforcement;
-- browser-safe projection with raw prompt/provider/base URL/process/error details omitted;
-- fourth HUD workspace: `CONVERSATION | REMINDERS | SYSTEM | MEMORY`;
-- bridge unavailability fails closed without taking the conversation HUD down.
+Current main:
 
-Before final review, the focused gate passed 95 tests:
-28 frontend-hardening + 33 reminder + 10 Phase 3 workspace + 8 UI convergence + 14 bridge + 2 POST-close.
+- `5da4a9a326423e02f5d00b40a59c4192a10321a0`
 
-## 3. Final-review findings that required correction
+GitHub comparison reports the feature branch is **96 commits ahead and 4 commits behind** current main, with merge base:
 
-The final implementation review found four real contract gaps:
+- `5ab6f44ae4c87044dcff528fef8e75345b703e74`
 
-1. **Hermes version gate**  
-   The adapter hard-gated the accepted Hermes commit but did not also hard-gate package/project version `0.20.6`, despite the frozen P6-02 contract requiring commit + version qualification.
+The P6-05 implementation is the final single commit on top of a 95-commit Phase 6 history that current main does not contain. A direct merge or normal PR from the feature branch would therefore import unrelated history.
 
-2. **Reminder refresh coupled to conversation gateway online state**  
-   `refreshReminders()` was behind the `payload.hermes.online` branch. This incorrectly made the HUD declare reminder authority unavailable when the conversation gateway was offline, even though durable Hermes reminder state is a separate authoritative surface.
+Do not:
 
-3. **Unsupported schedule examples in the HUD**  
-   The create form advertised prose such as `tomorrow at 9am` and `every weekday at 8am`. The accepted Hermes parser proof only established forms including `30m` and `every 30m` for this Orion contract.
+- merge `feature/p6-05-reminder-crud-hud` directly into main;
+- rebase or force-push the qualified evidence branch merely to make history cleaner;
+- merge main into the qualified feature branch before integration;
+- run the old `Invoke-P6-05-FinalizeCorrection.ps1` against the completed implementation.
 
-4. **Create path did not bind an explicit delivery intent**  
-   The local adapter has no live chat origin from which Hermes could infer a delivery destination. The accepted Hermes `cronjob()` surface supports `deliver`, and its structured job projection includes the stored delivery token.
+## Current integration direction
 
-A separate read-only review also established that `HERMES_PROFILE` is not part of the accepted pin's cron-home precedence for this adapter; explicit `HERMES_HOME` remains the correct profile-binding control.
+The researched integration path is a fresh branch from current main followed by a cherry-pick of **only**:
 
-## 4. Research conclusions used for the correction
+`b255aeb4a86daa2fc2a54688a2cae7a4b9ec9456`
 
-Research against the accepted Hermes pin established:
+The integration procedure must first verify clean state, exact refs, identical preimages for the 16 P6-05 files between current main and the source commit's parent, and no in-progress cherry-pick. The cherry-pick should use `-x` for public-branch provenance. Any conflict must cause an immediate abort and stop; no improvisational conflict resolution is authorized in the same unit.
 
-- `tools.cronjob_tools.cronjob()` accepts `deliver: Optional[str] = None`;
-- native create routes `deliver` through Hermes' own normalization/context-resolution path;
-- formatted native job output includes the persisted `deliver` field, allowing Orion to verify the create result rather than assuming the option was honored;
-- `deliver="discord"` is a native platform delivery intent;
-- actual fire-time Discord delivery still depends on Hermes resolving a configured Discord home destination;
-- historical Orion acceptance already recorded that the accepted COMPANION setup did not have a Discord home channel configured;
-- therefore P6-05 should bind the intended native delivery token but **must not** configure a channel or claim live Discord delivery;
-- exact Discord delivery remains a P6-06 prerequisite and live acceptance item.
+After the cherry-pick, the integration candidate must prove:
 
-The earlier patch-generation failures were not architecture failures. They were caused by brittle byte/format-sensitive edit scripts being applied to a dirty working tree. That method is retired for this correction.
+- same 16-file scope;
+- source/integration stable patch IDs match;
+- compile and JavaScript syntax gates pass;
+- 41/41 reminder tests pass;
+- full HUD suite passes;
+- `git diff --check` passes;
+- integration branch is exactly one commit ahead of its main base;
+- working tree is clean.
 
-## 5. Correction successfully written on 2026-10-05
+Do not push or merge that integration candidate without separate authorization.
 
-The semantic correction script reached:
+## P6-06 remains separate
 
-- `P6_05_CORRECTION_SCOPE=PASS`
-- `P6_05_HERMES_BASELINE=PASS`
-- `P6_05_SEMANTIC_CORRECTION_WRITE=PASS`
+P6-06 is not started by P6-05 integration. It still requires separate authorization for live acceptance, including exact Discord destination qualification, one bounded live reminder, delivery evidence, missed/manual-off behavior, interrupted-run handling, duplicate suppression, delivery failure, sibling isolation, and corruption-preservation coverage where destructive testing is required.
 
-The corrected local P6-05 source now includes:
+For the complete current integration research and process lessons, use:
 
-- `EXPECTED_HERMES_VERSION = "0.20.6"`;
-- runtime project-version qualification through the accepted Hermes checkout's `[project]` metadata;
-- fail-closed version mismatch behavior;
-- `REMINDER_DELIVERY_TARGET = "discord"`;
-- native create with `deliver=REMINDER_DELIVERY_TARGET`;
-- verification that Hermes' returned job preserved the requested delivery token;
-- schedule UI examples narrowed to `30m or every 30m`;
-- bridge test fixtures changed from unsupported prose schedule syntax to `30m`;
-- `refreshReminders()` executed independently before the conversation `if (online)` branch;
-- scheduler-active / scheduler-inactive presentation derived from reminder authority response;
-- removal of the false statement `Hermes offline // reminder authority unavailable`.
-
-The correction then passed:
-
-- Python compile;
-- frontend hardening: **28/28**;
-- reminder suite: **36/36**.
-
-The reminder-suite increase from 33 to 36 includes new regression coverage for:
-
-- Hermes project-version reading;
-- version mismatch fail-closed behavior;
-- accepted schedule examples / reconnect-independent reminder refresh behavior.
-
-## 6. Current stopping point: one stale Phase 3 static assertion
-
-The correction did **not** fail because the new reminder behavior was incorrect.
-
-`hud/tests/test_phase3_workspace.py::test_status_observations_sync_before_online_branch`
-still asserts the old byte-adjacent sequence:
-
-`syncSystemWorkspace();` immediately followed by `if (online) {`.
-
-The corrected architecture intentionally inserts:
-
-`await refreshReminders();`
-
-between those statements so reminder authority is refreshed independently of conversation-gateway online state.
-
-The existing test's semantic intent is still valid: bridge/credential observations must be synchronized before the online-only conversation branch. The test implementation is now stale because it encodes adjacency instead of ordering.
-
-No further source correction should be reapplied. The next edit is **test-only**.
-
-## 7. Exact next implementation unit
-
-Modify only:
-
-`hud/tests/test_phase3_workspace.py`
-
-Replace `test_status_observations_sync_before_online_branch` with a function-scoped ordering contract that:
-
-1. isolates the `refreshStatus` source block;
-2. proves bridge status assignment is present;
-3. proves credential status assignment is present;
-4. proves `syncSystemWorkspace();` is present;
-5. proves `await refreshReminders();` is present;
-6. proves `if (online) {` is present;
-7. asserts ordering:
-   - bridge observation
-   - credential observation
-   - system-workspace synchronization
-   - authoritative reminder refresh
-   - conversation-online branch
-
-This preserves the original Phase 3 contract and adds the accepted P6-05 independence requirement without relying on exact multiline formatting.
-
-Do not rerun any of the earlier correction scripts. They already wrote the intended P6-05 source correction.
-
-## 8. Final qualification gate after the test-only repair
-
-Run, in this order:
-
-1. Python compile for reminder adapter/projection/bridge.
-2. `test_phase3_workspace.py` targeted regression: expect 10/10.
-3. frontend hardening: 28 tests.
-4. reminder suite: 36 tests.
-5. Phase 3 workspace: 10 tests.
-6. UI convergence: 8 tests.
-7. bridge regression: 14 tests.
-8. POST connection-close regression: 2 tests.
-
-Focused expected total: **98 passing tests**.
-
-Then run the complete HUD Python discovery:
-
-`python -m unittest discover -s .\hud\tests -p "test_*.py" -v`
-
-Record the observed count rather than assuming a fixed total.
-
-Finally:
-
-- `git diff --check`;
-- verify exactly the same twelve P6-05 working-tree paths and no others;
-- inspect the final diff;
-- write a read-only final correction report;
-- confirm no `run` reminder route/control;
-- confirm no generic cron proxy;
-- confirm unsupported schedule prose is absent;
-- confirm the version gate is present;
-- confirm reminder refresh precedes the conversation `online` gate;
-- confirm Discord delivery intent is bound but no live-delivery claim is made.
-
-Only after that gate is green should P6-05 be considered **ready for commit authorization**.
-
-## 9. P6-06 carry-forward
-
-P6-06 remains a separate live-acceptance phase. It must not be folded into the P6-05 repository gate.
-
-The live matrix still needs to prove, under separate explicit authorization:
-
-- one bounded live one-shot;
-- actual Discord delivery;
-- HUD projection/reconnect;
-- manual-off missed-reminder behavior;
-- restart/interrupted-run `unknown`;
-- duplicate suppression;
-- delivery failure;
-- sibling failure isolation;
-- corruption preservation using disposable evidence where destructive testing is required.
-
-Because the accepted COMPANION configuration historically has no Discord home channel configured, P6-06 must first qualify/configure an exact delivery destination under a separate production-configuration authorization. P6-05 must not silently create one.
-
-## 10. Prepared continuation tooling
-
-Use:
-
-`scripts/phase6/Invoke-P6-05-FinalizeCorrection.ps1`
-
-The script is deliberately a **resume/finalize** gate, not another source correction script. It:
-
-- verifies the exact Orion branch/head and twelve-path working-tree scope;
-- verifies the 2026-10-05 semantic source correction is already present;
-- performs only the one AST-scoped stale-test repair if required;
-- compiles the candidate before writing it;
-- runs the targeted + focused + full HUD regression gates;
-- checks `git diff --check`;
-- rechecks the twelve-path scope;
-- writes a final report under `%TEMP%`.
-
-It does not commit, push, merge, deploy, start/restart Hermes, create/run a reminder, or change COMPANION configuration.
-
-## 11. Resume rule
-
-At the next session, start from this document and the prepared finalization script.
-
-Do **not**:
-- regenerate the whole P6-05 implementation;
-- rerun earlier brittle patch/correction scripts;
-- change the accepted Hermes pin;
-- configure Discord as a side effect of P6-05;
-- claim P6-05 closed merely because the 36 reminder tests pass.
-
-The immediate next goal is narrow:
-
-> repair one stale Phase 3 static test, run the complete final gate, review the final twelve-file diff, then decide whether P6-05 is ready for commit authorization.
+`docs/phase6/p6-05-merge-readiness-and-integration-plan-2026-10-06.md`
