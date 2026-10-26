@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import importlib.util
-import json
+import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -36,30 +37,34 @@ class FakeContext:
 class DC02MutationQuestionRoutingTests(unittest.TestCase):
     def setUp(self):
         plugin._INFLIGHT = None
+        self.tmp = tempfile.TemporaryDirectory()
+        self.vault = Path(self.tmp.name) / "vault"
+        self.vault.mkdir()
+        self.old_vault = os.environ.get("ORION_VAULT_ROOT")
+        os.environ["ORION_VAULT_ROOT"] = str(self.vault)
+
+    def tearDown(self):
+        if self.old_vault is None:
+            os.environ.pop("ORION_VAULT_ROOT", None)
+        else:
+            os.environ["ORION_VAULT_ROOT"] = self.old_vault
+        self.tmp.cleanup()
 
     def test_question_about_renaming_notes_still_retrieves(self):
-        calls = []
-
-        def fake_retriever(params):
-            calls.append(dict(params))
-            return json.dumps({
-                "success": True,
-                "retrieval_count": 1,
-                "sources": [{
-                    "source_relative_path": "Note Workflow.md",
-                    "source_sha256": "a" * 64,
-                    "record_id": "r1",
-                    "content": "Rename notes only after checking backlinks.",
-                }],
-                "mutation_performed": False,
-            })
-
-        original = plugin._get_retriever_handler
-        plugin._get_retriever_handler = lambda: fake_retriever
-        self.addCleanup(setattr, plugin, "_get_retriever_handler", original)
-
+        surface = "Rename notes only after checking backlinks and confirming the destination. " * 2
+        (self.vault / "Note Workflow.md").write_text(surface, encoding="utf-8")
         ctx = FakeContext([
-            {"ok": True, "result": {"hits": [{"record_id": "r1", "score": 0.82}]}}
+            {
+                "ok": True,
+                "result": {
+                    "hits": [{
+                        "record_id": "r1",
+                        "score": 0.82,
+                        "literal_surface": surface,
+                        "session_id": plugin.VAULT_STUDY_SESSION_ID,
+                    }]
+                },
+            }
         ])
         plugin.register(ctx)
         result = ctx.hooks["pre_llm_call"](
@@ -71,7 +76,6 @@ class DC02MutationQuestionRoutingTests(unittest.TestCase):
         self.assertIn('status="relevant"', result["context"])
         self.assertIn("Note Workflow.md", result["context"])
         self.assertEqual(len(ctx.mcp_calls), 1)
-        self.assertEqual(len(calls), 1)
 
     def test_actual_rename_request_still_bypasses_automatic_recall(self):
         ctx = FakeContext([])
