@@ -1,0 +1,69 @@
+task_id: orion-phase3-phase5-closure-2026-09-21
+goal: >-
+  Close the remaining PRD v2.8 Phase 3 presentation gap, finish Phase 4 voice/wake
+  acceptance without reviving a weak wake approach, and carry Phase 5 from source-only
+  previews to approval-bound recoverable document actions without weakening authority boundaries.
+success_criteria:
+  phase3:
+    - A bounded summonable HUD panel exists and is visibly driven by an explicit display path.
+    - Summoned content is keyboard-accessible, safely rendered, dismissible, and preserves Conversation/System/Memory state.
+  phase4:
+    - PTT/STT/same-session/visible reply remain accepted.
+    - Audible TTS, Speak Replies OFF, and interruption of both playback and active generation pass on Windows.
+    - Wake is either accepted through a supported local Hermes engine for "Hey Orion" or explicitly dispositioned by the owner; no silent requirement downgrade.
+  phase5:
+    - Exact action/target/diff approval is human-resolved through Hermes.
+    - Fresh one-operation authorization cannot be replayed or widened by cached/session/always/yolo/automatic modes.
+    - Final filesystem state is revalidated immediately before mutation.
+    - Edit/move failures are classified as no-mutation, committed, or recovery-required with evidence.
+    - Live default roots are never used by source-only mutation tests.
+state: active_source_only
+current_approach: >-
+  Keep live mutation disabled. Prove approval integrity and Windows disposable-root
+  mutation/recovery separately, then qualify the real Hermes-to-HUD approval path,
+  then install preview-only, then enable one bounded mutation class.
+confirmed_findings:
+  - P3-01 through P3-05A are merged/accepted, but PRD Phase 3 still requires a summonable-panel shell.
+  - Phase 4 P4-04A audio gateway compatibility is accepted; direct Edge/P4-04A audio recovered after intermittent connectivity failure.
+  - PR #16 already aborts in-flight TTS, stops active Audio playback, invalidates queued speech with an epoch, and invokes HUD STOP when PTT interrupts.
+  - Custom Hey Orion v1/v2 are rejected and no v3 is authorized under the same experiment.
+  - The accepted Hermes v0.20.6 pin already contains Sherpa open-vocabulary KWS; no dependency upgrade is inherently required to test arbitrary phrases.
+  - Sherpa Hey Orion was already screened at roughly 6/10 at sensitivity 0.5 and 0.4, so Sherpa is not an unexplored cure; the remaining supported-engine question is whether threshold/boost tuning can materially improve recall without unacceptable false wakes.
+  - Pinned Hermes maps sensitivity to Sherpa keywords_threshold but does not expose Sherpa keywords_score, leaving a possible narrow source-only tuning seam if threshold-only testing fails.
+  - P5-01 is merged at 33c39d4.
+  - P5-02A has fresh nonce-bound plans, exact cached bytes/diffs, private per-attempt approval keys, a post-approval observer, installed-Hermes dispatcher probes, and exact HUD description rendering.
+  - The isolated HUD fixture passed simulated DENY and ALLOW ONCE with mutation_performed=false and now exits cleanly on Ctrl+C.
+  - The P5 branch contains an unregistered disposable mutation candidate with native ReplaceFileW for edit and exclusive-create/verify/delete sequencing for draft moves.
+  - Disposable mutation guards now reject raw/resolved overlap with the live default roots and require a disjoint recovery root.
+  - The production move design still needs Windows handle-held source identity/deletion hardening to narrow the final read-to-unlink TOCTOU window; CreateFileW sharing modes and handle-based deletion provide a supported route.
+  - The pinned Hermes session SSE already carries tool.started arguments to the HUD, so the display/summon tool can use the existing authenticated stream instead of adding a second callback server/token.
+  - A bounded P3-05B summon-state prototype (text/evidence/link only, no iframe/network/storage authority) passed 7/7 independent Node tests.
+  - OWASP transaction-authorization guidance aligns with the design: authorization must be transaction-bound, short-lived, unique, replay-resistant, sequential, and rechecked at execution.
+failed_methods:
+  - method: Custom openWakeWord Hey Orion v1/v2
+    reason: Live detection remained far below the working >=95% gate; repeating the same training design is not justified.
+  - method: Rely on plugin pre_tool_call approval alone for protected writes
+    reason: Pinned Hermes has explicit bypass/cached modes and callback/dispatch exception paths that cannot prove a fresh human approval in every state.
+  - method: Treat isolated HUD terminal logs as proof of visual inspection
+    reason: Logs prove transport/decision routing, not that the human actually inspected the complete rendered target/diff.
+  - method: Assume a cross-root file move can be one atomic filesystem operation
+    reason: Inbox and vault are separate policy roots and may not always share a volume; exclusive create + verify + guarded source removal is more honest.
+genuine_blockers:
+  - Windows execution of the latest 37-test P5 source suite, including native ReplaceFileW behavior.
+  - Human confirmation of the exact approval-card visual markers from the isolated HUD test.
+  - A no-write installed-Hermes gateway-to-HUD approval run proving the private fresh-once handler gate on the real runtime path.
+  - Stable-enough TTS/provider connectivity for final Phase 4 audible acceptance.
+  - Bounded Windows/JLab qualification of the already-pinned Sherpa Hey Orion path beyond the previously tested 0.5/0.4 settings, with false-wake screening before any source patch.
+risks_to_resolve_before_live_write:
+  - Production approval should use one authoritative fresh handler-side transaction gate, not two independently cacheable gates.
+  - Final path/reparse checks are still path-based; define the local threat model and add the tightest practical pre-mutation revalidation against parent/target replacement races.
+  - Recovery receipts should survive process restart and include plan hash, attempt id, decision, before/after hashes, final classification, and recovery artifact identity.
+  - Recovery storage ACL/retention and restore behavior are not production-designed yet.
+  - Final draft deletion should be performed against a held Windows file identity, not only a path re-read, before real move mutation is enabled.
+  - ReplaceFileW has documented partial-state error codes; production recovery must inspect actual post-error state rather than infer from return code alone.
+next_action: >-
+  On Windows, pull PR #23 head 84191ec (or its current fast-forward successor), run the 37-test test_p5*.py discovery,
+  then the 2-test installed-Hermes dispatcher probe, then plugin doctor. Do not
+  start/install/enable the live plugin. If those pass, record the evidence and
+  proceed to a no-write real gateway/HUD fresh-once approval probe.
+remaining_work_allowance: source-only planning, tests, docs, and disposable prototypes; no live mutation authorization
