@@ -1,0 +1,14 @@
+FROM orion-hermes-iai:v2026.8.18-iai3.0.8-m5-extidle-b6d356e
+
+LABEL org.orion.p4.iai-daemon-supervision="s6-rc"
+LABEL org.orion.p4.runtime-recovery="durable-startup-v1"
+
+COPY s6/orion-iai-daemon/run /etc/s6-overlay/s6-rc.d/orion-iai-daemon/run
+
+RUN set -eux; \
+    mkdir -p /etc/s6-overlay/s6-rc.d/orion-iai-daemon/dependencies.d; \
+    mkdir -p /etc/s6-overlay/user-bundles.d/user/contents.d; \
+    printf 'longrun\n' > /etc/s6-overlay/s6-rc.d/orion-iai-daemon/type; \
+    : > /etc/s6-overlay/s6-rc.d/orion-iai-daemon/dependencies.d/base; \
+    : > /etc/s6-overlay/user-bundles.d/user/contents.d/orion-iai-daemon; \
+    chmod 0755 /etc/s6-overlay/s6-rc.d/orion-iai-daemon/run
