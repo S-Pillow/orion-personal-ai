@@ -19,21 +19,25 @@ The public entry point is:
 
 `scripts/dc02/orion_vault_markdown_ingest.py`
 
-It is a small transaction coordinator that loads and re-exports the tested implementation primitives from:
+It is the transaction coordinator and the only supported apply CLI. It loads/re-exports implementation primitives from:
 
 `scripts/dc02/orion_vault_markdown_ingest_core.py`
 
-The split keeps source-boundary and native iai primitives stable while making the crash/order invariants explicit at the public apply boundary.
+The core module is not a transaction entry point: direct execution and imported `core.main()` fail closed. The former executable `.source` sidecar was removed, so no second legacy apply program remains in the repository.
 
 ## Native iai contract
 
 `iai_mcp.study.study_document()` is the ingestion primitive. Orion pins `iai-pme==3.3.0`, validates the vendor signatures it relies on, uses `session_id="vault-study"`, and passes `critic=None`.
 
-For current files, iai performs its normal extraction, chunking, content-hash idempotency, near-duplicate reinforcement, graph weaving, supersession, replay metadata, and recall self-test.
+For current files, iai performs its normal plaintext extraction for `.md`, chunking, content-hash idempotency, near-duplicate reinforcement, graph weaving, supersession, replay metadata, and recall self-test.
 
 For vanished sources, Orion calls the same vendor primitive with `text=""` and the previous `source_name` so fade/supersession remains native iai behavior.
 
 The durable ownership signal is iai's `doc:<slug>` tag, not `session_id`. Orion derives tags through iai 3.3.0's own `_doc_tag()` and fails closed on current, historical, or active-recovery ownership collisions.
+
+Pinned iai 3.3.0 drops a nonempty whole-document chunk when `len(text.strip()) < 12`. Orion therefore rejects every nonzero-byte new/changed Markdown source below that same capture floor before pending/owner/store mutation. A true zero-byte file remains valid and follows native iai empty-document semantics.
+
+For the pinned native study primitive, Orion also treats the returned report as an acceptance contract: skipped/truncated data, inconsistent chunk accounting, an incomplete recall-test sample, or `recall_verified != recall_tested` prevents checkpoint commit. This is stricter than iai's best-effort warning behavior by design.
 
 ## Source admission
 
@@ -45,6 +49,8 @@ A source is admitted only when it is:
 - not a symlink/reparse point and not under a traversed reparse directory;
 - strict UTF-8;
 - no larger than 2,000,000 bytes by default.
+
+Source reads are bounded to the configured ceiling plus one byte and are checked for file-handle/path stability, size, mtime, and SHA-256 consistency. A file that grows or is replaced during admission/preflight fails closed rather than being buffered without bound or checkpointed from a stale snapshot.
 
 The complete admitted corpus is capped at 5,000 files by default. Recursive enumeration permission/I/O errors abort the scan instead of producing a smaller inventory that could become a false deletion plan.
 
@@ -87,7 +93,7 @@ Pending schema v2 contains only recovery metadata:
 
 It never stores note bodies.
 
-The journal is intentionally durable **before `MemoryStore` is opened**, not merely before `study_document()` is called. This keeps recovery fail-closed even if native store construction performs writes or fails partway through initialization.
+The journal is intentionally durable **before `MemoryStore` is opened**, not merely before `study_document()` is called. On POSIX, newly created metadata directory entries are fsynced through their parent chain before transaction use, and atomic replacements fsync the destination directory. Windows replacement uses `MoveFileExW(..., WRITE_THROUGH)`; the implementation does not claim a stronger cross-platform sudden-power-loss guarantee than the OS primitive provides.
 
 If store open or a later study/fade step fails, the successful checkpoint remains unchanged and the pending journal remains. On retry, every possibly-mutated path is forced through reconciliation. This covers reverted changed files, newly studied files deleted before retry, equal base/target file maps, and failures that occur before the first semantic call.
 
@@ -111,7 +117,7 @@ Owner schema v1 binds this DC-02 ingestion stream to exactly:
 
 The marker prevents a fresh second state file or a different vault from sequentially reusing the same iai store and silently repurposing the same vendor `doc:` tags.
 
-Plan-only validates an existing owner marker but never creates one. On the first apply to an unowned store, Orion writes the owner marker only after source/state/pending preflight succeeds and while the store-wide apply lock is held. A crash after that write is safe: the store is merely reserved for the same adapter configuration and no semantic success is implied.
+Plan-only validates an existing owner marker but never creates one. On the first mutating apply to an unowned store, pending recovery is made durable first, then the owner is claimed, then the native store is opened. A no-mutation first apply commits its successful state before claiming ownership.
 
 ## Apply serialization
 
@@ -122,9 +128,11 @@ iai's `AccessMode.SHARED` permits multiple SHARED holders, so vendor locking alo
 
 They are nonblocking OS advisory locks (`flock` on POSIX, `msvcrt.locking` on Windows), acquired in deterministic canonical-path order. Partial acquisition is rolled back if a later lock is unavailable.
 
-The state lock prevents two writers from racing one checkpoint/pending journal. The store lock prevents distinct state files from concurrently mutating the same iai store. The durable owner marker additionally prevents sequential cross-vault/cross-state reuse of that store.
+The state lock prevents two Orion adapter writers from racing one checkpoint/pending journal. The store lock prevents distinct Orion state files from concurrently mutating the same iai store. The durable owner marker additionally prevents sequential cross-vault/cross-state reuse of that store.
 
-Apply holds both locks across state/owner/pending validation, recovery classification, semantic work, native store close, final inventory verification, checkpoint commit, and pending cleanup.
+These locks do **not** serialize unrelated native iai SHARED clients. The first operator bootstrap must therefore be performed with the normal iai daemon/Hermes writer stopped, as a runtime isolation precondition rather than an adapter lock guarantee.
+
+Apply holds both Orion locks across state/owner/pending validation, recovery classification, semantic work, native store close, final inventory verification, checkpoint commit, and pending cleanup.
 
 Plan-only never creates or acquires either lock.
 
@@ -146,20 +154,33 @@ No successful checkpoint is committed when any of these occurs:
 
 - pinned iai package/signature assumptions differ;
 - enumeration, containment, reparse, UTF-8, regular-file, size, or corpus-count checks fail;
+- a nonzero new/changed Markdown source falls below iai 3.3.0's 12-character capture floor;
 - current, historical, or active-pending `doc:` ownership collides;
 - persisted checkpoint or pending vendor tags are inconsistent;
 - state/pending schema, session, vault root, iai version, or store root is inconsistent;
 - an existing store-owner marker does not match the selected vault/store/state tuple;
 - state, pending, owner, either lock file, or the iai store is inside the vault;
 - canonical `hippo/brain.sqlite3` is absent for apply;
-- either apply lock is already held;
+- either Orion apply lock is already held;
 - owner or pending metadata cannot be written atomically before direct-store open;
 - native store open/close fails;
 - iai reports skipped or truncated study data;
+- native chunk accounting is inconsistent;
+- the pinned native recall self-test is incomplete or misses any tested inserted/reinforced chunk;
 - a current note changes before/during study;
 - a deleted source reappears before/during fade;
 - the final vault inventory differs from the apply-defining inventory;
 - the successful checkpoint cannot be written atomically.
+
+## Known boundaries retained intentionally
+
+The adapter does not invent semantics that iai 3.3.0 does not expose reliably:
+
+- iai's internal `_supersede_missing()` catches/logs some failures and exposes only a superseded count, so Orion cannot prove from the public `study_document()` report that every requested fade succeeded when zero is also a legitimate result;
+- native tag-add failures inside iai capture paths may be logged internally rather than surfaced as a dedicated report error;
+- on a first Orion bootstrap with no historical Orion checkpoint, current files can all be studied, but Orion has no authoritative prior path inventory from which to decide that arbitrary pre-existing `doc:` tags in an already-populated unmanaged store should be faded. Bootstrap calibration must therefore inspect/confirm the canonical store rather than auto-sweeping unknown ownership.
+
+Those are vendor/API or bootstrap-calibration boundaries, not reasons to add a parallel semantic engine in Orion.
 
 ## Operator modes
 
@@ -193,7 +214,7 @@ Apply remains explicit:
   --apply
 ```
 
-The iai daemon/Hermes writer should still be stopped for the first operator bootstrap so direct-store maintenance is isolated from normal runtime work.
+The iai daemon/Hermes writer must be stopped for the first operator bootstrap so direct-store maintenance is isolated from normal runtime work.
 
 The first full bootstrap is a later MODERATE-memory operation. It does not load the Orion qwen model and does not write the vault.
 
@@ -213,7 +234,9 @@ This ticket does not:
 ## Acceptance
 
 - deterministic Markdown-only admission;
-- fail-closed enumeration/containment/reparse/source limits;
+- bounded fail-closed enumeration/containment/reparse/source limits;
+- nonzero sources that native iai would reduce to zero chunks fail before semantic mutation;
+- pinned-native study reports must pass chunk accounting and recall self-test verification before checkpoint;
 - vendor ownership collision guards for current, historical, and active-pending paths;
 - content-hash planning and current-before-deleted native ordering;
 - durable pending recovery written before direct native store open;
@@ -222,7 +245,7 @@ This ticket does not:
 - deleted-source reappearance and full-inventory drift fail closed;
 - schema-v2 state/pending metadata bind to the canonical iai store;
 - a schema-v1 store-owner marker prevents sequential cross-vault/cross-state store reuse;
-- same-state and same-store concurrent applies are serialized by cross-platform advisory locks;
+- same-state and same-store Orion applies are serialized by cross-platform advisory locks;
 - atomic metadata-only checkpoint/pending/owner writes outside the vault;
 - plan-only performs zero semantic/checkpoint/pending/owner/lock mutation;
 - source tests pass on Windows and Ubuntu.
