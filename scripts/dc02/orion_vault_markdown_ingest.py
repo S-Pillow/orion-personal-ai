@@ -286,6 +286,13 @@ def _validate_state_source_name(relative_path: str) -> None:
         raise AdapterError(f"state_source_name_not_markdown:{relative_path}")
 
 
+def _vault_source_path(vault_root: Path, relative_path: str) -> Path:
+    """Map one already-vetted POSIX source name back under the vault root."""
+    _validate_state_source_name(relative_path)
+    root_real = vault_root.resolve(strict=True)
+    return root_real.joinpath(*PurePosixPath(relative_path).parts)
+
+
 def _validate_success_timestamp(value: Any) -> None:
     if not isinstance(value, str) or not value:
         raise AdapterError("state_success_timestamp_invalid")
@@ -625,7 +632,6 @@ def load_pending_journal(
         raise AdapterError("pending_paths_invalid")
     seen_casefold: dict[str, str] = {}
     seen_tags: dict[str, str] = {}
-    current_by_tag = {tag: rel for rel, tag in current_doc_tags.items()}
     paths: list[str] = []
     for raw_rel, raw_meta in paths_raw.items():
         if not isinstance(raw_rel, str):
@@ -650,11 +656,6 @@ def load_pending_journal(
         if tag_owner is not None and tag_owner != raw_rel:
             raise AdapterError(f"pending_doc_tag_collision:{stored_tag}:{tag_owner}:{raw_rel}")
         seen_tags[stored_tag] = raw_rel
-        current_owner = current_by_tag.get(stored_tag)
-        if current_owner is not None and current_owner != raw_rel:
-            raise AdapterError(
-                f"pending_doc_tag_collision:{stored_tag}:{raw_rel}:{current_owner}"
-            )
         paths.append(raw_rel)
 
     state_files = state.get("files") if isinstance(state, Mapping) else None
@@ -670,6 +671,13 @@ def load_pending_journal(
     if state_checkpoint_id == base_checkpoint_id:
         if state_digest != base_digest:
             raise AdapterError("pending_base_digest_mismatch")
+        current_by_tag = {tag: rel for rel, tag in current_doc_tags.items()}
+        for stored_tag, pending_owner in seen_tags.items():
+            current_owner = current_by_tag.get(stored_tag)
+            if current_owner is not None and current_owner != pending_owner:
+                raise AdapterError(
+                    f"pending_doc_tag_collision:{stored_tag}:{pending_owner}:{current_owner}"
+                )
         return ordered, "active"
     raise AdapterError("pending_state_mismatch")
 
@@ -786,6 +794,9 @@ def apply_plan(
             raise AdapterError(f"markdown_changed_during_study:{rel}")
         reports["studied"][rel] = dict(report)
     for rel in plan.deleted:
+        source_path = _vault_source_path(vault_root, rel)
+        if os.path.lexists(source_path):
+            raise AdapterError(f"markdown_reappeared_before_fade:{rel}")
         try:
             report = study_document(
                 store, text="", source_name=rel, session_id=SESSION_ID, critic=None
@@ -795,6 +806,8 @@ def apply_plan(
         if not isinstance(report, Mapping):
             raise AdapterError(f"fade_invalid_report:{rel}")
         _validate_study_report(rel, report)
+        if os.path.lexists(source_path):
+            raise AdapterError(f"markdown_reappeared_during_fade:{rel}")
         reports["faded"][rel] = dict(report)
     return reports
 
@@ -1046,6 +1059,12 @@ def main(argv: list[str] | None = None) -> int:
             checkpoint_id = target_checkpoint_id
         elif pending_status != "completed" and state.get("successful_run_utc") is None:
             checkpoint_id = secrets.token_hex(32)
+
+        final_notes = scan_markdown_vault(
+            vault_root, max_files=args.max_files, max_file_bytes=args.max_file_bytes
+        )
+        if final_notes != notes:
+            raise AdapterError("vault_changed_before_checkpoint")
 
         payload = _state_payload(
             vault_root, notes, doc_tags, runtime.version, checkpoint_id
