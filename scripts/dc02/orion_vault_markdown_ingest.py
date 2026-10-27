@@ -47,6 +47,11 @@ def _bounded_binary_read(
     if max_bytes < 0:
         raise AdapterError("bounded_read_limit_invalid")
     flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    # A FIFO/special file named *.md must not be able to block admission before
+    # the opened-handle regular-file check. O_NONBLOCK is ignored for regular
+    # files, while on POSIX it makes special-file opens fail/return promptly.
+    if os.name != "nt":
+        flags |= getattr(os, "O_NONBLOCK", 0)
     fd: int | None = None
     try:
         fd = os.open(str(path), flags)
