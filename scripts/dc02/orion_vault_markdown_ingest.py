@@ -2,8 +2,8 @@
 """Orion DC-02 hardened transaction coordinator.
 
 The implementation primitives live in ``orion_vault_markdown_ingest_core.py``.
-This public entry point adds durable store ownership and coordinates recovery so
-metadata is durable before any direct-store open/mutation can occur.
+This public entry point owns the transaction boundary: durable store ownership,
+recovery ordering, metadata integrity, and the only supported native-store apply.
 """
 
 from __future__ import annotations
@@ -11,6 +11,8 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import secrets
+import stat
 import sys
 import tempfile
 from pathlib import Path
@@ -26,29 +28,22 @@ _core = importlib.util.module_from_spec(_CORE_SPEC)
 sys.modules[_CORE_SPEC.name] = _core
 _CORE_SPEC.loader.exec_module(_core)
 
-# Re-export the tested implementation surface so existing callers/tests continue
-# to import this public module while the transaction coordinator remains small.
-# Loader-only raw source strings are deliberately not exported: they are not part
-# of the adapter contract and must never become an alternate transaction surface.
-_CORE_REEXPORT_DENY = {
-    "main",
-    "_source",
-    "_prefix",
-    "_unsafe_cli",
-    "_marker",
-    "_sep",
-    "_SOURCE_PATH",
-    "_ORION_CORE_LIBRARY_LOAD",
-}
+# Re-export the tested primitive surface. The core's fail-closed ``main`` is not
+# exported: transaction execution belongs to this coordinator only.
 for _name in dir(_core):
-    if not _name.startswith("__") and _name not in _CORE_REEXPORT_DENY:
+    if not _name.startswith("__") and _name != "main":
         globals()[_name] = getattr(_core, _name)
 
 STORE_OWNER_SCHEMA_VERSION = 1
+IAI_MIN_CAPTURE_CHARS = 12
 
 
 def _store_owner_file_for(store_root: Path) -> Path:
-    return Path(_canonical_path_text(store_root)) / "orion" / "vault-markdown-ingest-owner.json"
+    return (
+        Path(_canonical_path_text(store_root))
+        / "orion"
+        / "vault-markdown-ingest-owner.json"
+    )
 
 
 def _store_owner_payload(
@@ -110,10 +105,6 @@ def load_store_owner(
     return raw
 
 
-def _canonical_path_key(path: Path) -> str:
-    return os.path.normcase(_canonical_path_text(path))
-
-
 def _canonical_path_is_within(path: Path, root: Path) -> bool:
     candidate = Path(_canonical_path_text(path))
     boundary = Path(_canonical_path_text(root))
@@ -135,19 +126,51 @@ def validate_state_store_namespace(state_file: Path, store_root: Path) -> None:
         )
 
 
+def validate_metadata_path_integrity(path: Path, role: str) -> None:
+    """Reject existing metadata sidecars that are links/reparse/special files."""
+    if not os.path.lexists(path):
+        return
+    if _is_reparse_point(path):
+        raise AdapterError(f"metadata_path_is_reparse_point:{role}:{path}")
+    try:
+        info = os.lstat(path)
+    except OSError as exc:
+        raise AdapterError(
+            f"metadata_path_stat_failed:{role}:{type(exc).__name__}"
+        ) from exc
+    if not stat.S_ISREG(info.st_mode):
+        raise AdapterError(f"metadata_path_not_regular:{role}:{path}")
+
+
+def validate_store_metadata_root(store_root: Path) -> None:
+    """Require the adapter's store-local metadata directory to be a real dir."""
+    metadata_root = Path(_canonical_path_text(store_root)) / "orion"
+    if not os.path.lexists(metadata_root):
+        return
+    if _is_reparse_point(metadata_root):
+        raise AdapterError(f"store_metadata_root_is_reparse_point:{metadata_root}")
+    try:
+        info = os.lstat(metadata_root)
+    except OSError as exc:
+        raise AdapterError(
+            f"store_metadata_root_stat_failed:{type(exc).__name__}"
+        ) from exc
+    if not stat.S_ISDIR(info.st_mode):
+        raise AdapterError(f"store_metadata_root_not_directory:{metadata_root}")
+
+
 def validate_metadata_path_disjointness(paths: Mapping[str, Path]) -> None:
     """Reject canonical path reuse across state/recovery/owner/store roles."""
-    seen: dict[str, tuple[str, str]] = {}
+    seen: dict[str, str] = {}
     for role, path in paths.items():
         canonical = _canonical_path_text(path)
         key = os.path.normcase(canonical)
-        prior = seen.get(key)
-        if prior is not None:
-            prior_role, _prior_path = prior
+        prior_role = seen.get(key)
+        if prior_role is not None:
             raise AdapterError(
                 f"metadata_path_collision:{prior_role}:{role}:{canonical}"
             )
-        seen[key] = (role, canonical)
+        seen[key] = role
 
 
 def validate_store_semantic_boundary(
@@ -172,6 +195,19 @@ def validate_store_semantic_boundary(
         raise AdapterError(f"canonical_store_db_inside_vault:{db_real}")
 
 
+def validate_owned_store_recovery_presence(
+    owner: Mapping[str, Any] | None,
+    *,
+    state_file: Path,
+    pending_file: Path,
+) -> None:
+    """Do not reinterpret an owned store with lost metadata as a fresh bootstrap."""
+    if owner is None:
+        return
+    if not state_file.exists() and not pending_file.exists():
+        raise AdapterError("owned_store_missing_state_and_pending")
+
+
 def _replace_atomic_durable(source: Path, destination: Path) -> None:
     """Atomically replace a metadata file with crash-durable rename semantics."""
     if os.name == "nt":
@@ -184,7 +220,9 @@ def _replace_atomic_durable(source: Path, destination: Path) -> None:
         flags = 0x00000001 | 0x00000008  # REPLACE_EXISTING | WRITE_THROUGH
         if not move_file_ex(str(source), str(destination), flags):
             error = ctypes.get_last_error()
-            raise OSError(error, f"MoveFileExW failed with error {error}", str(destination))
+            raise OSError(
+                error, f"MoveFileExW failed with error {error}", str(destination)
+            )
         return
 
     os.replace(source, destination)
@@ -250,6 +288,22 @@ def clear_pending_journal(pending_file: Path) -> None:
         raise AdapterError(f"pending_clear_failed:{type(exc).__name__}") from exc
 
 
+def _validate_native_chunk_floor(relative_path: str, note: NoteSnapshot) -> None:
+    """Fail before iai can supersede a nonempty document that yields no chunk."""
+    try:
+        text = Path(note.absolute_path).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise AdapterError(
+            f"markdown_chunk_floor_read_failed:{relative_path}:{type(exc).__name__}"
+        ) from exc
+    stripped = text.strip()
+    if stripped and len(stripped) < IAI_MIN_CAPTURE_CHARS:
+        raise AdapterError(
+            f"markdown_below_iai_capture_floor:{relative_path}:"
+            f"{len(stripped)}<{IAI_MIN_CAPTURE_CHARS}"
+        )
+
+
 def _validate_native_study_accounting(
     relative_path: str,
     note: NoteSnapshot,
@@ -284,10 +338,14 @@ def apply_plan(
     note_list = list(notes)
     by_rel = {note.relative_path: note for note in note_list}
     reports: dict[str, Any] = {"studied": {}, "faded": {}}
+
     for rel in (*plan.new, *plan.changed):
         note = by_rel.get(rel)
         if note is None:
             raise AdapterError(f"plan_missing_current_note:{rel}")
+        if not _resnapshot_matches(note, vault_root):
+            raise AdapterError(f"markdown_changed_before_study:{rel}")
+        _validate_native_chunk_floor(rel, note)
         if not _resnapshot_matches(note, vault_root):
             raise AdapterError(f"markdown_changed_before_study:{rel}")
         try:
@@ -345,31 +403,33 @@ def main(argv: list[str] | None = None) -> int:
     try:
         runtime = load_iai_runtime()
         notes = scan_markdown_vault(
-            vault_root, max_files=args.max_files, max_file_bytes=args.max_file_bytes
+            vault_root,
+            max_files=args.max_files,
+            max_file_bytes=args.max_file_bytes,
         )
         if args.expected_files is not None and len(notes) != args.expected_files:
             raise AdapterError(
                 f"expected_file_count_mismatch:{len(notes)}!={args.expected_files}"
             )
 
-        validate_state_location(state_file, vault_root)
-        validate_state_location(pending_file, vault_root)
-        validate_state_location(state_lock_file, vault_root)
-        validate_state_location(store_lock_file, vault_root)
-        validate_state_location(owner_file, vault_root)
         validate_store_location(store_root, vault_root)
+        validate_store_metadata_root(store_root)
+
+        metadata_paths = {
+            "state": state_file,
+            "pending": pending_file,
+            "state_lock": state_lock_file,
+            "store_lock": store_lock_file,
+            "store_owner": owner_file,
+        }
+        for role, path in metadata_paths.items():
+            validate_metadata_path_integrity(path, role)
+            validate_state_location(path, vault_root)
         validate_state_store_namespace(state_file, store_root)
 
         db_path = store_root / "hippo" / "brain.sqlite3"
         validate_metadata_path_disjointness(
-            {
-                "state": state_file,
-                "pending": pending_file,
-                "state_lock": state_lock_file,
-                "store_lock": store_lock_file,
-                "store_owner": owner_file,
-                "semantic_db": db_path,
-            }
+            {**metadata_paths, "semantic_db": db_path}
         )
 
         canonical_store_present = db_path.is_file()
@@ -394,7 +454,10 @@ def main(argv: list[str] | None = None) -> int:
         plan = build_plan(notes, state)
         if pending_status == "active":
             plan = reconcile_plan_with_pending(
-                plan, notes=notes, state=state, pending_paths=pending_paths
+                plan,
+                notes=notes,
+                state=state,
+                pending_paths=pending_paths,
             )
 
         owner = load_store_owner(
@@ -402,6 +465,11 @@ def main(argv: list[str] | None = None) -> int:
             vault_root=vault_root,
             store_root=store_root,
             state_file=state_file,
+        )
+        validate_owned_store_recovery_presence(
+            owner,
+            state_file=state_file,
+            pending_file=pending_file,
         )
 
         if not args.apply:
@@ -434,31 +502,19 @@ def main(argv: list[str] | None = None) -> int:
                 print("ORION_VAULT_MARKDOWN_INGEST=PLAN_PASS")
             return 0
 
-        # Claim an unowned store only after every source/state/pending preflight
-        # has succeeded and while the store-wide lock is held. A crash after this
-        # write is safe: it only reserves the store for the same configuration.
-        if owner is None:
-            write_store_owner_atomic(
-                owner_file,
-                _store_owner_payload(
-                    vault_root=vault_root,
-                    store_root=store_root,
-                    state_file=state_file,
-                ),
-            )
-
         if pending_status == "completed":
             clear_pending_journal(pending_file)
 
         reports: dict[str, Any] = {"studied": {}, "faded": {}}
         checkpoint_id = _checkpoint_identity(state)
+        owner_claimed_for_mutation = False
+
         if plan.mutation_count:
             target_checkpoint_id = secrets.token_hex(32)
 
-            # The recovery journal must be durable before *opening* the native
-            # store, not merely before study_document(). This keeps direct-store
-            # recovery fail-closed even if store construction performs writes or
-            # fails partway through initialization.
+            # Recovery must exist before either the durable owner claim or native
+            # store open. Thus a crash cannot leave an owned-but-unrecoverable
+            # first bootstrap, and any later store open is journal-covered.
             write_pending_atomic(
                 pending_file,
                 _pending_payload(
@@ -473,10 +529,23 @@ def main(argv: list[str] | None = None) -> int:
                     target_checkpoint_id=target_checkpoint_id,
                 ),
             )
+            if owner is None:
+                write_store_owner_atomic(
+                    owner_file,
+                    _store_owner_payload(
+                        vault_root=vault_root,
+                        store_root=store_root,
+                        state_file=state_file,
+                    ),
+                )
+                owner_claimed_for_mutation = True
+
             try:
                 store = runtime.open_store(store_root)
             except Exception as exc:
-                raise AdapterError(f"store_open_failed:{type(exc).__name__}:{exc}") from exc
+                raise AdapterError(
+                    f"store_open_failed:{type(exc).__name__}:{exc}"
+                ) from exc
             try:
                 reports = apply_plan(
                     store=store,
@@ -497,13 +566,17 @@ def main(argv: list[str] | None = None) -> int:
                 try:
                     store.close()
                 except Exception as exc:
-                    raise AdapterError(f"store_close_failed:{type(exc).__name__}") from exc
+                    raise AdapterError(
+                        f"store_close_failed:{type(exc).__name__}"
+                    ) from exc
             checkpoint_id = target_checkpoint_id
         elif pending_status != "completed" and state.get("successful_run_utc") is None:
             checkpoint_id = secrets.token_hex(32)
 
         final_notes = scan_markdown_vault(
-            vault_root, max_files=args.max_files, max_file_bytes=args.max_file_bytes
+            vault_root,
+            max_files=args.max_files,
+            max_file_bytes=args.max_file_bytes,
         )
         if final_notes != notes:
             raise AdapterError("vault_changed_before_checkpoint")
@@ -517,6 +590,20 @@ def main(argv: list[str] | None = None) -> int:
             store_root=store_root,
         )
         write_state_atomic(state_file, payload)
+
+        # A no-mutation first apply claims ownership only after its successful
+        # checkpoint exists. A mutating first apply already claimed ownership
+        # after the pending journal was durable and before store open.
+        if owner is None and not owner_claimed_for_mutation:
+            write_store_owner_atomic(
+                owner_file,
+                _store_owner_payload(
+                    vault_root=vault_root,
+                    store_root=store_root,
+                    state_file=state_file,
+                ),
+            )
+
         clear_pending_journal(pending_file)
 
         result = _json_result(
@@ -560,7 +647,8 @@ def main(argv: list[str] | None = None) -> int:
                 apply_locks.close()
             except OSError as exc:
                 print(
-                    f"ORION_VAULT_MARKDOWN_INGEST=LOCK_RELEASE_WARNING:{type(exc).__name__}",
+                    "ORION_VAULT_MARKDOWN_INGEST=LOCK_RELEASE_WARNING:"
+                    f"{type(exc).__name__}",
                     file=sys.stderr,
                 )
 
