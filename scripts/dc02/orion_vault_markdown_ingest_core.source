@@ -1,0 +1,6 @@
+#!/usr/bin/env python3
+"""Orion DC-02 Markdown-only native iai ingestion adapter.
+
+This file is an internal source payload for the public transaction coordinator.
+It is not a supported executable entry point.
+"""
