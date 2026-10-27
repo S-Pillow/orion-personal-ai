@@ -453,12 +453,13 @@ def _validate_state_files(files: Mapping[str, Any]) -> None:
         seen_tags[doc_tag] = raw_rel
 
 
-def _empty_state(vault_root: Path, store_root: Path) -> dict[str, Any]:
+def _empty_state(vault_root: Path, store_root: Path | None = None) -> dict[str, Any]:
+    effective_store = store_root if store_root is not None else _default_store_root()
     return {
         "schema_version": STATE_SCHEMA_VERSION,
         "session_id": SESSION_ID,
         "vault_root": str(vault_root.resolve(strict=True)),
-        "store_root": _canonical_path_text(store_root),
+        "store_root": _canonical_path_text(effective_store),
         "iai_version": EXPECTED_IAI_VERSION,
         "successful_run_utc": None,
         "files": {},
@@ -495,7 +496,11 @@ def _checkpoint_identity(state: Mapping[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def load_state(state_file: Path, vault_root: Path, store_root: Path) -> dict[str, Any]:
+def load_state(
+    state_file: Path,
+    vault_root: Path,
+    store_root: Path | None = None,
+) -> dict[str, Any]:
     if not state_file.exists():
         return _empty_state(vault_root, store_root)
     try:
@@ -514,10 +519,16 @@ def load_state(state_file: Path, vault_root: Path, store_root: Path) -> dict[str
     stored_root = str(raw.get("vault_root") or "")
     if os.path.normcase(stored_root) != os.path.normcase(expected_root):
         raise AdapterError(f"state_vault_root_mismatch:{stored_root}:{expected_root}")
-    expected_store = _canonical_path_text(store_root)
-    stored_store = str(raw.get("store_root") or "")
-    if os.path.normcase(stored_store) != os.path.normcase(expected_store):
-        raise AdapterError(f"state_store_root_mismatch:{stored_store}:{expected_store}")
+    stored_store = raw.get("store_root")
+    if store_root is not None:
+        expected_store = _canonical_path_text(store_root)
+        stored_store_text = str(stored_store or "")
+        if os.path.normcase(stored_store_text) != os.path.normcase(expected_store):
+            raise AdapterError(
+                f"state_store_root_mismatch:{stored_store_text}:{expected_store}"
+            )
+    elif stored_store is not None and not isinstance(stored_store, str):
+        raise AdapterError("state_store_root_invalid")
     _validate_success_timestamp(raw.get("successful_run_utc"))
     files = raw.get("files")
     if not isinstance(files, dict):
@@ -603,19 +614,21 @@ def _utc_now_iso() -> str:
 
 def _state_payload(
     vault_root: Path,
-    store_root: Path,
     notes: Iterable[NoteSnapshot],
     doc_tags: Mapping[str, str],
     iai_version: str,
     checkpoint_id: str,
+    *,
+    store_root: Path | None = None,
 ) -> dict[str, Any]:
     if not _SHA256_RE.fullmatch(checkpoint_id):
         raise AdapterError("state_checkpoint_id_invalid")
+    effective_store = store_root if store_root is not None else _default_store_root()
     return {
         "schema_version": STATE_SCHEMA_VERSION,
         "session_id": SESSION_ID,
         "vault_root": str(vault_root.resolve(strict=True)),
-        "store_root": _canonical_path_text(store_root),
+        "store_root": _canonical_path_text(effective_store),
         "iai_version": iai_version,
         "successful_run_utc": _utc_now_iso(),
         "checkpoint_id": checkpoint_id,
@@ -1208,7 +1221,12 @@ def main(argv: list[str] | None = None) -> int:
             raise AdapterError("vault_changed_before_checkpoint")
 
         payload = _state_payload(
-            vault_root, store_root, notes, doc_tags, runtime.version, checkpoint_id
+            vault_root,
+            notes,
+            doc_tags,
+            runtime.version,
+            checkpoint_id,
+            store_root=store_root,
         )
         write_state_atomic(state_file, payload)
         clear_pending_journal(pending_file)
