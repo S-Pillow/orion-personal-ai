@@ -32,8 +32,8 @@ SESSION_ID = "vault-study"
 DEFAULT_VAULT_ROOT = Path(r"C:\Personal\Me")
 MAX_VAULT_FILES = 5000
 MAX_SOURCE_FILE_BYTES = 2_000_000
-STATE_SCHEMA_VERSION = 1
-PENDING_SCHEMA_VERSION = 1
+STATE_SCHEMA_VERSION = 2
+PENDING_SCHEMA_VERSION = 2
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -108,6 +108,32 @@ class _ApplyLockHandle:
         finally:
             os.close(self.fd)
             self.closed = True
+
+
+class _ApplyLocksHandle:
+    """Own the deterministic set of state/store apply locks for one run."""
+
+    def __init__(self, handles: Iterable[_ApplyLockHandle]) -> None:
+        self.handles = tuple(handles)
+        self.closed = False
+
+    def close(self) -> None:
+        if self.closed:
+            return
+        first_error: OSError | None = None
+        for handle in reversed(self.handles):
+            try:
+                handle.close()
+            except OSError as exc:
+                if first_error is None:
+                    first_error = exc
+        self.closed = True
+        if first_error is not None:
+            raise first_error
+
+
+def _canonical_path_text(path: Path) -> str:
+    return str(path.expanduser().resolve(strict=False))
 
 
 def _is_reparse_point(path: Path) -> bool:
@@ -294,12 +320,17 @@ def _apply_lock_file_for(state_file: Path) -> Path:
     return state_file.with_name(state_file.name + ".apply.lock")
 
 
+def _store_apply_lock_file_for(store_root: Path) -> Path:
+    return store_root / "orion" / "vault-markdown-ingest-store.apply.lock"
+
+
 def _acquire_apply_lock(lock_file: Path) -> _ApplyLockHandle:
-    """Acquire a nonblocking cross-process lock for the full apply state machine."""
+    """Acquire one nonblocking cross-process advisory lock."""
     fd: int | None = None
+    canonical = Path(_canonical_path_text(lock_file))
     try:
-        lock_file.parent.mkdir(parents=True, exist_ok=True)
-        fd = os.open(str(lock_file), os.O_CREAT | os.O_RDWR, 0o600)
+        canonical.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(str(canonical), os.O_CREAT | os.O_RDWR, 0o600)
         if os.name == "nt":
             import msvcrt
 
@@ -312,14 +343,36 @@ def _acquire_apply_lock(lock_file: Path) -> _ApplyLockHandle:
             import fcntl
 
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        return _ApplyLockHandle(lock_file, fd)
+        return _ApplyLockHandle(canonical, fd)
     except OSError as exc:
         if fd is not None:
             try:
                 os.close(fd)
             except OSError:
                 pass
-        raise AdapterError(f"apply_lock_unavailable:{lock_file}:{type(exc).__name__}") from exc
+        raise AdapterError(f"apply_lock_unavailable:{canonical}:{type(exc).__name__}") from exc
+
+
+def _acquire_apply_locks(lock_files: Iterable[Path]) -> _ApplyLocksHandle:
+    """Acquire state and store locks in deterministic canonical-path order."""
+    by_key: dict[str, Path] = {}
+    for raw in lock_files:
+        canonical = Path(_canonical_path_text(raw))
+        key = os.path.normcase(str(canonical))
+        by_key[key] = canonical
+    ordered = [by_key[key] for key in sorted(by_key)]
+    handles: list[_ApplyLockHandle] = []
+    try:
+        for path in ordered:
+            handles.append(_acquire_apply_lock(path))
+    except AdapterError:
+        for handle in reversed(handles):
+            try:
+                handle.close()
+            except OSError:
+                pass
+        raise
+    return _ApplyLocksHandle(handles)
 
 
 def _path_is_within(path: Path, root: Path) -> bool:
@@ -400,11 +453,12 @@ def _validate_state_files(files: Mapping[str, Any]) -> None:
         seen_tags[doc_tag] = raw_rel
 
 
-def _empty_state(vault_root: Path) -> dict[str, Any]:
+def _empty_state(vault_root: Path, store_root: Path) -> dict[str, Any]:
     return {
         "schema_version": STATE_SCHEMA_VERSION,
         "session_id": SESSION_ID,
         "vault_root": str(vault_root.resolve(strict=True)),
+        "store_root": _canonical_path_text(store_root),
         "iai_version": EXPECTED_IAI_VERSION,
         "successful_run_utc": None,
         "files": {},
@@ -414,9 +468,9 @@ def _empty_state(vault_root: Path) -> dict[str, Any]:
 def _checkpoint_identity(state: Mapping[str, Any]) -> str:
     """Return a stable successful-checkpoint generation identity.
 
-    New checkpoints carry an explicit random identity. Legacy/empty checkpoints
-    derive a deterministic identity from their validated checkpoint metadata so
-    an interrupted first bootstrap can still be recognized on retry.
+    New checkpoints carry an explicit random identity. Empty checkpoints derive
+    a deterministic identity from their validated source/store metadata so an
+    interrupted first bootstrap can still be recognized on retry.
     """
     explicit = state.get("checkpoint_id")
     if explicit is not None:
@@ -426,23 +480,24 @@ def _checkpoint_identity(state: Mapping[str, Any]) -> str:
     files = state.get("files")
     if not isinstance(files, Mapping):
         raise AdapterError("state_files_invalid")
-    legacy = {
+    base = {
         "schema_version": state.get("schema_version"),
         "session_id": state.get("session_id"),
         "vault_root": state.get("vault_root"),
+        "store_root": state.get("store_root"),
         "iai_version": state.get("iai_version"),
         "successful_run_utc": state.get("successful_run_utc"),
         "files": files,
     }
     encoded = json.dumps(
-        legacy, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        base, sort_keys=True, separators=(",", ":"), ensure_ascii=False
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
 
-def load_state(state_file: Path, vault_root: Path) -> dict[str, Any]:
+def load_state(state_file: Path, vault_root: Path, store_root: Path) -> dict[str, Any]:
     if not state_file.exists():
-        return _empty_state(vault_root)
+        return _empty_state(vault_root, store_root)
     try:
         raw = json.loads(state_file.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -459,6 +514,10 @@ def load_state(state_file: Path, vault_root: Path) -> dict[str, Any]:
     stored_root = str(raw.get("vault_root") or "")
     if os.path.normcase(stored_root) != os.path.normcase(expected_root):
         raise AdapterError(f"state_vault_root_mismatch:{stored_root}:{expected_root}")
+    expected_store = _canonical_path_text(store_root)
+    stored_store = str(raw.get("store_root") or "")
+    if os.path.normcase(stored_store) != os.path.normcase(expected_store):
+        raise AdapterError(f"state_store_root_mismatch:{stored_store}:{expected_store}")
     _validate_success_timestamp(raw.get("successful_run_utc"))
     files = raw.get("files")
     if not isinstance(files, dict):
@@ -544,6 +603,7 @@ def _utc_now_iso() -> str:
 
 def _state_payload(
     vault_root: Path,
+    store_root: Path,
     notes: Iterable[NoteSnapshot],
     doc_tags: Mapping[str, str],
     iai_version: str,
@@ -555,6 +615,7 @@ def _state_payload(
         "schema_version": STATE_SCHEMA_VERSION,
         "session_id": SESSION_ID,
         "vault_root": str(vault_root.resolve(strict=True)),
+        "store_root": _canonical_path_text(store_root),
         "iai_version": iai_version,
         "successful_run_utc": _utc_now_iso(),
         "checkpoint_id": checkpoint_id,
@@ -565,6 +626,7 @@ def _state_payload(
 def _pending_payload(
     *,
     vault_root: Path,
+    store_root: Path,
     state: Mapping[str, Any],
     notes: Iterable[NoteSnapshot],
     doc_tags: Mapping[str, str],
@@ -599,6 +661,7 @@ def _pending_payload(
         "schema_version": PENDING_SCHEMA_VERSION,
         "session_id": SESSION_ID,
         "vault_root": str(vault_root.resolve(strict=True)),
+        "store_root": _canonical_path_text(store_root),
         "iai_version": iai_version,
         "started_run_utc": _utc_now_iso(),
         "base_checkpoint_id": _checkpoint_identity(state),
@@ -653,6 +716,7 @@ def load_pending_journal(
     pending_file: Path,
     *,
     vault_root: Path,
+    store_root: Path,
     state: Mapping[str, Any],
     current_doc_tags: Mapping[str, str],
     doc_tag_fn: Callable[[str], str],
@@ -675,6 +739,10 @@ def load_pending_journal(
     stored_root = str(raw.get("vault_root") or "")
     if os.path.normcase(stored_root) != os.path.normcase(expected_root):
         raise AdapterError(f"pending_vault_root_mismatch:{stored_root}:{expected_root}")
+    expected_store = _canonical_path_text(store_root)
+    stored_store = str(raw.get("store_root") or "")
+    if os.path.normcase(stored_store) != os.path.normcase(expected_store):
+        raise AdapterError(f"pending_store_root_mismatch:{stored_store}:{expected_store}")
 
     base_checkpoint_id = raw.get("base_checkpoint_id")
     target_checkpoint_id = raw.get("target_checkpoint_id")
@@ -969,7 +1037,7 @@ def _json_result(
         "iai_version": runtime.version,
         "session_id": SESSION_ID,
         "vault_root": str(vault_root.resolve(strict=True)),
-        "store_root": str(store_root),
+        "store_root": _canonical_path_text(store_root),
         "state_file": str(state_file),
         "file_count": len(notes),
         "rejected_files": 0,
@@ -1012,8 +1080,9 @@ def main(argv: list[str] | None = None) -> int:
         else _default_state_file(store_root)
     )
     pending_file = _pending_file_for(state_file)
-    lock_file = _apply_lock_file_for(state_file)
-    apply_lock: _ApplyLockHandle | None = None
+    state_lock_file = _apply_lock_file_for(state_file)
+    store_lock_file = _store_apply_lock_file_for(store_root)
+    apply_locks: _ApplyLocksHandle | None = None
     try:
         runtime = load_iai_runtime()
         notes = scan_markdown_vault(
@@ -1025,21 +1094,23 @@ def main(argv: list[str] | None = None) -> int:
             )
         validate_state_location(state_file, vault_root)
         validate_state_location(pending_file, vault_root)
-        validate_state_location(lock_file, vault_root)
+        validate_state_location(state_lock_file, vault_root)
+        validate_state_location(store_lock_file, vault_root)
         validate_store_location(store_root, vault_root)
         db_path = store_root / "hippo" / "brain.sqlite3"
         canonical_store_present = db_path.is_file()
         if args.apply:
             if not canonical_store_present:
                 raise AdapterError(f"canonical_store_missing:{db_path}")
-            apply_lock = _acquire_apply_lock(lock_file)
+            apply_locks = _acquire_apply_locks((state_lock_file, store_lock_file))
 
         doc_tags = validate_doc_tag_uniqueness(notes, runtime.doc_tag)
-        state = load_state(state_file, vault_root)
+        state = load_state(state_file, vault_root, store_root)
         validate_cross_generation_doc_tags(state, doc_tags, runtime.doc_tag)
         pending_paths, pending_status = load_pending_journal(
             pending_file,
             vault_root=vault_root,
+            store_root=store_root,
             state=state,
             current_doc_tags=doc_tags,
             doc_tag_fn=runtime.doc_tag,
@@ -1096,6 +1167,7 @@ def main(argv: list[str] | None = None) -> int:
                     pending_file,
                     _pending_payload(
                         vault_root=vault_root,
+                        store_root=store_root,
                         state=state,
                         notes=notes,
                         doc_tags=doc_tags,
@@ -1136,7 +1208,7 @@ def main(argv: list[str] | None = None) -> int:
             raise AdapterError("vault_changed_before_checkpoint")
 
         payload = _state_payload(
-            vault_root, notes, doc_tags, runtime.version, checkpoint_id
+            vault_root, store_root, notes, doc_tags, runtime.version, checkpoint_id
         )
         write_state_atomic(state_file, payload)
         clear_pending_journal(pending_file)
@@ -1177,8 +1249,14 @@ def main(argv: list[str] | None = None) -> int:
             print(f"ORION_VAULT_MARKDOWN_INGEST=FAIL:{exc}", file=sys.stderr)
         return 1
     finally:
-        if apply_lock is not None:
-            apply_lock.close()
+        if apply_locks is not None:
+            try:
+                apply_locks.close()
+            except OSError as exc:
+                print(
+                    f"ORION_VAULT_MARKDOWN_INGEST=LOCK_RELEASE_WARNING:{type(exc).__name__}",
+                    file=sys.stderr,
+                )
 
 
 if __name__ == "__main__":
