@@ -10,8 +10,10 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-CORE_PATH = ROOT / "scripts" / "dc02" / "orion_vault_markdown_ingest_core.py"
-PUBLIC_PATH = ROOT / "scripts" / "dc02" / "orion_vault_markdown_ingest.py"
+DC02_DIR = ROOT / "scripts" / "dc02"
+CORE_PATH = DC02_DIR / "orion_vault_markdown_ingest_core.py"
+LEGACY_SOURCE_PATH = DC02_DIR / "orion_vault_markdown_ingest_core.source"
+PUBLIC_PATH = DC02_DIR / "orion_vault_markdown_ingest.py"
 
 
 class CoreEntrypointBoundaryTests(unittest.TestCase):
@@ -47,13 +49,34 @@ class CoreEntrypointBoundaryTests(unittest.TestCase):
             stderr.getvalue(),
         )
 
-    def test_public_coordinator_remains_the_only_python_cli(self):
+    def test_legacy_executable_source_sidecar_is_absent(self):
+        self.assertFalse(
+            LEGACY_SOURCE_PATH.exists(),
+            "legacy executable core source sidecar must not be shipped",
+        )
+
+    def test_core_contains_no_transaction_main_or_dynamic_source_loader(self):
         core_text = CORE_PATH.read_text(encoding="utf-8")
-        public_text = PUBLIC_PATH.read_text(encoding="utf-8")
+        self.assertNotIn("store = runtime.open_store(store_root)", core_text)
+        self.assertNotIn("exec(compile(", core_text)
+        self.assertNotIn("orion_vault_markdown_ingest_core.source", core_text)
+        self.assertNotIn("target_checkpoint_id = secrets.token_hex(32)", core_text)
         self.assertIn("internal_core_entrypoint_disabled", core_text)
-        self.assertNotIn("runtime.open_store(store_root)", core_text)
-        self.assertIn("runtime.open_store(store_root)", public_text)
+
+    def test_public_coordinator_is_the_only_transaction_cli(self):
+        public_text = PUBLIC_PATH.read_text(encoding="utf-8")
+        self.assertIn("store = runtime.open_store(store_root)", public_text)
         self.assertIn('if __name__ == "__main__":', public_text)
+        pending_index = public_text.index("write_pending_atomic(")
+        store_open_index = public_text.index("store = runtime.open_store(store_root)")
+        self.assertLess(pending_index, store_open_index)
+
+        transaction_python_files = []
+        for path in DC02_DIR.glob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            if "store = runtime.open_store(store_root)" in text:
+                transaction_python_files.append(path.name)
+        self.assertEqual(transaction_python_files, [PUBLIC_PATH.name])
 
 
 if __name__ == "__main__":
