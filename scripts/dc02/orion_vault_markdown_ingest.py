@@ -32,6 +32,7 @@ DEFAULT_VAULT_ROOT = Path(r"C:\Personal\Me")
 MAX_VAULT_FILES = 5000
 MAX_SOURCE_FILE_BYTES = 2_000_000
 STATE_SCHEMA_VERSION = 1
+PENDING_SCHEMA_VERSION = 1
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -278,6 +279,10 @@ def _default_state_file(store_root: Path) -> Path:
     return store_root / "orion" / "vault-markdown-ingest-state.json"
 
 
+def _pending_file_for(state_file: Path) -> Path:
+    return state_file.with_name(state_file.name + ".pending.json")
+
+
 def _path_is_within(path: Path, root: Path) -> bool:
     try:
         path.resolve(strict=False).relative_to(root.resolve(strict=True))
@@ -467,6 +472,29 @@ def build_plan(
     )
 
 
+def _state_files_payload(
+    notes: Iterable[NoteSnapshot],
+    doc_tags: Mapping[str, str],
+) -> dict[str, Any]:
+    return {
+        note.relative_path: note.state_value(doc_tags[note.relative_path])
+        for note in sorted(
+            notes,
+            key=lambda item: (item.relative_path.casefold(), item.relative_path),
+        )
+    }
+
+
+def _files_digest(files: Mapping[str, Any]) -> str:
+    encoded = json.dumps(
+        files,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -483,13 +511,49 @@ def _state_payload(
         "vault_root": str(vault_root.resolve(strict=True)),
         "iai_version": iai_version,
         "successful_run_utc": _utc_now_iso(),
-        "files": {
-            note.relative_path: note.state_value(doc_tags[note.relative_path])
-            for note in sorted(
-                notes,
-                key=lambda item: (item.relative_path.casefold(), item.relative_path),
-            )
-        },
+        "files": _state_files_payload(notes, doc_tags),
+    }
+
+
+def _pending_payload(
+    *,
+    vault_root: Path,
+    state: Mapping[str, Any],
+    notes: Iterable[NoteSnapshot],
+    doc_tags: Mapping[str, str],
+    plan: SyncPlan,
+    iai_version: str,
+) -> dict[str, Any]:
+    previous_raw = state.get("files") if isinstance(state, Mapping) else None
+    if not isinstance(previous_raw, Mapping):
+        raise AdapterError("state_files_invalid")
+    target_files = _state_files_payload(notes, doc_tags)
+    affected = sorted(
+        set((*plan.new, *plan.changed, *plan.deleted)),
+        key=lambda value: (value.casefold(), value),
+    )
+    if not affected:
+        raise AdapterError("pending_journal_empty")
+
+    paths: dict[str, Any] = {}
+    for rel in affected:
+        tag = doc_tags.get(rel)
+        if tag is None:
+            old = previous_raw.get(rel)
+            if not isinstance(old, Mapping) or not isinstance(old.get("doc_tag"), str):
+                raise AdapterError(f"pending_doc_tag_missing:{rel}")
+            tag = str(old["doc_tag"])
+        paths[rel] = {"doc_tag": tag}
+
+    return {
+        "schema_version": PENDING_SCHEMA_VERSION,
+        "session_id": SESSION_ID,
+        "vault_root": str(vault_root.resolve(strict=True)),
+        "iai_version": iai_version,
+        "started_run_utc": _utc_now_iso(),
+        "base_files_sha256": _files_digest(previous_raw),
+        "target_files_sha256": _files_digest(target_files),
+        "paths": paths,
     }
 
 
@@ -520,6 +584,174 @@ def write_state_atomic(state_file: Path, payload: Mapping[str, Any]) -> None:
                 tmp_path.unlink()
             except OSError:
                 pass
+
+
+def write_pending_atomic(pending_file: Path, payload: Mapping[str, Any]) -> None:
+    """Persist recovery metadata before any native iai mutation is attempted."""
+    tmp_path: Path | None = None
+    try:
+        pending_file.parent.mkdir(parents=True, exist_ok=True)
+        encoded = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+        fd, tmp_name = tempfile.mkstemp(
+            prefix=pending_file.name + ".",
+            suffix=".tmp",
+            dir=str(pending_file.parent),
+            text=True,
+        )
+        tmp_path = Path(tmp_name)
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(encoded)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_path, pending_file)
+        tmp_path = None
+    except (OSError, TypeError, ValueError) as exc:
+        raise AdapterError(f"pending_write_failed:{type(exc).__name__}") from exc
+    finally:
+        if tmp_path is not None and tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+
+
+def clear_pending_journal(pending_file: Path) -> None:
+    try:
+        pending_file.unlink(missing_ok=True)
+    except OSError as exc:
+        raise AdapterError(f"pending_clear_failed:{type(exc).__name__}") from exc
+
+
+def load_pending_journal(
+    pending_file: Path,
+    *,
+    vault_root: Path,
+    state: Mapping[str, Any],
+    current_doc_tags: Mapping[str, str],
+    doc_tag_fn: Callable[[str], str],
+) -> tuple[tuple[str, ...], str]:
+    """Return pending affected paths and whether the journal is active/completed."""
+    if not pending_file.exists():
+        return (), "none"
+    try:
+        raw = json.loads(pending_file.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise AdapterError(f"pending_read_failed:{type(exc).__name__}") from exc
+    if not isinstance(raw, dict):
+        raise AdapterError("pending_invalid_shape")
+    if raw.get("schema_version") != PENDING_SCHEMA_VERSION:
+        raise AdapterError("pending_schema_mismatch")
+    if raw.get("session_id") != SESSION_ID:
+        raise AdapterError("pending_session_mismatch")
+    if raw.get("iai_version") != EXPECTED_IAI_VERSION:
+        raise AdapterError("pending_iai_version_mismatch")
+
+    expected_root = str(vault_root.resolve(strict=True))
+    stored_root = str(raw.get("vault_root") or "")
+    if os.path.normcase(stored_root) != os.path.normcase(expected_root):
+        raise AdapterError(f"pending_vault_root_mismatch:{stored_root}:{expected_root}")
+
+    base_digest = raw.get("base_files_sha256")
+    target_digest = raw.get("target_files_sha256")
+    if not isinstance(base_digest, str) or not _SHA256_RE.fullmatch(base_digest):
+        raise AdapterError("pending_base_digest_invalid")
+    if not isinstance(target_digest, str) or not _SHA256_RE.fullmatch(target_digest):
+        raise AdapterError("pending_target_digest_invalid")
+
+    paths_raw = raw.get("paths")
+    if not isinstance(paths_raw, dict) or not paths_raw:
+        raise AdapterError("pending_paths_invalid")
+    seen_casefold: dict[str, str] = {}
+    seen_tags: dict[str, str] = {}
+    current_by_tag = {tag: rel for rel, tag in current_doc_tags.items()}
+    paths: list[str] = []
+    for raw_rel, raw_meta in paths_raw.items():
+        if not isinstance(raw_rel, str):
+            raise AdapterError("pending_source_name_invalid_type")
+        _validate_state_source_name(raw_rel)
+        folded = raw_rel.casefold()
+        previous = seen_casefold.get(folded)
+        if previous is not None and previous != raw_rel:
+            raise AdapterError(f"pending_casefold_path_collision:{previous}:{raw_rel}")
+        seen_casefold[folded] = raw_rel
+        if not isinstance(raw_meta, Mapping):
+            raise AdapterError(f"pending_path_entry_invalid:{raw_rel}")
+        stored_tag = raw_meta.get("doc_tag")
+        if not isinstance(stored_tag, str):
+            raise AdapterError(f"pending_doc_tag_invalid:{raw_rel}")
+        expected_tag = _vendor_doc_tag(raw_rel, doc_tag_fn)
+        if stored_tag != expected_tag:
+            raise AdapterError(
+                f"pending_doc_tag_vendor_mismatch:{raw_rel}:{stored_tag}:{expected_tag}"
+            )
+        tag_owner = seen_tags.get(stored_tag)
+        if tag_owner is not None and tag_owner != raw_rel:
+            raise AdapterError(f"pending_doc_tag_collision:{stored_tag}:{tag_owner}:{raw_rel}")
+        seen_tags[stored_tag] = raw_rel
+        current_owner = current_by_tag.get(stored_tag)
+        if current_owner is not None and current_owner != raw_rel:
+            raise AdapterError(
+                f"pending_doc_tag_collision:{stored_tag}:{raw_rel}:{current_owner}"
+            )
+        paths.append(raw_rel)
+
+    state_files = state.get("files") if isinstance(state, Mapping) else None
+    if not isinstance(state_files, Mapping):
+        raise AdapterError("state_files_invalid")
+    state_digest = _files_digest(state_files)
+    ordered = tuple(sorted(paths, key=lambda value: (value.casefold(), value)))
+    if state_digest == target_digest:
+        return ordered, "completed"
+    if state_digest == base_digest:
+        return ordered, "active"
+    raise AdapterError("pending_state_mismatch")
+
+
+def reconcile_plan_with_pending(
+    plan: SyncPlan,
+    *,
+    notes: Iterable[NoteSnapshot],
+    state: Mapping[str, Any],
+    pending_paths: Iterable[str],
+) -> SyncPlan:
+    """Force every possibly-mutated pending path through native iai once more."""
+    pending = set(pending_paths)
+    if not pending:
+        return plan
+    current = {note.relative_path for note in notes}
+    previous_raw = state.get("files") if isinstance(state, Mapping) else None
+    if not isinstance(previous_raw, Mapping):
+        raise AdapterError("state_files_invalid")
+    previous = set(str(rel) for rel in previous_raw)
+
+    new = set(plan.new)
+    changed = set(plan.changed)
+    unchanged = set(plan.unchanged)
+    deleted = set(plan.deleted)
+
+    for rel in pending:
+        if rel in current:
+            deleted.discard(rel)
+            unchanged.discard(rel)
+            if rel in previous:
+                new.discard(rel)
+                changed.add(rel)
+            else:
+                changed.discard(rel)
+                new.add(rel)
+        else:
+            new.discard(rel)
+            changed.discard(rel)
+            unchanged.discard(rel)
+            deleted.add(rel)
+
+    ordering = lambda value: (value.casefold(), value)
+    return SyncPlan(
+        new=tuple(sorted(new, key=ordering)),
+        changed=tuple(sorted(changed, key=ordering)),
+        unchanged=tuple(sorted(unchanged, key=ordering)),
+        deleted=tuple(sorted(deleted, key=ordering)),
+    )
 
 
 def _report_count(report: Mapping[str, Any], key: str, relative_path: str) -> int:
@@ -765,6 +997,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.state_file is not None
         else _default_state_file(store_root)
     )
+    pending_file = _pending_file_for(state_file)
 
     try:
         runtime = load_iai_runtime()
@@ -778,11 +1011,26 @@ def main(argv: list[str] | None = None) -> int:
                 f"expected_file_count_mismatch:{len(notes)}!={args.expected_files}"
             )
         validate_state_location(state_file, vault_root)
+        validate_state_location(pending_file, vault_root)
         validate_store_location(store_root, vault_root)
         doc_tags = validate_doc_tag_uniqueness(notes, runtime.doc_tag)
         state = load_state(state_file, vault_root)
         validate_cross_generation_doc_tags(state, doc_tags, runtime.doc_tag)
+        pending_paths, pending_status = load_pending_journal(
+            pending_file,
+            vault_root=vault_root,
+            state=state,
+            current_doc_tags=doc_tags,
+            doc_tag_fn=runtime.doc_tag,
+        )
         plan = build_plan(notes, state)
+        if pending_status == "active":
+            plan = reconcile_plan_with_pending(
+                plan,
+                notes=notes,
+                state=state,
+                pending_paths=pending_paths,
+            )
 
         db_path = store_root / "hippo" / "brain.sqlite3"
         canonical_store_present = db_path.is_file()
@@ -827,6 +1075,17 @@ def main(argv: list[str] | None = None) -> int:
             except Exception as exc:  # noqa: BLE001 - lock/backend errors fail closed
                 raise AdapterError(f"store_open_failed:{type(exc).__name__}:{exc}") from exc
             try:
+                write_pending_atomic(
+                    pending_file,
+                    _pending_payload(
+                        vault_root=vault_root,
+                        state=state,
+                        notes=notes,
+                        doc_tags=doc_tags,
+                        plan=plan,
+                        iai_version=runtime.version,
+                    ),
+                )
                 reports = apply_plan(
                     store=store,
                     vault_root=vault_root,
@@ -856,6 +1115,7 @@ def main(argv: list[str] | None = None) -> int:
             runtime.version,
         )
         write_state_atomic(state_file, payload)
+        clear_pending_journal(pending_file)
 
         result = _json_result(
             runtime=runtime,
