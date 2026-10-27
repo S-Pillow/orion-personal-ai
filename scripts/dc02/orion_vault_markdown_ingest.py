@@ -420,9 +420,14 @@ def _read_note_text_matching_snapshot(relative_path: str, note: NoteSnapshot) ->
     if hashlib.sha256(data).hexdigest() != note.sha256:
         raise AdapterError(f"markdown_changed_before_chunk_floor:{relative_path}")
     try:
-        return data.decode("utf-8")
+        text = data.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise AdapterError(f"markdown_changed_before_chunk_floor:{relative_path}") from exc
+    # iai 3.3.0 extracts Markdown via Path.read_text(), whose text wrapper uses
+    # universal-newline translation. Mirror that before applying chunk_text's
+    # len(text.strip()) floor so CRLF-heavy short notes cannot pass preflight
+    # while becoming sub-12-character text inside the vendor path.
+    return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
 def _validate_native_chunk_floor(relative_path: str, note: NoteSnapshot) -> None:
