@@ -104,6 +104,35 @@ class FinalAuditTests(unittest.TestCase):
             self.assertFalse(mod._pending_file_for(state).exists())
             self.assertFalse(mod._store_owner_file_for(store).exists())
 
+    def test_crlf_short_note_uses_vendor_universal_newline_length_before_mutation(self):
+        with tempfile.TemporaryDirectory() as td:
+            _base, vault, store, state = self._fixture(td)
+            raw = b"a\r\nb\r\nc\r\nd\r\ne"
+            self.assertEqual(len(raw), 13)
+            (vault / "crlf.md").write_bytes(raw)
+            opens: list[Path] = []
+            runtime = self._runtime(
+                {
+                    "chunks_total": 0,
+                    "inserted": 0,
+                    "reinforced": 0,
+                    "skipped": 0,
+                    "recall_tested": 0,
+                    "recall_verified": 0,
+                },
+                open_store=lambda path: opens.append(path) or FakeStore(),
+            )
+            output = io.StringIO()
+            with mock.patch.object(mod, "load_iai_runtime", return_value=runtime), redirect_stdout(output):
+                rc = mod.main(self._args(vault, store, state))
+            self.assertEqual(rc, 1)
+            result = json.loads(output.getvalue())
+            self.assertIn("markdown_below_iai_capture_floor:crlf.md:9<12", result["error"])
+            self.assertEqual(opens, [])
+            self.assertFalse(state.exists())
+            self.assertFalse(mod._pending_file_for(state).exists())
+            self.assertFalse(mod._store_owner_file_for(store).exists())
+
     def test_zero_byte_note_remains_valid_native_empty_document(self):
         with tempfile.TemporaryDirectory() as td:
             _base, vault, store, state = self._fixture(td)
