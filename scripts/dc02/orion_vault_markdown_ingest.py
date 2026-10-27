@@ -12,6 +12,7 @@ import importlib.util
 import json
 import os
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -27,8 +28,20 @@ _CORE_SPEC.loader.exec_module(_core)
 
 # Re-export the tested implementation surface so existing callers/tests continue
 # to import this public module while the transaction coordinator remains small.
+# Loader-only raw source strings are deliberately not exported: they are not part
+# of the adapter contract and must never become an alternate transaction surface.
+_CORE_REEXPORT_DENY = {
+    "main",
+    "_source",
+    "_prefix",
+    "_unsafe_cli",
+    "_marker",
+    "_sep",
+    "_SOURCE_PATH",
+    "_ORION_CORE_LIBRARY_LOAD",
+}
 for _name in dir(_core):
-    if not _name.startswith("__"):
+    if not _name.startswith("__") and _name not in _CORE_REEXPORT_DENY:
         globals()[_name] = getattr(_core, _name)
 
 STORE_OWNER_SCHEMA_VERSION = 1
@@ -97,8 +110,221 @@ def load_store_owner(
     return raw
 
 
+def _canonical_path_key(path: Path) -> str:
+    return os.path.normcase(_canonical_path_text(path))
+
+
+def _canonical_path_is_within(path: Path, root: Path) -> bool:
+    candidate = Path(_canonical_path_text(path))
+    boundary = Path(_canonical_path_text(root))
+    try:
+        candidate.relative_to(boundary)
+    except ValueError:
+        return False
+    return True
+
+
+def validate_state_store_namespace(state_file: Path, store_root: Path) -> None:
+    """Keep custom state metadata out of native semantic-store namespaces."""
+    if not _canonical_path_is_within(state_file, store_root):
+        return
+    allowed = Path(_canonical_path_text(store_root)) / "orion"
+    if not _canonical_path_is_within(state_file, allowed):
+        raise AdapterError(
+            f"state_file_inside_semantic_store_namespace:{_canonical_path_text(state_file)}"
+        )
+
+
+def validate_metadata_path_disjointness(paths: Mapping[str, Path]) -> None:
+    """Reject canonical path reuse across state/recovery/owner/store roles."""
+    seen: dict[str, tuple[str, str]] = {}
+    for role, path in paths.items():
+        canonical = _canonical_path_text(path)
+        key = os.path.normcase(canonical)
+        prior = seen.get(key)
+        if prior is not None:
+            prior_role, _prior_path = prior
+            raise AdapterError(
+                f"metadata_path_collision:{prior_role}:{role}:{canonical}"
+            )
+        seen[key] = (role, canonical)
+
+
+def validate_store_semantic_boundary(
+    store_root: Path, vault_root: Path, db_path: Path
+) -> None:
+    """Reject semantic-store aliases that escape the selected store boundary."""
+    hippo_dir = store_root / "hippo"
+    if _is_reparse_point(hippo_dir):
+        raise AdapterError(f"canonical_store_hippo_is_reparse_point:{hippo_dir}")
+    if _is_reparse_point(db_path):
+        raise AdapterError(f"canonical_store_db_is_reparse_point:{db_path}")
+    try:
+        db_real = db_path.resolve(strict=True)
+    except OSError as exc:
+        raise AdapterError(
+            f"canonical_store_db_resolve_failed:{type(exc).__name__}"
+        ) from exc
+    store_real = Path(_canonical_path_text(store_root))
+    if not _contained(db_real, store_real):
+        raise AdapterError(f"canonical_store_db_escaped_root:{db_real}:{store_real}")
+    if _path_is_within(db_path, vault_root):
+        raise AdapterError(f"canonical_store_db_inside_vault:{db_real}")
+
+
+def _replace_atomic_durable(source: Path, destination: Path) -> None:
+    """Atomically replace a metadata file with crash-durable rename semantics."""
+    if os.name == "nt":
+        import ctypes
+        from ctypes import wintypes
+
+        move_file_ex = ctypes.WinDLL("kernel32", use_last_error=True).MoveFileExW
+        move_file_ex.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD]
+        move_file_ex.restype = wintypes.BOOL
+        flags = 0x00000001 | 0x00000008  # REPLACE_EXISTING | WRITE_THROUGH
+        if not move_file_ex(str(source), str(destination), flags):
+            error = ctypes.get_last_error()
+            raise OSError(error, f"MoveFileExW failed with error {error}", str(destination))
+        return
+
+    os.replace(source, destination)
+    directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    directory_fd = os.open(str(destination.parent), directory_flags)
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+
+
+def _write_atomic(path: Path, payload: Mapping[str, Any], error_prefix: str) -> None:
+    """Write metadata via fsynced temp file + durable atomic replacement."""
+    tmp_path: Path | None = None
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        encoded = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+        fd, tmp_name = tempfile.mkstemp(
+            prefix=path.name + ".", suffix=".tmp", dir=str(path.parent), text=True
+        )
+        tmp_path = Path(tmp_name)
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(encoded)
+            handle.flush()
+            os.fsync(handle.fileno())
+        _replace_atomic_durable(tmp_path, path)
+        tmp_path = None
+    except (OSError, TypeError, ValueError) as exc:
+        raise AdapterError(f"{error_prefix}:{type(exc).__name__}") from exc
+    finally:
+        if tmp_path is not None and tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+
+
+def write_state_atomic(state_file: Path, payload: Mapping[str, Any]) -> None:
+    _write_atomic(state_file, payload, "state_write_failed")
+
+
+def write_pending_atomic(pending_file: Path, payload: Mapping[str, Any]) -> None:
+    _write_atomic(pending_file, payload, "pending_write_failed")
+
+
 def write_store_owner_atomic(owner_file: Path, payload: Mapping[str, Any]) -> None:
     _write_atomic(owner_file, payload, "store_owner_write_failed")
+
+
+def clear_pending_journal(pending_file: Path) -> None:
+    """Clear recovery metadata; fsync the directory on POSIX after unlink."""
+    existed = pending_file.exists() or pending_file.is_symlink()
+    try:
+        pending_file.unlink(missing_ok=True)
+        if existed and os.name != "nt":
+            directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+            directory_fd = os.open(str(pending_file.parent), directory_flags)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+    except OSError as exc:
+        raise AdapterError(f"pending_clear_failed:{type(exc).__name__}") from exc
+
+
+def _validate_native_study_accounting(
+    relative_path: str,
+    note: NoteSnapshot,
+    report: Mapping[str, Any],
+) -> None:
+    """Reject vendor reports that would silently checkpoint missing source data."""
+    if "chunks_total" not in report:
+        return
+    total = _report_count(report, "chunks_total", relative_path)
+    if note.size > 0 and total == 0:
+        raise AdapterError(f"study_no_chunks_for_nonempty_source:{relative_path}")
+    if all(key in report for key in ("inserted", "reinforced", "skipped")):
+        accounted = sum(
+            _report_count(report, key, relative_path)
+            for key in ("inserted", "reinforced", "skipped")
+        )
+        if accounted != total:
+            raise AdapterError(
+                f"study_chunk_accounting_mismatch:{relative_path}:{accounted}!={total}"
+            )
+
+
+def apply_plan(
+    *,
+    store: Any,
+    vault_root: Path,
+    notes: Any,
+    plan: SyncPlan,
+    study_document: Any,
+) -> dict[str, Any]:
+    """Apply the native plan with source-race and report-accounting fences."""
+    note_list = list(notes)
+    by_rel = {note.relative_path: note for note in note_list}
+    reports: dict[str, Any] = {"studied": {}, "faded": {}}
+    for rel in (*plan.new, *plan.changed):
+        note = by_rel.get(rel)
+        if note is None:
+            raise AdapterError(f"plan_missing_current_note:{rel}")
+        if not _resnapshot_matches(note, vault_root):
+            raise AdapterError(f"markdown_changed_before_study:{rel}")
+        try:
+            report = study_document(
+                store,
+                path=Path(note.absolute_path),
+                source_name=rel,
+                session_id=SESSION_ID,
+                critic=None,
+            )
+        except Exception as exc:
+            raise AdapterError(f"study_call_failed:{rel}:{type(exc).__name__}") from exc
+        if not isinstance(report, Mapping):
+            raise AdapterError(f"study_invalid_report:{rel}")
+        _validate_study_report(rel, report)
+        _validate_native_study_accounting(rel, note, report)
+        if not _resnapshot_matches(note, vault_root):
+            raise AdapterError(f"markdown_changed_during_study:{rel}")
+        reports["studied"][rel] = dict(report)
+
+    for rel in plan.deleted:
+        source_path = _vault_source_path(vault_root, rel)
+        if os.path.lexists(source_path):
+            raise AdapterError(f"markdown_reappeared_before_fade:{rel}")
+        try:
+            report = study_document(
+                store, text="", source_name=rel, session_id=SESSION_ID, critic=None
+            )
+        except Exception as exc:
+            raise AdapterError(f"fade_call_failed:{rel}:{type(exc).__name__}") from exc
+        if not isinstance(report, Mapping):
+            raise AdapterError(f"fade_invalid_report:{rel}")
+        _validate_study_report(rel, report)
+        if os.path.lexists(source_path):
+            raise AdapterError(f"markdown_reappeared_during_fade:{rel}")
+        reports["faded"][rel] = dict(report)
+    return reports
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -132,9 +358,23 @@ def main(argv: list[str] | None = None) -> int:
         validate_state_location(store_lock_file, vault_root)
         validate_state_location(owner_file, vault_root)
         validate_store_location(store_root, vault_root)
+        validate_state_store_namespace(state_file, store_root)
 
         db_path = store_root / "hippo" / "brain.sqlite3"
+        validate_metadata_path_disjointness(
+            {
+                "state": state_file,
+                "pending": pending_file,
+                "state_lock": state_lock_file,
+                "store_lock": store_lock_file,
+                "store_owner": owner_file,
+                "semantic_db": db_path,
+            }
+        )
+
         canonical_store_present = db_path.is_file()
+        if canonical_store_present:
+            validate_store_semantic_boundary(store_root, vault_root, db_path)
         if args.apply:
             if not canonical_store_present:
                 raise AdapterError(f"canonical_store_missing:{db_path}")
