@@ -8,7 +8,7 @@ Restore the authoritative Obsidian Markdown corpus to the canonical native iai s
 
 The implementation boundary is deliberately narrow:
 
-- Orion owns source admission, immutable transaction snapshots, synchronization state, recovery metadata, store ownership, and apply serialization.
+- Orion owns source admission, immutable transaction snapshots, synchronization state, recovery metadata, store ownership, semantic-store topology validation, and apply serialization.
 - pinned `iai-pme==3.3.0` owns Markdown extraction, chunking, embeddings, deduplication, `doc:` tags, graph weaving, shared document ownership, supersession/fade behavior, recall self-test, and persistence.
 - the vault is read-only;
 - the adapter is operator-run only;
@@ -26,6 +26,7 @@ The implementation is split by invariant:
 - `scripts/dc02/orion_vault_ingest_fs.py` — fail-closed filesystem admission, crash-durable metadata writes, immutable staging, semantic-DB boundary checks, and the one apply lock;
 - `scripts/dc02/orion_vault_ingest_state.py` — successful checkpoint, store ownership, planning, and the explicit pending-journal state machine;
 - `scripts/dc02/orion_vault_ingest_runtime.py` — pinned iai 3.3.0 loading, native report acceptance, apply ordering, CLI argument parsing, and result envelope;
+- `scripts/dc02/orion_vault_ingest_contract.py` — cross-module fail-closed contract for semantic-store topology and persisted checkpoint validity;
 - `scripts/dc02/orion_vault_markdown_ingest_core.py` — import-only compatibility/re-export surface used by tests and the public coordinator.
 
 Direct execution of the compatibility core fails closed. There is no secondary legacy apply program or executable source sidecar.
@@ -37,7 +38,7 @@ The transaction core was rebuilt after review exposed that the earlier live-path
 1. **validated source names** — one admission grammar is used before a source name may enter planning, state, pending recovery, vendor tagging, or fade operations;
 2. **immutable staging** — native iai studies private staged `.md` snapshots, never the live vault path;
 3. **fixed metadata namespace** — state, pending recovery, owner, and the single apply lock have fixed names under `<store-root>/orion/`;
-4. **one store-wide apply lock** — Orion apply processes are serialized through one OS advisory lock;
+4. **one store-wide apply lock** — Orion apply processes are serialized through one OS advisory lock, with semantic-store topology constrained so one physical DB cannot acquire multiple Orion lock namespaces;
 5. **explicit journal state machine** — a pending journal is absent, active, or completed according to checkpoint identity plus file-map digest.
 
 The goal is to remove whole classes of bugs instead of adding a new guard for each discovered edge case.
@@ -71,10 +72,11 @@ Admission rejects:
 - empty, absolute, noncanonical, `.` or `..` paths;
 - literal backslashes;
 - non-Markdown suffixes;
-- Windows-forbidden characters `< > : " \ | ? *`;
+- Windows-forbidden characters `< > : " \\ | ? *`;
 - ASCII control characters;
 - path components ending in a space or period;
 - Windows reserved device stems such as `CON`, `PRN`, `AUX`, `NUL`, `COM1`-`COM9`, and `LPT1`-`LPT9` (including the Windows-recognized superscript digit forms);
+- non-strict-UTF-8/surrogate source identity;
 - case-fold collisions within one inventory.
 
 The same validator is used when loading checkpoint and pending metadata. The adapter therefore cannot successfully persist a source name that a later invocation refuses to load.
@@ -117,7 +119,7 @@ This intentionally replaces the previous before-study/after-study/final-inventor
 
 For a path planned as deleted, absence is checked once more before the new pending journal is written. A later reappearance belongs to the next snapshot/run.
 
-## Fixed metadata namespace
+## Fixed metadata namespace and semantic-store topology
 
 There is no `--state-file` option in the rebuilt design.
 
@@ -136,6 +138,10 @@ Removing arbitrary state placement eliminates state/store pairing ambiguity and 
 
 Existing metadata, lock, owner, and semantic DB files must be regular non-reparse files with a single filesystem link. The opened lock handle repeats the regular-file/link-count check before Windows writes its locking byte.
 
+The canonical store root is resolved before metadata paths are derived. In addition, `<canonical-store>/hippo` itself must be a real directory: a symlink, junction, or other reparse-point `hippo` is rejected before `brain.sqlite3` is accepted. This enforces **one physical semantic DB -> one Orion metadata namespace + one Orion apply lock** and prevents two apparent store roots from reaching the same DB through redirected `hippo` directories while holding independent locks and journals.
+
+Canonical aliases of the store root itself still collapse through canonical-path resolution.
+
 ## State schema v3
 
 The successful state records:
@@ -146,6 +152,8 @@ The successful state records:
 - successful UTC timestamp;
 - successful checkpoint identity;
 - per-source size, mtime, SHA-256, and native `doc:` tag.
+
+An on-disk state file must contain a non-null timezone-aware successful timestamp. `successful_run_utc: null` is valid only in the synthetic in-memory empty state returned when no checkpoint has ever been persisted. Broken persisted aliases are detected with `lexists` and fail closed instead of being interpreted as “no state”.
 
 This PR has not deployed a prior DC-02 runtime state. A stale prototype schema fails closed rather than being silently migrated.
 
@@ -173,7 +181,7 @@ Apply uses exactly one store-local advisory lock:
 - POSIX: nonblocking `flock`;
 - Windows: nonblocking one-byte `msvcrt.locking`.
 
-The lock is held across state/owner/pending classification, source inventory, staging, journal creation, native store work, checkpoint commit, and pending cleanup.
+The lock is held across semantic-store topology validation, state/owner/pending classification, source inventory, staging, journal creation, native store work, checkpoint commit, and pending cleanup.
 
 Plan-only never creates or acquires the lock.
 
@@ -220,23 +228,24 @@ Any other identity/digest relationship fails closed.
 For one admitted snapshot:
 
 1. acquire the single Orion store lock;
-2. load/validate fixed state and owner metadata;
-3. scan and validate the Markdown inventory and source-name grammar;
-4. classify pending recovery;
-5. clear a completed journal before further apply work;
-6. build/reconcile the plan;
-7. freeze every new/changed source into immutable private staging;
-8. recheck planned deletions are absent;
-9. write the new pending journal durably;
-10. claim store ownership if necessary;
-11. revalidate `hippo/brain.sqlite3`;
-12. open native `MemoryStore`;
-13. study staged new files, then staged changed files, then fade deleted paths with `text=""`;
-14. require a clean store close;
-15. atomically commit state with the pending target checkpoint identity;
-16. claim owner after state for a first no-mutation apply;
-17. clear pending recovery;
-18. remove temporary staged files and release the Orion lock.
+2. validate the fixed metadata namespace and semantic-store topology;
+3. load/validate successful state and owner metadata;
+4. scan and validate the Markdown inventory and source-name grammar;
+5. classify pending recovery;
+6. clear a completed journal before further apply work;
+7. build/reconcile the plan;
+8. freeze every new/changed source into immutable private staging;
+9. recheck planned deletions are absent;
+10. write the new pending journal durably;
+11. claim store ownership if necessary;
+12. revalidate `hippo` topology and `hippo/brain.sqlite3`;
+13. open native `MemoryStore`;
+14. study staged new files, then staged changed files, then fade deleted paths with `text=""`;
+15. require a clean store close;
+16. atomically commit state with the pending target checkpoint identity;
+17. claim owner after state for a first no-mutation apply;
+18. clear pending recovery;
+19. remove temporary staged files and release the Orion lock.
 
 On POSIX, metadata temp files are fsynced and atomic replacement fsyncs the destination directory. Newly created metadata directories are fsynced through their parent chain. Windows replacement uses `MoveFileExW(REPLACE_EXISTING | WRITE_THROUGH)`.
 
@@ -324,7 +333,9 @@ This PR does not:
 Before the source/review cycle can be considered complete:
 
 - the rebuilt invariant tests must pass on Ubuntu and Windows;
-- prior bug classes must be represented as invariant/regression tests, including directory enumeration failure, FIFO/special files, portable source names, apply-time rejection of a POSIX-only backslash source before journal/owner/store open, current/historical/pending tag collisions, immutable staged paths, staging-temp boundary enforcement, store-open failure, partial semantic mutation, reverted sources, new-then-deleted recovery, equal-map recovery, completed-journal cleanup, hardlink alias rejection, and real cross-process lock contention;
-- a fresh independent code review must evaluate the rebuilt head rather than an older prototype commit.
+- prior bug classes must be represented as invariant/regression tests, including directory enumeration failure, FIFO/special files, portable source names, apply-time rejection of a POSIX-only backslash source before journal/owner/store open, current/historical/pending tag collisions, immutable staged paths, staging-temp boundary enforcement, store-open failure, partial semantic mutation, reverted sources, new-then-deleted recovery, equal-map recovery, completed-journal cleanup, hardlink alias rejection, redirected `hippo`/semantic-DB alias rejection, persisted-checkpoint timestamp validity, and real cross-process lock contention;
+- a fresh independent code review must evaluate the rebuilt exact head rather than an older prototype commit.
+
+Exact-head source verification at the latest code head before this documentation-only alignment was Orion source-tests run **#82**, PASS on Ubuntu and Windows, including DC-02 and every broader source step.
 
 Runtime bootstrap remains out of scope until separately approved.
