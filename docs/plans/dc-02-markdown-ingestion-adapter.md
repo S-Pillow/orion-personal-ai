@@ -130,7 +130,7 @@ vendor function and checked against current ownership.
 
 ### State and change detection
 
-The default state checkpoint is outside the vault:
+The default successful-run checkpoint is outside the vault:
 
 `<IAI_MCP_STORE>/orion/vault-markdown-ingest-state.json`
 
@@ -151,6 +151,43 @@ Existing state is fail-closed validated before it can define deletions. The
 checkpoint advances only after the complete apply succeeds and the native store
 closes cleanly. A failed run never records a new successful-run checkpoint.
 
+### Pending mutation recovery
+
+Native iai calls are durable individually, so a later failure in a multi-file
+apply can leave the semantic store ahead of the last successful checkpoint.
+Before the first native mutation, Orion therefore atomically writes a recovery
+sidecar next to the checkpoint:
+
+`<state-file>.pending.json`
+
+The pending journal contains metadata only: vault/session/version identity,
+base and target checkpoint digests, affected relative paths, and their vendor
+`doc:` tags. It never stores note bodies.
+
+If an apply fails after one or more iai calls, the successful checkpoint stays
+unchanged and the pending journal remains. On the next run, every affected path
+is forced through reconciliation regardless of whether its current content hash
+now matches the old checkpoint. This covers both important rollback-shaped
+cases:
+
+- a changed file was studied successfully, then reverted before retry;
+- a newly studied file was deleted before retry and therefore must be faded even
+  though it never appeared in the last successful checkpoint.
+
+For a pending-only vanished path, ownership is re-derived through iai 3.3.0's
+pinned `_doc_tag()` function. Pending tags are validated against both the
+vendor function and current ownership before the store opens.
+
+The journal records hashes of both the base checkpoint file map and the intended
+target file map. If the successful checkpoint already matches the target, Orion
+knows the prior apply completed and only journal cleanup was interrupted; it
+does not restudy the files. A later explicit apply can clear that completed
+sidecar without reopening the semantic store when no new mutations exist.
+
+Plan-only mode reads and validates an active pending journal and reflects the
+forced reconciliation work in its plan, but it never writes or clears either
+sidecar.
+
 ### Apply order
 
 1. new files;
@@ -162,7 +199,7 @@ makes ordinary rename/shared-owner behavior safe.
 
 ### Fail-closed conditions
 
-No checkpoint is committed if any of these occurs:
+No successful checkpoint is committed if any of these occurs:
 
 - iai package version is not exactly 3.3.0;
 - required iai study/doc-tag signatures differ from the pinned contract;
@@ -175,27 +212,31 @@ No checkpoint is committed if any of these occurs:
 - current iai document-tag collision;
 - checkpoint doc tag no longer matches iai 3.3.0 for its persisted source path;
 - historical/current document-tag collision;
-- state file or iai store is placed inside the vault;
+- state file, pending journal, or iai store is placed inside the vault;
 - state belongs to a different vault root/session/schema/iai version;
 - persisted checkpoint metadata or successful-run timestamp is malformed;
+- pending journal identity, digest, path, or vendor-tag metadata is malformed or
+  inconsistent with the successful checkpoint;
+- pending ownership collides with a different current source;
 - canonical `hippo/brain.sqlite3` is absent for apply;
 - the native store cannot be opened (including writer/lock conflicts);
+- the pending recovery journal cannot be written before native mutation;
 - iai reports any skipped or truncated study chunk;
 - a note changes before or while it is being studied;
 - the store cannot be cleanly closed;
-- the checkpoint cannot be written atomically.
+- the successful checkpoint cannot be written atomically.
 
-Partial iai writes can exist if a later file fails. The state checkpoint does
-not advance, so the next operator run retries the same batch. iai's study
-capture is idempotent/reinforcing, making this retry behavior intentional.
+If journal cleanup fails after the successful checkpoint has already been
+written, the run reports failure but the next run recognizes the journal as
+completed from its target digest and does not replay semantic mutations.
 
 ## Operator modes
 
 ### Plan-only (default)
 
-This imports iai 3.3.0 for version/doc-tag compatibility and reads the vault and
-checkpoint, but does not open or mutate the semantic store and does not advance
-the checkpoint.
+This imports iai 3.3.0 for version/doc-tag compatibility and reads the vault,
+successful checkpoint, and any pending recovery journal, but does not open or
+mutate the semantic store and does not write or clear checkpoint sidecars.
 
 Example:
 
@@ -257,12 +298,16 @@ This ticket does not:
 - strict containment/reparse protection;
 - strict UTF-8 and bounded source limits;
 - vendor doc-tag collision guard for current and previous checkpoint ownership;
-- vendor compatibility validation for persisted doc tags;
+- vendor compatibility validation for persisted and pending doc tags;
 - content-hash planning;
 - current-before-deleted apply ordering for non-colliding ownership;
+- durable pending-run recovery for partial native mutations, including reverted
+  changed files and newly studied files deleted before retry;
+- completed-journal detection prevents duplicate replay after checkpoint commit;
 - partial-study and concurrent-file-change failure;
-- atomic successful-run checkpoint outside vault with no raw note content;
-- plan-only zero store/checkpoint mutation;
+- atomic successful-run checkpoint and pending journal outside vault with no raw
+  note content;
+- plan-only zero store/checkpoint/journal mutation;
 - source tests pass on Windows and Ubuntu.
 
 Runtime bootstrap/calibration is a later operator action.
