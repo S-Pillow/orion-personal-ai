@@ -48,6 +48,7 @@ def write_success_state(state_file: Path, root: Path, files: dict[str, bytes]) -
         "schema_version": mod.STATE_SCHEMA_VERSION,
         "session_id": mod.SESSION_ID,
         "vault_root": str(root.resolve()),
+        "store_root": str((state_file.parent / "store").resolve()),
         "iai_version": mod.EXPECTED_IAI_VERSION,
         "successful_run_utc": "2026-10-27T05:00:00Z",
         "files": {path: state_entry(content, path) for path, content in files.items()},
@@ -244,6 +245,40 @@ class RecoveryHardeningTests(unittest.TestCase):
             self.assertFalse(state_file.exists())
             self.assertTrue(mod._pending_file_for(state_file).is_file())
 
+    def test_success_state_is_bound_to_iai_store_root(self):
+        with tempfile.TemporaryDirectory() as td:
+            root, store_root, state_file = self._paths(td)
+            (root / "a.md").write_text("a", encoding="utf-8")
+            with mock.patch.object(
+                mod,
+                "load_iai_runtime",
+                return_value=self._runtime(lambda *_a, **_kw: {}),
+            ):
+                self.assertEqual(
+                    mod.main(self._args(root, store_root, state_file, apply=True)),
+                    0,
+                )
+            persisted = json.loads(state_file.read_text(encoding="utf-8"))
+            self.assertEqual(
+                persisted["store_root"], mod._canonical_path_text(store_root)
+            )
+
+            other_store = Path(td) / "other-store"
+            (other_store / "hippo").mkdir(parents=True)
+            (other_store / "hippo" / "brain.sqlite3").write_bytes(b"fixture")
+            stdout = io.StringIO()
+            with mock.patch.object(
+                mod,
+                "load_iai_runtime",
+                return_value=self._runtime(lambda *_a, **_kw: self.fail("wrong-store study")),
+            ), redirect_stdout(stdout):
+                rc = mod.main(
+                    self._args(root, other_store, state_file, json_mode=True)
+                )
+            self.assertEqual(rc, 1)
+            result = json.loads(stdout.getvalue())
+            self.assertIn("state_store_root_mismatch", result["error"])
+
     def test_apply_lock_round_trip_is_cross_platform_callable(self):
         with tempfile.TemporaryDirectory() as td:
             lock_file = Path(td) / "state.apply.lock"
@@ -255,10 +290,8 @@ class RecoveryHardeningTests(unittest.TestCase):
             second.close()
             self.assertTrue(second.closed)
 
-    def test_apply_lock_rejects_a_second_process(self):
-        with tempfile.TemporaryDirectory() as td:
-            lock_file = Path(td) / "state.apply.lock"
-            child_code = r'''
+    def _spawn_lock_holder(self, lock_file: Path):
+        child_code = r'''
 import importlib.util
 import sys
 from pathlib import Path
@@ -274,37 +307,70 @@ print("LOCKED", flush=True)
 sys.stdin.readline()
 handle.close()
 '''
-            process = subprocess.Popen(
-                [sys.executable, "-c", child_code, str(MODULE_PATH), str(lock_file)],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
+        process = subprocess.Popen(
+            [sys.executable, "-c", child_code, str(MODULE_PATH), str(lock_file)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        assert process.stdout is not None
+        ready = process.stdout.readline().strip()
+        if ready != "LOCKED":
+            assert process.stderr is not None
+            error = process.stderr.read()
+            process.kill()
+            process.communicate(timeout=5)
+            self.fail(f"lock holder failed before readiness: {ready!r} {error!r}")
+        return process
+
+    def _release_lock_holder(self, process) -> None:
+        if process.stdin is not None:
             try:
-                assert process.stdout is not None
-                ready = process.stdout.readline().strip()
-                if ready != "LOCKED":
-                    assert process.stderr is not None
-                    error = process.stderr.read()
-                    self.fail(f"lock holder failed before readiness: {ready!r} {error!r}")
+                process.stdin.write("\n")
+                process.stdin.flush()
+            except BrokenPipeError:
+                pass
+        try:
+            process.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.communicate(timeout=5)
+        self.assertEqual(process.returncode, 0)
+
+    def test_apply_lock_rejects_a_second_process(self):
+        with tempfile.TemporaryDirectory() as td:
+            lock_file = Path(td) / "state.apply.lock"
+            process = self._spawn_lock_holder(lock_file)
+            try:
                 with self.assertRaisesRegex(mod.AdapterError, "apply_lock_unavailable"):
                     mod._acquire_apply_lock(lock_file)
             finally:
-                if process.stdin is not None:
-                    try:
-                        process.stdin.write("\n")
-                        process.stdin.flush()
-                    except BrokenPipeError:
-                        pass
-                try:
-                    process.communicate(timeout=5)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.communicate(timeout=5)
-            self.assertEqual(process.returncode, 0)
+                self._release_lock_holder(process)
             after = mod._acquire_apply_lock(lock_file)
             after.close()
+
+    def test_store_lock_serializes_different_state_files(self):
+        with tempfile.TemporaryDirectory() as td:
+            store_root = Path(td) / "store"
+            store_lock = mod._store_apply_lock_file_for(store_root)
+            state_one = Path(td) / "one.json"
+            state_two = Path(td) / "two.json"
+            first_state_lock = mod._apply_lock_file_for(state_one)
+            second_state_lock = mod._apply_lock_file_for(state_two)
+            self.assertNotEqual(first_state_lock, second_state_lock)
+
+            process = self._spawn_lock_holder(store_lock)
+            try:
+                with self.assertRaisesRegex(mod.AdapterError, "apply_lock_unavailable"):
+                    mod._acquire_apply_locks((second_state_lock, store_lock))
+                released_partial = mod._acquire_apply_lock(second_state_lock)
+                released_partial.close()
+            finally:
+                self._release_lock_holder(process)
+
+            combined = mod._acquire_apply_locks((first_state_lock, store_lock))
+            combined.close()
 
     def test_apply_lock_failure_aborts_before_state_or_store_mutation(self):
         with tempfile.TemporaryDirectory() as td:
@@ -317,7 +383,7 @@ handle.close()
             )
             with mock.patch.object(mod, "load_iai_runtime", return_value=runtime), mock.patch.object(
                 mod,
-                "_acquire_apply_lock",
+                "_acquire_apply_locks",
                 side_effect=mod.AdapterError("apply_lock_unavailable:Injected"),
             ):
                 rc = mod.main(self._args(root, store_root, state_file, apply=True))
@@ -326,7 +392,7 @@ handle.close()
             self.assertFalse(state_file.exists())
             self.assertFalse(mod._pending_file_for(state_file).exists())
 
-    def test_plan_only_never_creates_apply_lock_file(self):
+    def test_plan_only_never_creates_apply_lock_files(self):
         with tempfile.TemporaryDirectory() as td:
             root, store_root, state_file = self._paths(td)
             (root / "a.md").write_text("a", encoding="utf-8")
@@ -339,6 +405,7 @@ handle.close()
                     0,
                 )
             self.assertFalse(mod._apply_lock_file_for(state_file).exists())
+            self.assertFalse(mod._store_apply_lock_file_for(store_root).exists())
 
 
 if __name__ == "__main__":
