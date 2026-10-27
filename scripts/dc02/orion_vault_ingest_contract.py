@@ -31,7 +31,7 @@ def validate_store(vault_root: Path, store_root: Path, *, require_db: bool) -> P
 
 def load_state(path: Path, vault_root: Path, store_root: Path) -> dict[str, Any]:
     """Load only a real successful persisted checkpoint or synthetic empty state."""
-    persisted = path.exists()
+    persisted = os.path.lexists(path)
     state = _state.load_state(path, vault_root, store_root)
     if persisted and state.get("successful_run_utc") is None:
         raise AdapterError("state_success_timestamp_invalid")
