@@ -1,6 +1,6 @@
 # DC-02 Markdown-Only Native iai Ingestion Adapter
 
-Date: 2026-10-27
+Date: 2026-10-26
 
 ## Purpose
 
@@ -37,10 +37,6 @@ a path-backed document it:
 Critic-based contradiction resolution is optional. Orion does not enable it for
 this adapter.
 
-The adapter also pins the vendor compatibility surface it intentionally relies
-on: `iai_mcp.study._doc_tag()` and the iai 3.3.0 `study_document()` parameters
-used by Orion. A version/signature mismatch fails before store mutation.
-
 ### Why stock `iai teach <vault>` / `iai watch <vault>` is not the boundary
 
 The stock directory iterator intentionally accepts every suffix in iai's
@@ -72,16 +68,28 @@ the iai `doc:<slug>` tag. Therefore this adapter:
 - precomputes the exact iai document tag for every admitted relative path;
 - refuses the entire run if two current relative paths collide to the same doc
   tag;
-- validates persisted state metadata before using it to plan deletion/fade
-  work.
+- re-derives every persisted checkpoint tag through the pinned iai 3.3.0
+  `_doc_tag()` implementation before trusting it;
+- refuses a current path that collides with a different path from the previous
+  successful checkpoint, including a vanished path that would otherwise be
+  faded after the new path is studied.
+
+The cross-generation guard matters because iai document tags are sluggified and
+truncated. A path can therefore be unique in the current vault while still
+colliding with a historical owner. Without the guard, the later empty-document
+fade could target the same tag that was just attached to the new path. Orion
+fails closed instead of guessing rename intent.
 
 ### Rename behavior
 
-iai's exact-key reinforcement unions `extra_tags`. Therefore, when a renamed
-file has identical chunks, studying the new path first adds the new document
-tag to the existing record. Fading the vanished old path afterward then
-removes/disowns the old tag without incorrectly fading a record still owned by
-the renamed document.
+For non-colliding tags, iai's exact-key reinforcement unions `extra_tags`.
+Therefore, when a renamed file has identical chunks, studying the new path first
+adds the new document tag to the existing record. Fading the vanished old path
+afterward then removes/disowns the old tag without incorrectly fading a record
+still owned by the renamed document.
+
+If the old and new paths map to the same iai `doc:` tag, the adapter refuses the
+run rather than performing the fade.
 
 ## Adapter contract
 
@@ -104,17 +112,18 @@ A file is admitted only when all of the following are true:
 - the complete admitted corpus is at most 5,000 files by default, matching the
   DC-02 resolver ceiling.
 
-An unsafe/reparse Markdown file or traversed directory fails the whole scan; it
-is not silently omitted. Oversize, invalid UTF-8, containment failures, and a
-source that changes while the scan snapshot is being taken also fail closed.
+The adapter fails rather than silently truncating or omitting authoritative
+Markdown when a source boundary cannot be proven safe.
 
 ### Identity
 
 `source_name` is always the vault-relative POSIX path, e.g.
 `Projects/Orion/Architecture.md`.
 
-Before any apply run, the adapter asks iai 3.3.0's own `_doc_tag()` function for
-every current source name and refuses any collision.
+Before any plan or apply result is accepted, the adapter asks iai 3.3.0's own
+`_doc_tag()` function for every current source name and refuses collisions. If
+checkpoint state exists, persisted paths are also re-derived through the same
+vendor function and checked against current ownership.
 
 ### State and change detection
 
@@ -125,67 +134,52 @@ The default state checkpoint is outside the vault:
 The state records:
 
 - schema version;
-- vault root identity;
 - `session_id`;
-- iai version;
+- resolved vault root;
+- pinned iai version;
 - successful-run UTC timestamp;
-- relative path;
-- file size;
-- mtime in nanoseconds;
-- SHA-256;
-- iai document tag.
-
-No raw note content is written to the checkpoint. Existing state is validated
-before it can drive a plan; malformed/corrupt JSON, incompatible schema/session/
-iai version, unsafe source names, invalid hashes/metadata, or persisted doc-tag
-collisions fail closed.
+- per-file SHA-256, size, mtime, and iai document tag.
 
 Content SHA-256, not mtime alone, decides whether a current note requires
 restudy. This avoids reinforcing an unchanged note merely because a sync tool
 touched its timestamp.
 
-The checkpoint advances only after the complete apply succeeds and the native
-store closes cleanly. The state write is temp file -> flush/fsync -> atomic
-replace.
+Existing state is fail-closed validated before it can define deletions. The
+checkpoint advances only after the complete apply succeeds and the native store
+closes cleanly. A failed run never records a new successful-run checkpoint.
 
 ### Apply order
 
 1. new files;
 2. content-changed files;
-3. vanished paths as empty documents;
-4. cleanly close the native store;
-5. atomically advance the Orion checkpoint.
+3. vanished paths as empty documents.
 
-This intentionally mirrors iai watch semantics and makes normal rename/shared-
-owner behavior safe.
-
-Each current note is fingerprint-checked immediately before and after the
-vendor study call. A changed source aborts the run and leaves the checkpoint at
-the last successful state.
+This intentionally mirrors iai watch semantics for non-colliding ownership and
+makes ordinary rename/shared-owner behavior safe.
 
 ### Fail-closed conditions
 
 No checkpoint is committed if any of these occurs:
 
 - iai package version is not exactly 3.3.0;
-- expected vendor study/doc-tag signature is unavailable;
+- required iai study/doc-tag signatures differ from the pinned contract;
 - unsafe/reparse path or containment failure;
-- invalid UTF-8;
-- non-regular Markdown source;
+- invalid UTF-8 or non-regular Markdown source;
 - source file exceeds the configured limit;
 - corpus exceeds the configured file limit;
-- case-insensitive path collision;
-- iai document-tag collision in the current corpus;
+- case-insensitive current path collision;
+- current iai document-tag collision;
+- checkpoint doc tag no longer matches iai 3.3.0 for its persisted source path;
+- historical/current document-tag collision;
 - state file or iai store is placed inside the vault;
-- persisted state is corrupt or incompatible;
+- state belongs to a different vault root/session/schema/iai version;
+- persisted checkpoint metadata or successful-run timestamp is malformed;
 - canonical `hippo/brain.sqlite3` is absent for apply;
-- the native store cannot be opened;
-- a native study/fade call raises;
+- the native store cannot be opened (including writer/lock conflicts);
 - iai reports any skipped or truncated study chunk;
-- a source changes before or during study;
-- deletion/fade processing is incomplete;
+- a note changes before or while it is being studied;
 - the store cannot be cleanly closed;
-- the checkpoint cannot be atomically written.
+- the checkpoint cannot be written atomically.
 
 Partial iai writes can exist if a later file fails. The state checkpoint does
 not advance, so the next operator run retries the same batch. iai's study
@@ -196,8 +190,8 @@ capture is idempotent/reinforcing, making this retry behavior intentional.
 ### Plan-only (default)
 
 This imports iai 3.3.0 for version/doc-tag compatibility and reads the vault and
-Orion checkpoint, but does not open or mutate the semantic store and does not
-write the checkpoint.
+checkpoint, but does not open or mutate the semantic store and does not advance
+the checkpoint.
 
 Example:
 
@@ -213,14 +207,13 @@ Optional bootstrap guard after observing the current inventory:
 ```powershell
 & $Python .\scripts\dc02\orion_vault_markdown_ingest.py `
   --vault-root "C:\Personal\Me" `
-  --expected-files 248
+  --expected-files <confirmed-plan-count>
 ```
 
-Plan output reports the vault/store/state targets, session, iai version, file
-counts, new/changed/unchanged/deleted counts, zero rejected/collision counts
-when validation passes, canonical-store presence, and whether apply prechecks
-permit proceeding. `--json` exposes the path lists and computed current doc
-ownership map.
+Plan output includes source/store/state identity, iai version, file and
+new/changed/unchanged/deleted counts, collision/rejection status, and whether
+the canonical store exists. The plan remains read-only even when the canonical
+store is absent.
 
 ### Apply
 
@@ -240,25 +233,6 @@ The first full bootstrap is a MODERATE-memory operation because it reads every
 Markdown note and invokes iai embedding/study work. It does not load the Orion
 qwen model and does not write the vault.
 
-## Source verification
-
-Disposable tests live under:
-
-`tests/dc02/test_orion_vault_markdown_ingest.py`
-
-They use temporary directories and fake store/vendor call surfaces; they do not
-read Steven's real vault or open the canonical store. CI runs them on both
-Ubuntu and Windows before the broader vault-action disposable suite so their
-platform result remains observable even if an unrelated later suite fails.
-
-The tests cover Markdown-only admission, case handling, deterministic ordering,
-UTF-8 and size/count boundaries, symlink/reparse refusal, containment,
-case-insensitive collisions, vendor doc-tag/signature compatibility, SHA-based
-planning, rename/new/deleted behavior, vendor call parameters/order,
-skip/truncation rejection, source mutation races, strict state validation,
-no-content checkpointing, plan-only no-write behavior, failure no-advance, and
-successful close-before-checkpoint ordering.
-
 ## Non-goals
 
 This ticket does not:
@@ -277,13 +251,13 @@ This ticket does not:
 - deterministic Markdown-only inventory;
 - strict containment/reparse protection;
 - strict UTF-8 and bounded source limits;
-- vendor doc-tag collision guard;
+- vendor doc-tag collision guard for current and previous checkpoint ownership;
+- vendor compatibility validation for persisted doc tags;
 - content-hash planning;
-- current-before-deleted apply ordering;
+- current-before-deleted apply ordering for non-colliding ownership;
 - partial-study and concurrent-file-change failure;
-- validated atomic state checkpoint outside vault;
-- plan-only performs no semantic-store/checkpoint writes;
+- atomic successful-run checkpoint outside vault with no raw note content;
+- plan-only zero store/checkpoint mutation;
 - source tests pass on Windows and Ubuntu.
 
-Runtime bootstrap/calibration is a later operator action and requires separate
-Steven approval.
+Runtime bootstrap/calibration is a later operator action.
