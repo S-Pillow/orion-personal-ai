@@ -4,6 +4,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 import re
 import sys
 import tempfile
@@ -174,7 +175,8 @@ class PendingJournalRecoveryTests(unittest.TestCase):
     def test_completed_checkpoint_with_leftover_journal_does_not_restudy(self):
         with tempfile.TemporaryDirectory() as td:
             root, store_root, state_file = self._paths(td)
-            (root / "a.md").write_text("content", encoding="utf-8")
+            note_path = root / "a.md"
+            note_path.write_text("content", encoding="utf-8")
             first_calls: list[str] = []
 
             def first_study(_store, **kwargs):
@@ -198,6 +200,14 @@ class PendingJournalRecoveryTests(unittest.TestCase):
             self.assertEqual(state["checkpoint_id"], pending["target_checkpoint_id"])
             self.assertNotEqual(pending["base_checkpoint_id"], pending["target_checkpoint_id"])
 
+            before_state = state_file.read_bytes()
+            before_pending = pending_file.read_bytes()
+            stat_before = note_path.stat()
+            os.utime(
+                note_path,
+                ns=(stat_before.st_atime_ns, stat_before.st_mtime_ns + 1_000_000_000),
+            )
+
             retry_calls: list[str] = []
 
             def should_not_study(_store, **kwargs):
@@ -211,11 +221,32 @@ class PendingJournalRecoveryTests(unittest.TestCase):
                 mod,
                 "load_iai_runtime",
                 return_value=self._runtime(should_not_study, open_store=should_not_open),
+            ), mock.patch.object(
+                mod,
+                "clear_pending_journal",
+                side_effect=mod.AdapterError("pending_clear_failed:InjectedAgain"),
+            ):
+                rc = mod.main(self._apply_args(root, store_root, state_file))
+            self.assertEqual(rc, 1)
+            self.assertEqual(retry_calls, [])
+            self.assertEqual(state_file.read_bytes(), before_state)
+            self.assertEqual(pending_file.read_bytes(), before_pending)
+
+            with mock.patch.object(
+                mod,
+                "load_iai_runtime",
+                return_value=self._runtime(should_not_study, open_store=should_not_open),
             ):
                 rc = mod.main(self._apply_args(root, store_root, state_file))
             self.assertEqual(rc, 0)
             self.assertEqual(retry_calls, [])
             self.assertFalse(pending_file.exists())
+            refreshed = json.loads(state_file.read_text(encoding="utf-8"))
+            self.assertEqual(refreshed["checkpoint_id"], state["checkpoint_id"])
+            self.assertNotEqual(
+                refreshed["files"]["a.md"]["mtime_ns"],
+                state["files"]["a.md"]["mtime_ns"],
+            )
 
     def test_plan_only_reconciles_active_pending_without_mutating_sidecars(self):
         with tempfile.TemporaryDirectory() as td:
