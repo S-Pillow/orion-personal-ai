@@ -227,22 +227,28 @@ def scan_markdown_vault(
     return notes
 
 
+def _vendor_doc_tag(
+    relative_path: str,
+    doc_tag_fn: Callable[[str], str],
+) -> str:
+    try:
+        tag = str(doc_tag_fn(relative_path))
+    except Exception as exc:  # noqa: BLE001 - vendor contract must fail closed
+        raise AdapterError(f"doc_tag_failed:{relative_path}:{type(exc).__name__}") from exc
+    if not tag.startswith("doc:") or len(tag) <= 4:
+        raise AdapterError(f"doc_tag_invalid:{relative_path}:{tag}")
+    return tag
+
+
 def validate_doc_tag_uniqueness(
     notes: Iterable[NoteSnapshot],
     doc_tag_fn: Callable[[str], str],
 ) -> dict[str, str]:
-    """Return path->vendor doc tag, refusing any ownership collision."""
+    """Return path->vendor doc tag, refusing any current ownership collision."""
     by_tag: dict[str, str] = {}
     by_path: dict[str, str] = {}
     for note in notes:
-        try:
-            tag = str(doc_tag_fn(note.relative_path))
-        except Exception as exc:  # noqa: BLE001 - vendor contract must fail closed
-            raise AdapterError(
-                f"doc_tag_failed:{note.relative_path}:{type(exc).__name__}"
-            ) from exc
-        if not tag.startswith("doc:") or len(tag) <= 4:
-            raise AdapterError(f"doc_tag_invalid:{note.relative_path}:{tag}")
+        tag = _vendor_doc_tag(note.relative_path, doc_tag_fn)
         owner = by_tag.get(tag)
         if owner is not None and owner != note.relative_path:
             raise AdapterError(f"doc_tag_collision:{tag}:{owner}:{note.relative_path}")
@@ -371,6 +377,49 @@ def load_state(state_file: Path, vault_root: Path) -> dict[str, Any]:
         raise AdapterError("state_files_invalid")
     _validate_state_files(files)
     return raw
+
+
+def validate_cross_generation_doc_tags(
+    state: Mapping[str, Any],
+    current_doc_tags: Mapping[str, str],
+    doc_tag_fn: Callable[[str], str],
+) -> None:
+    """Refuse stale/tampered or cross-generation iai document ownership.
+
+    A current path can be unique within today's vault while still mapping to the
+    same truncated/sluggified vendor ``doc:`` tag as a path that existed in the
+    previous successful checkpoint. If that previous path is now vanished, the
+    normal empty-document fade would target the same ownership tag that the new
+    path just attached and could supersede the new document. Fail before the
+    store is opened instead of attempting to infer rename intent.
+    """
+    previous_raw = state.get("files") if isinstance(state, Mapping) else None
+    if not isinstance(previous_raw, Mapping):
+        raise AdapterError("state_files_invalid")
+
+    current_by_tag: dict[str, str] = {}
+    for current_path, tag in current_doc_tags.items():
+        owner = current_by_tag.get(tag)
+        if owner is not None and owner != current_path:
+            raise AdapterError(f"doc_tag_collision:{tag}:{owner}:{current_path}")
+        current_by_tag[tag] = current_path
+
+    for raw_path, raw_meta in previous_raw.items():
+        if not isinstance(raw_path, str) or not isinstance(raw_meta, Mapping):
+            raise AdapterError("state_file_entry_invalid")
+        stored_tag = raw_meta.get("doc_tag")
+        if not isinstance(stored_tag, str):
+            raise AdapterError(f"state_file_doc_tag_invalid:{raw_path}")
+        expected_tag = _vendor_doc_tag(raw_path, doc_tag_fn)
+        if stored_tag != expected_tag:
+            raise AdapterError(
+                f"state_doc_tag_vendor_mismatch:{raw_path}:{stored_tag}:{expected_tag}"
+            )
+        current_owner = current_by_tag.get(stored_tag)
+        if current_owner is not None and current_owner != raw_path:
+            raise AdapterError(
+                f"historical_doc_tag_collision:{stored_tag}:{raw_path}:{current_owner}"
+            )
 
 
 def build_plan(
@@ -719,6 +768,7 @@ def main(argv: list[str] | None = None) -> int:
         validate_store_location(store_root, vault_root)
         doc_tags = validate_doc_tag_uniqueness(notes, runtime.doc_tag)
         state = load_state(state_file, vault_root)
+        validate_cross_generation_doc_tags(state, doc_tags, runtime.doc_tag)
         plan = build_plan(notes, state)
 
         db_path = store_root / "hippo" / "brain.sqlite3"
