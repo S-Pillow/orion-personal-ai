@@ -289,7 +289,7 @@ def clear_pending_journal(pending_file: Path) -> None:
 
 
 def _validate_native_chunk_floor(relative_path: str, note: NoteSnapshot) -> None:
-    """Fail before iai can supersede a nonempty document that yields no chunk."""
+    """Reject a source that pinned iai 3.3.0 would convert to zero chunks."""
     try:
         text = Path(note.absolute_path).read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:
@@ -302,6 +302,24 @@ def _validate_native_chunk_floor(relative_path: str, note: NoteSnapshot) -> None
             f"markdown_below_iai_capture_floor:{relative_path}:"
             f"{len(stripped)}<{IAI_MIN_CAPTURE_CHARS}"
         )
+
+
+def _is_pinned_native_study_document(study_document: Any) -> bool:
+    """Recognize the exact vendor primitive returned by load_iai_runtime()."""
+    return (
+        getattr(study_document, "__module__", "") == "iai_mcp.study"
+        and getattr(study_document, "__name__", "") == "study_document"
+    )
+
+
+def validate_native_plan_chunkability(notes: Any, plan: SyncPlan) -> None:
+    """Validate the pinned iai chunk floor before journal/owner/store mutation."""
+    by_rel = {note.relative_path: note for note in notes}
+    for rel in (*plan.new, *plan.changed):
+        note = by_rel.get(rel)
+        if note is None:
+            raise AdapterError(f"plan_missing_current_note:{rel}")
+        _validate_native_chunk_floor(rel, note)
 
 
 def _validate_native_study_accounting(
@@ -343,9 +361,6 @@ def apply_plan(
         note = by_rel.get(rel)
         if note is None:
             raise AdapterError(f"plan_missing_current_note:{rel}")
-        if not _resnapshot_matches(note, vault_root):
-            raise AdapterError(f"markdown_changed_before_study:{rel}")
-        _validate_native_chunk_floor(rel, note)
         if not _resnapshot_matches(note, vault_root):
             raise AdapterError(f"markdown_changed_before_study:{rel}")
         try:
@@ -459,6 +474,13 @@ def main(argv: list[str] | None = None) -> int:
                 state=state,
                 pending_paths=pending_paths,
             )
+
+        # The real operator runtime is pinned to iai 3.3.0's exact study_document
+        # primitive. Validate its documented 12-char capture floor before any
+        # transaction metadata or semantic-store mutation. Injected test runtimes
+        # remain generic seams and are instead checked through returned reports.
+        if _is_pinned_native_study_document(runtime.study_document):
+            validate_native_plan_chunkability(notes, plan)
 
         owner = load_store_owner(
             owner_file,
