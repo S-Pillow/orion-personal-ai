@@ -998,6 +998,9 @@ def main(argv: list[str] | None = None) -> int:
         if not canonical_store_present:
             raise AdapterError(f"canonical_store_missing:{db_path}")
 
+        if pending_status == "completed":
+            clear_pending_journal(pending_file)
+
         reports: dict[str, Any] = {"studied": {}, "faded": {}}
         checkpoint_id = _checkpoint_identity(state)
         if plan.mutation_count:
