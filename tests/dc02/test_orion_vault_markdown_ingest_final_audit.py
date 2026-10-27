@@ -3,7 +3,9 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import os
 import re
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -186,6 +188,40 @@ class FinalAuditTests(unittest.TestCase):
             path.write_bytes(b"abcdefghijk")
             with self.assertRaisesRegex(mod.AdapterError, "markdown_file_too_large"):
                 mod._strict_utf8_snapshot(path, vault.resolve(), max_file_bytes=10)
+
+    @unittest.skipIf(sys.platform.startswith("win") or not hasattr(os, "mkfifo"), "POSIX FIFO regression")
+    def test_fifo_markdown_is_rejected_without_blocking_admission(self):
+        with tempfile.TemporaryDirectory() as td:
+            vault = Path(td) / "vault"
+            vault.mkdir()
+            os.mkfifo(vault / "pipe.md")
+            code = r'''
+import importlib.util
+import sys
+from pathlib import Path
+module_path = Path(sys.argv[1])
+vault = Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("dc02_fifo_probe", module_path)
+mod = importlib.util.module_from_spec(spec)
+assert spec and spec.loader
+sys.modules[spec.name] = mod
+spec.loader.exec_module(mod)
+try:
+    mod.scan_markdown_vault(vault)
+except mod.AdapterError as exc:
+    print(str(exc))
+    raise SystemExit(0 if "markdown_not_regular_file:" in str(exc) else 2)
+raise SystemExit(3)
+'''
+            result = subprocess.run(
+                [sys.executable, "-c", code, str(MODULE_PATH), str(vault)],
+                capture_output=True,
+                text=True,
+                timeout=2,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("markdown_not_regular_file:", result.stdout)
 
     def test_native_recall_self_test_miss_rejects_checkpointable_report(self):
         with tempfile.TemporaryDirectory() as td:
