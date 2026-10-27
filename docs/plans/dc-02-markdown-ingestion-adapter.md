@@ -110,10 +110,13 @@ A file is admitted only when all of the following are true:
   resolver ceiling;
 - its bytes decode as strict UTF-8;
 - the complete admitted corpus is at most 5,000 files by default, matching the
-  DC-02 resolver ceiling.
+  DC-02 resolver ceiling;
+- recursive directory enumeration completes without permission or I/O errors.
 
 The adapter fails rather than silently truncating or omitting authoritative
-Markdown when a source boundary cannot be proven safe.
+Markdown when a source boundary cannot be proven safe. In particular, an
+`os.walk` enumeration error aborts the scan; it is never converted into a
+smaller inventory that could falsely produce deletion/fade work.
 
 ### Identity
 
@@ -163,6 +166,7 @@ No checkpoint is committed if any of these occurs:
 
 - iai package version is not exactly 3.3.0;
 - required iai study/doc-tag signatures differ from the pinned contract;
+- recursive vault enumeration raises a permission or I/O error;
 - unsafe/reparse path or containment failure;
 - invalid UTF-8 or non-regular Markdown source;
 - source file exceeds the configured limit;
@@ -249,6 +253,7 @@ This ticket does not:
 ## Acceptance for the adapter implementation
 
 - deterministic Markdown-only inventory;
+- directory-enumeration failures abort rather than produce false deletions;
 - strict containment/reparse protection;
 - strict UTF-8 and bounded source limits;
 - vendor doc-tag collision guard for current and previous checkpoint ownership;
