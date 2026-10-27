@@ -48,6 +48,7 @@ def write_success_state(state_file: Path, root: Path, files: dict[str, bytes]) -
         "schema_version": mod.STATE_SCHEMA_VERSION,
         "session_id": mod.SESSION_ID,
         "vault_root": str(root.resolve()),
+        "store_root": str((state_file.parent / "store").resolve()),
         "iai_version": mod.EXPECTED_IAI_VERSION,
         "successful_run_utc": "2026-10-27T05:00:00Z",
         "files": {path: state_entry(content, path) for path, content in files.items()},
