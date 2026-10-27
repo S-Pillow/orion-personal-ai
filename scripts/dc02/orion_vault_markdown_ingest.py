@@ -48,6 +48,7 @@ def main(argv: list[str] | None = None) -> int:
     paths = None
     lock = None
     staged = None
+    db_identity = None
     try:
         # Resolve the store root exactly once. Every metadata path, ownership
         # identity, topology check, stage boundary and native store open in this
@@ -57,14 +58,22 @@ def main(argv: list[str] | None = None) -> int:
         store_root = core.canonical_path(store_root)
         paths = core.metadata_paths(store_root)
         runtime = core.load_iai_runtime()
-        core.validate_store(vault_root, store_root, require_db=args.apply)
+        db_path = core.validate_store(vault_root, store_root, require_db=args.apply)
         core.validate_metadata_namespace(paths, vault_root, store_root)
         if args.apply:
             lock = core.acquire_apply_lock(paths.lock)
             core.validate_metadata_namespace(paths, vault_root, store_root)
+            db_path = core.validate_store(vault_root, store_root, require_db=True)
+            db_identity = core.semantic_db_identity(db_path)
+        elif db_path.exists():
+            db_identity = core.semantic_db_identity(db_path)
 
-        state = core.load_state(paths.state, vault_root, store_root)
-        owner = core.load_owner(paths.owner, vault_root, store_root)
+        state = core.load_state(
+            paths.state, vault_root, store_root, db_identity=db_identity
+        )
+        owner = core.load_owner(
+            paths.owner, vault_root, store_root, db_identity=db_identity
+        )
         if owner is not None and not paths.state.exists() and not paths.pending.exists():
             raise AdapterError("owned_store_missing_state_and_pending")
 
@@ -85,6 +94,7 @@ def main(argv: list[str] | None = None) -> int:
             state,
             doc_tags,
             runtime.doc_tag,
+            db_identity=db_identity,
         )
 
         if args.apply and pending.status == "completed":
@@ -112,6 +122,9 @@ def main(argv: list[str] | None = None) -> int:
                 print("ORION_VAULT_MARKDOWN_INGEST=PLAN_PASS")
             return 0
 
+        if db_identity is None:
+            raise AdapterError("semantic_db_identity_required")
+
         reports = {"studied": {}, "faded": {}}
         checkpoint_id = str(state["checkpoint_id"])
         if plan.mutation_count:
@@ -132,23 +145,48 @@ def main(argv: list[str] | None = None) -> int:
                     plan,
                     target_checkpoint_id,
                     recovery_doc_tags=pending.doc_tags if pending.status == "active" else None,
+                    db_identity=db_identity,
                 ),
                 "pending",
             )
             if owner is None:
-                core._atomic_write(paths.owner, core.owner_payload(vault_root, store_root), "owner")
-                owner = core.owner_payload(vault_root, store_root)
-            core.validate_store(vault_root, store_root, require_db=True)
+                owner_payload = core.owner_payload(
+                    vault_root, store_root, db_identity=db_identity
+                )
+                core._atomic_write(paths.owner, owner_payload, "owner")
+                owner = owner_payload
+
+            db_path = core.validate_store(vault_root, store_root, require_db=True)
+            core.assert_semantic_db_identity(db_path, db_identity)
             reports = _open_and_apply(runtime, store_root, staged, plan)
+            # Native close completed. Refuse checkpoint commit if the path now
+            # names a different DB file than the one bound to this transaction.
+            db_path = core.validate_store(vault_root, store_root, require_db=True)
+            core.assert_semantic_db_identity(db_path, db_identity)
             checkpoint_id = target_checkpoint_id
 
+        # This also protects no-op applies: an external DB replacement cannot
+        # inherit a prior checkpoint merely because no source digest changed.
+        db_path = core.validate_store(vault_root, store_root, require_db=True)
+        core.assert_semantic_db_identity(db_path, db_identity)
         core._atomic_write(
             paths.state,
-            core._state_payload(vault_root, store_root, notes, doc_tags, checkpoint_id),
+            core._state_payload(
+                vault_root,
+                store_root,
+                notes,
+                doc_tags,
+                checkpoint_id,
+                db_identity=db_identity,
+            ),
             "state",
         )
         if owner is None:
-            core._atomic_write(paths.owner, core.owner_payload(vault_root, store_root), "owner")
+            core._atomic_write(
+                paths.owner,
+                core.owner_payload(vault_root, store_root, db_identity=db_identity),
+                "owner",
+            )
         core.clear_pending(paths.pending)
 
         payload = core.result_payload(
