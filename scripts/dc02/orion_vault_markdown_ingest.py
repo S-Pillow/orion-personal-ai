@@ -49,6 +49,12 @@ def main(argv: list[str] | None = None) -> int:
     lock = None
     staged = None
     try:
+        # Resolve the store root exactly once. Every metadata path, ownership
+        # identity, topology check, stage boundary and native store open in this
+        # transaction is bound to this immutable canonical path. A lexical
+        # store-root symlink/junction cannot be retargeted mid-run to split the
+        # journal/lock namespace from the semantic DB.
+        store_root = core.canonical_path(store_root)
         paths = core.metadata_paths(store_root)
         runtime = core.load_iai_runtime()
         core.validate_store(vault_root, store_root, require_db=args.apply)
@@ -133,7 +139,7 @@ def main(argv: list[str] | None = None) -> int:
                 core._atomic_write(paths.owner, core.owner_payload(vault_root, store_root), "owner")
                 owner = core.owner_payload(vault_root, store_root)
             core.validate_store(vault_root, store_root, require_db=True)
-            reports = _open_and_apply(runtime, core.canonical_path(store_root), staged, plan)
+            reports = _open_and_apply(runtime, store_root, staged, plan)
             checkpoint_id = target_checkpoint_id
 
         core._atomic_write(
