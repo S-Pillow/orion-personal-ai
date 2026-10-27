@@ -523,6 +523,7 @@ def _pending_payload(
     doc_tags: Mapping[str, str],
     plan: SyncPlan,
     iai_version: str,
+    doc_tag_fn: Callable[[str], str],
 ) -> dict[str, Any]:
     previous_raw = state.get("files") if isinstance(state, Mapping) else None
     if not isinstance(previous_raw, Mapping):
@@ -540,9 +541,13 @@ def _pending_payload(
         tag = doc_tags.get(rel)
         if tag is None:
             old = previous_raw.get(rel)
-            if not isinstance(old, Mapping) or not isinstance(old.get("doc_tag"), str):
-                raise AdapterError(f"pending_doc_tag_missing:{rel}")
-            tag = str(old["doc_tag"])
+            if isinstance(old, Mapping) and isinstance(old.get("doc_tag"), str):
+                tag = str(old["doc_tag"])
+            else:
+                # A path can exist only in a prior pending run (newly studied,
+                # then removed before retry). Re-derive ownership through the
+                # pinned vendor function instead of dropping that fade work.
+                tag = _vendor_doc_tag(rel, doc_tag_fn)
         paths[rel] = {"doc_tag": tag}
 
     return {
@@ -1084,6 +1089,7 @@ def main(argv: list[str] | None = None) -> int:
                         doc_tags=doc_tags,
                         plan=plan,
                         iai_version=runtime.version,
+                        doc_tag_fn=runtime.doc_tag,
                     ),
                 )
                 reports = apply_plan(
