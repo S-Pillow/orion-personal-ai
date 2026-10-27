@@ -18,6 +18,7 @@ import inspect
 import json
 import os
 import re
+import secrets
 import stat
 import sys
 import tempfile
@@ -140,9 +141,6 @@ def _strict_utf8_snapshot(
     except OSError as exc:
         raise AdapterError(f"markdown_read_failed:{resolved}:{type(exc).__name__}") from exc
 
-    # If the source moved underneath the snapshot, do not construct a plan
-    # from mixed metadata/content. Apply performs the same fingerprint check
-    # immediately before and after each native study call.
     if before.st_size != after.st_size or before.st_mtime_ns != after.st_mtime_ns:
         raise AdapterError(f"markdown_changed_during_snapshot:{resolved}")
     if after.st_size != len(data):
@@ -163,13 +161,7 @@ def scan_markdown_vault(
     max_files: int = MAX_VAULT_FILES,
     max_file_bytes: int = MAX_SOURCE_FILE_BYTES,
 ) -> list[NoteSnapshot]:
-    """Return a deterministic snapshot of contained, non-reparse ``*.md`` only.
-
-    Reparse directories, Markdown reparse files, and directory-enumeration
-    errors fail the entire scan rather than being silently omitted. An
-    incomplete inventory must never be authoritative enough to generate
-    deletion/fade work.
-    """
+    """Return a deterministic snapshot of contained, non-reparse ``*.md`` only."""
     if max_files < 1:
         raise AdapterError("max_files_must_be_positive")
     if max_file_bytes < 1:
@@ -178,7 +170,6 @@ def scan_markdown_vault(
         raise AdapterError(f"vault_root_unavailable:{vault_root}")
     if _is_reparse_point(vault_root):
         raise AdapterError(f"vault_root_is_reparse_point:{vault_root}")
-
     try:
         root_real = vault_root.resolve(strict=True)
     except OSError as exc:
@@ -189,15 +180,10 @@ def scan_markdown_vault(
 
     def _walk_error(exc: OSError) -> None:
         failed_path = getattr(exc, "filename", None) or str(root_real)
-        raise AdapterError(
-            f"vault_walk_failed:{failed_path}:{type(exc).__name__}"
-        ) from exc
+        raise AdapterError(f"vault_walk_failed:{failed_path}:{type(exc).__name__}") from exc
 
     for dirpath, dirnames, filenames in os.walk(
-        root_real,
-        topdown=True,
-        onerror=_walk_error,
-        followlinks=False,
+        root_real, topdown=True, onerror=_walk_error, followlinks=False
     ):
         current = Path(dirpath)
         safe_dirs: list[str] = []
@@ -220,17 +206,11 @@ def scan_markdown_vault(
             path = current / name
             if path.suffix.casefold() != ".md":
                 continue
-            snap = _strict_utf8_snapshot(
-                path,
-                root_real,
-                max_file_bytes=max_file_bytes,
-            )
+            snap = _strict_utf8_snapshot(path, root_real, max_file_bytes=max_file_bytes)
             folded = snap.relative_path.casefold()
             previous = seen_casefold.get(folded)
             if previous is not None and previous != snap.relative_path:
-                raise AdapterError(
-                    f"casefold_path_collision:{previous}:{snap.relative_path}"
-                )
+                raise AdapterError(f"casefold_path_collision:{previous}:{snap.relative_path}")
             seen_casefold[folded] = snap.relative_path
             notes.append(snap)
             if len(notes) > max_files:
@@ -240,13 +220,10 @@ def scan_markdown_vault(
     return notes
 
 
-def _vendor_doc_tag(
-    relative_path: str,
-    doc_tag_fn: Callable[[str], str],
-) -> str:
+def _vendor_doc_tag(relative_path: str, doc_tag_fn: Callable[[str], str]) -> str:
     try:
         tag = str(doc_tag_fn(relative_path))
-    except Exception as exc:  # noqa: BLE001 - vendor contract must fail closed
+    except Exception as exc:
         raise AdapterError(f"doc_tag_failed:{relative_path}:{type(exc).__name__}") from exc
     if not tag.startswith("doc:") or len(tag) <= 4:
         raise AdapterError(f"doc_tag_invalid:{relative_path}:{tag}")
@@ -254,10 +231,8 @@ def _vendor_doc_tag(
 
 
 def validate_doc_tag_uniqueness(
-    notes: Iterable[NoteSnapshot],
-    doc_tag_fn: Callable[[str], str],
+    notes: Iterable[NoteSnapshot], doc_tag_fn: Callable[[str], str]
 ) -> dict[str, str]:
-    """Return path->vendor doc tag, refusing any current ownership collision."""
     by_tag: dict[str, str] = {}
     by_path: dict[str, str] = {}
     for note in notes:
@@ -334,7 +309,6 @@ def _validate_state_files(files: Mapping[str, Any]) -> None:
         if previous is not None and previous != raw_rel:
             raise AdapterError(f"state_casefold_path_collision:{previous}:{raw_rel}")
         seen_casefold[folded] = raw_rel
-
         if not isinstance(raw_meta, Mapping):
             raise AdapterError(f"state_file_entry_invalid:{raw_rel}")
         size = raw_meta.get("size")
@@ -366,8 +340,36 @@ def _empty_state(vault_root: Path) -> dict[str, Any]:
     }
 
 
+def _checkpoint_identity(state: Mapping[str, Any]) -> str:
+    """Return a stable successful-checkpoint generation identity.
+
+    New checkpoints carry an explicit random identity. Legacy/empty checkpoints
+    derive a deterministic identity from their validated checkpoint metadata so
+    an interrupted first bootstrap can still be recognized on retry.
+    """
+    explicit = state.get("checkpoint_id")
+    if explicit is not None:
+        if not isinstance(explicit, str) or not _SHA256_RE.fullmatch(explicit):
+            raise AdapterError("state_checkpoint_id_invalid")
+        return explicit
+    files = state.get("files")
+    if not isinstance(files, Mapping):
+        raise AdapterError("state_files_invalid")
+    legacy = {
+        "schema_version": state.get("schema_version"),
+        "session_id": state.get("session_id"),
+        "vault_root": state.get("vault_root"),
+        "iai_version": state.get("iai_version"),
+        "successful_run_utc": state.get("successful_run_utc"),
+        "files": files,
+    }
+    encoded = json.dumps(
+        legacy, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def load_state(state_file: Path, vault_root: Path) -> dict[str, Any]:
-    """Load and fully validate the Orion-owned successful-run checkpoint."""
     if not state_file.exists():
         return _empty_state(vault_root)
     try:
@@ -382,17 +384,16 @@ def load_state(state_file: Path, vault_root: Path) -> dict[str, Any]:
         raise AdapterError("state_session_mismatch")
     if raw.get("iai_version") != EXPECTED_IAI_VERSION:
         raise AdapterError("state_iai_version_mismatch")
-
     expected_root = str(vault_root.resolve(strict=True))
     stored_root = str(raw.get("vault_root") or "")
     if os.path.normcase(stored_root) != os.path.normcase(expected_root):
         raise AdapterError(f"state_vault_root_mismatch:{stored_root}:{expected_root}")
-
     _validate_success_timestamp(raw.get("successful_run_utc"))
     files = raw.get("files")
     if not isinstance(files, dict):
         raise AdapterError("state_files_invalid")
     _validate_state_files(files)
+    _checkpoint_identity(raw)
     return raw
 
 
@@ -401,26 +402,15 @@ def validate_cross_generation_doc_tags(
     current_doc_tags: Mapping[str, str],
     doc_tag_fn: Callable[[str], str],
 ) -> None:
-    """Refuse stale/tampered or cross-generation iai document ownership.
-
-    A current path can be unique within today's vault while still mapping to the
-    same truncated/sluggified vendor ``doc:`` tag as a path that existed in the
-    previous successful checkpoint. If that previous path is now vanished, the
-    normal empty-document fade would target the same ownership tag that the new
-    path just attached and could supersede the new document. Fail before the
-    store is opened instead of attempting to infer rename intent.
-    """
     previous_raw = state.get("files") if isinstance(state, Mapping) else None
     if not isinstance(previous_raw, Mapping):
         raise AdapterError("state_files_invalid")
-
     current_by_tag: dict[str, str] = {}
     for current_path, tag in current_doc_tags.items():
         owner = current_by_tag.get(tag)
         if owner is not None and owner != current_path:
             raise AdapterError(f"doc_tag_collision:{tag}:{owner}:{current_path}")
         current_by_tag[tag] = current_path
-
     for raw_path, raw_meta in previous_raw.items():
         if not isinstance(raw_path, str) or not isinstance(raw_meta, Mapping):
             raise AdapterError("state_file_entry_invalid")
@@ -439,18 +429,13 @@ def validate_cross_generation_doc_tags(
             )
 
 
-def build_plan(
-    notes: Iterable[NoteSnapshot],
-    state: Mapping[str, Any],
-) -> SyncPlan:
+def build_plan(notes: Iterable[NoteSnapshot], state: Mapping[str, Any]) -> SyncPlan:
     current = {note.relative_path: note for note in notes}
     previous_raw = state.get("files") if isinstance(state, Mapping) else {}
     previous = previous_raw if isinstance(previous_raw, Mapping) else {}
-
     new: list[str] = []
     changed: list[str] = []
     unchanged: list[str] = []
-
     for rel in sorted(current, key=lambda value: (value.casefold(), value)):
         old = previous.get(rel)
         if not isinstance(old, Mapping):
@@ -459,38 +444,25 @@ def build_plan(
             changed.append(rel)
         else:
             unchanged.append(rel)
-
     deleted = sorted(
         (str(rel) for rel in previous.keys() if rel not in current),
         key=lambda value: (value.casefold(), value),
     )
-    return SyncPlan(
-        new=tuple(new),
-        changed=tuple(changed),
-        unchanged=tuple(unchanged),
-        deleted=tuple(deleted),
-    )
+    return SyncPlan(tuple(new), tuple(changed), tuple(unchanged), tuple(deleted))
 
 
 def _state_files_payload(
-    notes: Iterable[NoteSnapshot],
-    doc_tags: Mapping[str, str],
+    notes: Iterable[NoteSnapshot], doc_tags: Mapping[str, str]
 ) -> dict[str, Any]:
     return {
         note.relative_path: note.state_value(doc_tags[note.relative_path])
-        for note in sorted(
-            notes,
-            key=lambda item: (item.relative_path.casefold(), item.relative_path),
-        )
+        for note in sorted(notes, key=lambda item: (item.relative_path.casefold(), item.relative_path))
     }
 
 
 def _files_digest(files: Mapping[str, Any]) -> str:
     encoded = json.dumps(
-        files,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
+        files, sort_keys=True, separators=(",", ":"), ensure_ascii=False
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
@@ -504,13 +476,17 @@ def _state_payload(
     notes: Iterable[NoteSnapshot],
     doc_tags: Mapping[str, str],
     iai_version: str,
+    checkpoint_id: str,
 ) -> dict[str, Any]:
+    if not _SHA256_RE.fullmatch(checkpoint_id):
+        raise AdapterError("state_checkpoint_id_invalid")
     return {
         "schema_version": STATE_SCHEMA_VERSION,
         "session_id": SESSION_ID,
         "vault_root": str(vault_root.resolve(strict=True)),
         "iai_version": iai_version,
         "successful_run_utc": _utc_now_iso(),
+        "checkpoint_id": checkpoint_id,
         "files": _state_files_payload(notes, doc_tags),
     }
 
@@ -524,10 +500,13 @@ def _pending_payload(
     plan: SyncPlan,
     iai_version: str,
     doc_tag_fn: Callable[[str], str],
+    target_checkpoint_id: str,
 ) -> dict[str, Any]:
     previous_raw = state.get("files") if isinstance(state, Mapping) else None
     if not isinstance(previous_raw, Mapping):
         raise AdapterError("state_files_invalid")
+    if not _SHA256_RE.fullmatch(target_checkpoint_id):
+        raise AdapterError("pending_target_checkpoint_id_invalid")
     target_files = _state_files_payload(notes, doc_tags)
     affected = sorted(
         set((*plan.new, *plan.changed, *plan.deleted)),
@@ -535,7 +514,6 @@ def _pending_payload(
     )
     if not affected:
         raise AdapterError("pending_journal_empty")
-
     paths: dict[str, Any] = {}
     for rel in affected:
         tag = doc_tags.get(rel)
@@ -544,80 +522,53 @@ def _pending_payload(
             if isinstance(old, Mapping) and isinstance(old.get("doc_tag"), str):
                 tag = str(old["doc_tag"])
             else:
-                # A path can exist only in a prior pending run (newly studied,
-                # then removed before retry). Re-derive ownership through the
-                # pinned vendor function instead of dropping that fade work.
                 tag = _vendor_doc_tag(rel, doc_tag_fn)
         paths[rel] = {"doc_tag": tag}
-
     return {
         "schema_version": PENDING_SCHEMA_VERSION,
         "session_id": SESSION_ID,
         "vault_root": str(vault_root.resolve(strict=True)),
         "iai_version": iai_version,
         "started_run_utc": _utc_now_iso(),
+        "base_checkpoint_id": _checkpoint_identity(state),
+        "target_checkpoint_id": target_checkpoint_id,
         "base_files_sha256": _files_digest(previous_raw),
         "target_files_sha256": _files_digest(target_files),
         "paths": paths,
     }
 
 
-def write_state_atomic(state_file: Path, payload: Mapping[str, Any]) -> None:
-    """Commit the checkpoint as temp -> fsync -> atomic replace."""
+def _write_atomic(path: Path, payload: Mapping[str, Any], error_prefix: str) -> None:
     tmp_path: Path | None = None
     try:
-        state_file.parent.mkdir(parents=True, exist_ok=True)
+        path.parent.mkdir(parents=True, exist_ok=True)
         encoded = json.dumps(payload, indent=2, sort_keys=True) + "\n"
         fd, tmp_name = tempfile.mkstemp(
-            prefix=state_file.name + ".",
-            suffix=".tmp",
-            dir=str(state_file.parent),
-            text=True,
+            prefix=path.name + ".", suffix=".tmp", dir=str(path.parent), text=True
         )
         tmp_path = Path(tmp_name)
         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
             handle.write(encoded)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(tmp_path, state_file)
+        os.replace(tmp_path, path)
         tmp_path = None
     except (OSError, TypeError, ValueError) as exc:
-        raise AdapterError(f"state_write_failed:{type(exc).__name__}") from exc
+        raise AdapterError(f"{error_prefix}:{type(exc).__name__}") from exc
     finally:
         if tmp_path is not None and tmp_path.exists():
             try:
                 tmp_path.unlink()
             except OSError:
                 pass
+
+
+def write_state_atomic(state_file: Path, payload: Mapping[str, Any]) -> None:
+    _write_atomic(state_file, payload, "state_write_failed")
 
 
 def write_pending_atomic(pending_file: Path, payload: Mapping[str, Any]) -> None:
-    """Persist recovery metadata before any native iai mutation is attempted."""
-    tmp_path: Path | None = None
-    try:
-        pending_file.parent.mkdir(parents=True, exist_ok=True)
-        encoded = json.dumps(payload, indent=2, sort_keys=True) + "\n"
-        fd, tmp_name = tempfile.mkstemp(
-            prefix=pending_file.name + ".",
-            suffix=".tmp",
-            dir=str(pending_file.parent),
-            text=True,
-        )
-        tmp_path = Path(tmp_name)
-        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
-            handle.write(encoded)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(tmp_path, pending_file)
-        tmp_path = None
-    except (OSError, TypeError, ValueError) as exc:
-        raise AdapterError(f"pending_write_failed:{type(exc).__name__}") from exc
-    finally:
-        if tmp_path is not None and tmp_path.exists():
-            try:
-                tmp_path.unlink()
-            except OSError:
-                pass
+    _write_atomic(pending_file, payload, "pending_write_failed")
 
 
 def clear_pending_journal(pending_file: Path) -> None:
@@ -635,7 +586,6 @@ def load_pending_journal(
     current_doc_tags: Mapping[str, str],
     doc_tag_fn: Callable[[str], str],
 ) -> tuple[tuple[str, ...], str]:
-    """Return pending affected paths and whether the journal is active/completed."""
     if not pending_file.exists():
         return (), "none"
     try:
@@ -650,12 +600,19 @@ def load_pending_journal(
         raise AdapterError("pending_session_mismatch")
     if raw.get("iai_version") != EXPECTED_IAI_VERSION:
         raise AdapterError("pending_iai_version_mismatch")
-
     expected_root = str(vault_root.resolve(strict=True))
     stored_root = str(raw.get("vault_root") or "")
     if os.path.normcase(stored_root) != os.path.normcase(expected_root):
         raise AdapterError(f"pending_vault_root_mismatch:{stored_root}:{expected_root}")
 
+    base_checkpoint_id = raw.get("base_checkpoint_id")
+    target_checkpoint_id = raw.get("target_checkpoint_id")
+    if not isinstance(base_checkpoint_id, str) or not _SHA256_RE.fullmatch(base_checkpoint_id):
+        raise AdapterError("pending_base_checkpoint_id_invalid")
+    if not isinstance(target_checkpoint_id, str) or not _SHA256_RE.fullmatch(target_checkpoint_id):
+        raise AdapterError("pending_target_checkpoint_id_invalid")
+    if base_checkpoint_id == target_checkpoint_id:
+        raise AdapterError("pending_checkpoint_identity_reused")
     base_digest = raw.get("base_files_sha256")
     target_digest = raw.get("target_files_sha256")
     if not isinstance(base_digest, str) or not _SHA256_RE.fullmatch(base_digest):
@@ -704,10 +661,15 @@ def load_pending_journal(
     if not isinstance(state_files, Mapping):
         raise AdapterError("state_files_invalid")
     state_digest = _files_digest(state_files)
+    state_checkpoint_id = _checkpoint_identity(state)
     ordered = tuple(sorted(paths, key=lambda value: (value.casefold(), value)))
-    if state_digest == target_digest:
+    if state_checkpoint_id == target_checkpoint_id:
+        if state_digest != target_digest:
+            raise AdapterError("pending_target_digest_mismatch")
         return ordered, "completed"
-    if state_digest == base_digest:
+    if state_checkpoint_id == base_checkpoint_id:
+        if state_digest != base_digest:
+            raise AdapterError("pending_base_digest_mismatch")
         return ordered, "active"
     raise AdapterError("pending_state_mismatch")
 
@@ -719,7 +681,6 @@ def reconcile_plan_with_pending(
     state: Mapping[str, Any],
     pending_paths: Iterable[str],
 ) -> SyncPlan:
-    """Force every possibly-mutated pending path through native iai once more."""
     pending = set(pending_paths)
     if not pending:
         return plan
@@ -728,12 +689,10 @@ def reconcile_plan_with_pending(
     if not isinstance(previous_raw, Mapping):
         raise AdapterError("state_files_invalid")
     previous = set(str(rel) for rel in previous_raw)
-
     new = set(plan.new)
     changed = set(plan.changed)
     unchanged = set(plan.unchanged)
     deleted = set(plan.deleted)
-
     for rel in pending:
         if rel in current:
             deleted.discard(rel)
@@ -749,13 +708,12 @@ def reconcile_plan_with_pending(
             changed.discard(rel)
             unchanged.discard(rel)
             deleted.add(rel)
-
     ordering = lambda value: (value.casefold(), value)
     return SyncPlan(
-        new=tuple(sorted(new, key=ordering)),
-        changed=tuple(sorted(changed, key=ordering)),
-        unchanged=tuple(sorted(unchanged, key=ordering)),
-        deleted=tuple(sorted(deleted, key=ordering)),
+        tuple(sorted(new, key=ordering)),
+        tuple(sorted(changed, key=ordering)),
+        tuple(sorted(unchanged, key=ordering)),
+        tuple(sorted(deleted, key=ordering)),
     )
 
 
@@ -785,9 +743,7 @@ def _validate_study_report(relative_path: str, report: Mapping[str, Any]) -> Non
 def _resnapshot_matches(note: NoteSnapshot, vault_root: Path) -> bool:
     root_real = vault_root.resolve(strict=True)
     now = _strict_utf8_snapshot(
-        Path(note.absolute_path),
-        root_real,
-        max_file_bytes=max(note.size, 1),
+        Path(note.absolute_path), root_real, max_file_bytes=max(note.size, 1)
     )
     return (
         now.relative_path == note.relative_path
@@ -805,10 +761,8 @@ def apply_plan(
     plan: SyncPlan,
     study_document: Callable[..., dict[str, Any]],
 ) -> dict[str, Any]:
-    """Apply current files first, then fade deletions, matching iai watch order."""
     by_rel = {note.relative_path: note for note in notes}
     reports: dict[str, Any] = {"studied": {}, "faded": {}}
-
     for rel in (*plan.new, *plan.changed):
         note = by_rel.get(rel)
         if note is None:
@@ -823,7 +777,7 @@ def apply_plan(
                 session_id=SESSION_ID,
                 critic=None,
             )
-        except Exception as exc:  # noqa: BLE001 - a failed vendor call blocks checkpoint
+        except Exception as exc:
             raise AdapterError(f"study_call_failed:{rel}:{type(exc).__name__}") from exc
         if not isinstance(report, Mapping):
             raise AdapterError(f"study_invalid_report:{rel}")
@@ -831,27 +785,17 @@ def apply_plan(
         if not _resnapshot_matches(note, vault_root):
             raise AdapterError(f"markdown_changed_during_study:{rel}")
         reports["studied"][rel] = dict(report)
-
-    # A rename is new-current + deleted-old. Current-first lets native exact or
-    # near-duplicate reinforcement attach the new doc owner before the old doc
-    # owner is disowned/faded by the empty-document study. Cross-generation
-    # same-tag ownership is rejected before this function is reached.
     for rel in plan.deleted:
         try:
             report = study_document(
-                store,
-                text="",
-                source_name=rel,
-                session_id=SESSION_ID,
-                critic=None,
+                store, text="", source_name=rel, session_id=SESSION_ID, critic=None
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             raise AdapterError(f"fade_call_failed:{rel}:{type(exc).__name__}") from exc
         if not isinstance(report, Mapping):
             raise AdapterError(f"fade_invalid_report:{rel}")
         _validate_study_report(rel, report)
         reports["faded"][rel] = dict(report)
-
     return reports
 
 
@@ -859,7 +803,6 @@ def _validate_vendor_contract(
     doc_tag_fn: Callable[[str], str],
     study_document: Callable[..., dict[str, Any]],
 ) -> None:
-    """Pin the private/public iai 3.3.0 symbols Orion intentionally relies on."""
     try:
         doc_params = inspect.signature(doc_tag_fn).parameters
         study_params = inspect.signature(study_document).parameters
@@ -880,31 +823,20 @@ def load_iai_runtime(expected_version: str = EXPECTED_IAI_VERSION) -> IaiRuntime
         raise AdapterError("iai_pme_not_installed") from exc
     if version != expected_version:
         raise AdapterError(f"iai_version_mismatch:{version}!={expected_version}")
-
     try:
         from iai_mcp.hippo import AccessMode
         from iai_mcp.store import MemoryStore
         from iai_mcp.study import _doc_tag, study_document
-    except Exception as exc:  # noqa: BLE001 - runtime preflight must fail closed
+    except Exception as exc:
         raise AdapterError(f"iai_import_failed:{type(exc).__name__}") from exc
-
     _validate_vendor_contract(_doc_tag, study_document)
 
     def _open(store_root: Path):
-        # Matches iai 3.3.0's own direct study/Brain path: shared access with
-        # no persistent ANN index writer. A conflicting writer must fail here.
         return MemoryStore(
-            store_root,
-            access_mode=AccessMode.SHARED,
-            persist_index=False,
+            store_root, access_mode=AccessMode.SHARED, persist_index=False
         )
 
-    return IaiRuntime(
-        version=version,
-        doc_tag=_doc_tag,
-        study_document=study_document,
-        open_store=_open,
-    )
+    return IaiRuntime(version, _doc_tag, study_document, _open)
 
 
 def _print_plan(
@@ -1003,13 +935,10 @@ def main(argv: list[str] | None = None) -> int:
         else _default_state_file(store_root)
     )
     pending_file = _pending_file_for(state_file)
-
     try:
         runtime = load_iai_runtime()
         notes = scan_markdown_vault(
-            vault_root,
-            max_files=args.max_files,
-            max_file_bytes=args.max_file_bytes,
+            vault_root, max_files=args.max_files, max_file_bytes=args.max_file_bytes
         )
         if args.expected_files is not None and len(notes) != args.expected_files:
             raise AdapterError(
@@ -1031,12 +960,8 @@ def main(argv: list[str] | None = None) -> int:
         plan = build_plan(notes, state)
         if pending_status == "active":
             plan = reconcile_plan_with_pending(
-                plan,
-                notes=notes,
-                state=state,
-                pending_paths=pending_paths,
+                plan, notes=notes, state=state, pending_paths=pending_paths
             )
-
         db_path = store_root / "hippo" / "brain.sqlite3"
         canonical_store_present = db_path.is_file()
 
@@ -1074,10 +999,12 @@ def main(argv: list[str] | None = None) -> int:
             raise AdapterError(f"canonical_store_missing:{db_path}")
 
         reports: dict[str, Any] = {"studied": {}, "faded": {}}
+        checkpoint_id = _checkpoint_identity(state)
         if plan.mutation_count:
+            target_checkpoint_id = secrets.token_hex(32)
             try:
                 store = runtime.open_store(store_root)
-            except Exception as exc:  # noqa: BLE001 - lock/backend errors fail closed
+            except Exception as exc:
                 raise AdapterError(f"store_open_failed:{type(exc).__name__}:{exc}") from exc
             try:
                 write_pending_atomic(
@@ -1090,6 +1017,7 @@ def main(argv: list[str] | None = None) -> int:
                         plan=plan,
                         iai_version=runtime.version,
                         doc_tag_fn=runtime.doc_tag,
+                        target_checkpoint_id=target_checkpoint_id,
                     ),
                 )
                 reports = apply_plan(
@@ -1102,23 +1030,22 @@ def main(argv: list[str] | None = None) -> int:
             except Exception as apply_exc:
                 try:
                     store.close()
-                except Exception as close_exc:  # noqa: BLE001
+                except Exception as close_exc:
                     raise AdapterError(
-                        "store_close_failed_after_apply_error:"
-                        f"{type(close_exc).__name__}"
+                        f"store_close_failed_after_apply_error:{type(close_exc).__name__}"
                     ) from apply_exc
                 raise
             else:
                 try:
                     store.close()
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc:
                     raise AdapterError(f"store_close_failed:{type(exc).__name__}") from exc
+            checkpoint_id = target_checkpoint_id
+        elif pending_status != "completed" and state.get("successful_run_utc") is None:
+            checkpoint_id = secrets.token_hex(32)
 
         payload = _state_payload(
-            vault_root,
-            notes,
-            doc_tags,
-            runtime.version,
+            vault_root, notes, doc_tags, runtime.version, checkpoint_id
         )
         write_state_atomic(state_file, payload)
         clear_pending_journal(pending_file)
