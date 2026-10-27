@@ -142,6 +142,7 @@ class RecoveryStateMachineTests(unittest.TestCase):
                 "iai_version": mod.EXPECTED_IAI_VERSION,
                 "vault_root": str(vault.resolve()),
                 "store_root": str(store.resolve()),
+                "semantic_db_identity": mod.semantic_db_identity(store / "hippo" / "brain.sqlite3"),
                 "started_run_utc": "2026-10-27T00:00:00Z",
                 "base_checkpoint_id": state["checkpoint_id"],
                 "target_checkpoint_id": "6" * 64,
