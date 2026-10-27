@@ -5,6 +5,7 @@ import importlib.util
 import io
 import json
 import re
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -253,6 +254,57 @@ class RecoveryHardeningTests(unittest.TestCase):
             second = mod._acquire_apply_lock(lock_file)
             second.close()
             self.assertTrue(second.closed)
+
+    def test_apply_lock_rejects_a_second_process(self):
+        with tempfile.TemporaryDirectory() as td:
+            lock_file = Path(td) / "state.apply.lock"
+            child_code = r'''
+import importlib.util
+import sys
+from pathlib import Path
+module_path = Path(sys.argv[1])
+lock_path = Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("dc02_lock_holder", module_path)
+module = importlib.util.module_from_spec(spec)
+assert spec and spec.loader
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+handle = module._acquire_apply_lock(lock_path)
+print("LOCKED", flush=True)
+sys.stdin.readline()
+handle.close()
+'''
+            process = subprocess.Popen(
+                [sys.executable, "-c", child_code, str(MODULE_PATH), str(lock_file)],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            try:
+                assert process.stdout is not None
+                ready = process.stdout.readline().strip()
+                if ready != "LOCKED":
+                    assert process.stderr is not None
+                    error = process.stderr.read()
+                    self.fail(f"lock holder failed before readiness: {ready!r} {error!r}")
+                with self.assertRaisesRegex(mod.AdapterError, "apply_lock_unavailable"):
+                    mod._acquire_apply_lock(lock_file)
+            finally:
+                if process.stdin is not None:
+                    try:
+                        process.stdin.write("\n")
+                        process.stdin.flush()
+                    except BrokenPipeError:
+                        pass
+                try:
+                    process.communicate(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.communicate(timeout=5)
+            self.assertEqual(process.returncode, 0)
+            after = mod._acquire_apply_lock(lock_file)
+            after.close()
 
     def test_apply_lock_failure_aborts_before_state_or_store_mutation(self):
         with tempfile.TemporaryDirectory() as td:
