@@ -243,6 +243,51 @@ class RecoveryHardeningTests(unittest.TestCase):
             self.assertFalse(state_file.exists())
             self.assertTrue(mod._pending_file_for(state_file).is_file())
 
+    def test_apply_lock_round_trip_is_cross_platform_callable(self):
+        with tempfile.TemporaryDirectory() as td:
+            lock_file = Path(td) / "state.apply.lock"
+            first = mod._acquire_apply_lock(lock_file)
+            self.assertTrue(lock_file.is_file())
+            first.close()
+            self.assertTrue(first.closed)
+            second = mod._acquire_apply_lock(lock_file)
+            second.close()
+            self.assertTrue(second.closed)
+
+    def test_apply_lock_failure_aborts_before_state_or_store_mutation(self):
+        with tempfile.TemporaryDirectory() as td:
+            root, store_root, state_file = self._paths(td)
+            (root / "a.md").write_text("a", encoding="utf-8")
+            open_calls: list[Path] = []
+            runtime = self._runtime(
+                lambda *_a, **_kw: self.fail("study called after lock failure"),
+                open_store=lambda path: open_calls.append(path) or FakeStore(),
+            )
+            with mock.patch.object(mod, "load_iai_runtime", return_value=runtime), mock.patch.object(
+                mod,
+                "_acquire_apply_lock",
+                side_effect=mod.AdapterError("apply_lock_unavailable:Injected"),
+            ):
+                rc = mod.main(self._args(root, store_root, state_file, apply=True))
+            self.assertEqual(rc, 1)
+            self.assertEqual(open_calls, [])
+            self.assertFalse(state_file.exists())
+            self.assertFalse(mod._pending_file_for(state_file).exists())
+
+    def test_plan_only_never_creates_apply_lock_file(self):
+        with tempfile.TemporaryDirectory() as td:
+            root, store_root, state_file = self._paths(td)
+            (root / "a.md").write_text("a", encoding="utf-8")
+            runtime = self._runtime(
+                lambda *_a, **_kw: self.fail("plan-only called study")
+            )
+            with mock.patch.object(mod, "load_iai_runtime", return_value=runtime):
+                self.assertEqual(
+                    mod.main(self._args(root, store_root, state_file)),
+                    0,
+                )
+            self.assertFalse(mod._apply_lock_file_for(state_file).exists())
+
 
 if __name__ == "__main__":
     unittest.main()
