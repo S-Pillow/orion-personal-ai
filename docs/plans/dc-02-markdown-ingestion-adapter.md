@@ -1,6 +1,6 @@
 # DC-02 Markdown-Only Native iai Ingestion Adapter
 
-Date: 2026-10-26
+Date: 2026-10-27
 
 ## Purpose
 
@@ -37,6 +37,10 @@ a path-backed document it:
 Critic-based contradiction resolution is optional. Orion does not enable it for
 this adapter.
 
+The adapter also pins the vendor compatibility surface it intentionally relies
+on: `iai_mcp.study._doc_tag()` and the iai 3.3.0 `study_document()` parameters
+used by Orion. A version/signature mismatch fails before store mutation.
+
 ### Why stock `iai teach <vault>` / `iai watch <vault>` is not the boundary
 
 The stock directory iterator intentionally accepts every suffix in iai's
@@ -66,9 +70,10 @@ the iai `doc:<slug>` tag. Therefore this adapter:
   identity;
 - does not treat that session id as sufficient ownership;
 - precomputes the exact iai document tag for every admitted relative path;
-- refuses the entire run if two relative paths collide to the same doc tag.
-
-This protects later doc-tag-based vault ownership resolution.
+- refuses the entire run if two current relative paths collide to the same doc
+  tag;
+- validates persisted state metadata before using it to plan deletion/fade
+  work.
 
 ### Rename behavior
 
@@ -92,14 +97,16 @@ A file is admitted only when all of the following are true:
 - its suffix is exactly `.md` case-insensitively;
 - neither it nor a traversed directory is a symlink/reparse point;
 - its resolved path remains contained by the resolved vault root;
+- it is a regular file;
 - it is at most 2,000,000 bytes by default, matching the DC-02 current-source
   resolver ceiling;
 - its bytes decode as strict UTF-8;
 - the complete admitted corpus is at most 5,000 files by default, matching the
   DC-02 resolver ceiling.
 
-The adapter fails rather than silently truncating when a Markdown file exceeds
-a configured safety ceiling.
+An unsafe/reparse Markdown file or traversed directory fails the whole scan; it
+is not silently omitted. Oversize, invalid UTF-8, containment failures, and a
+source that changes while the scan snapshot is being taken also fail closed.
 
 ### Identity
 
@@ -107,7 +114,7 @@ a configured safety ceiling.
 `Projects/Orion/Architecture.md`.
 
 Before any apply run, the adapter asks iai 3.3.0's own `_doc_tag()` function for
-every source name and refuses any collision.
+every current source name and refuses any collision.
 
 ### State and change detection
 
@@ -115,42 +122,70 @@ The default state checkpoint is outside the vault:
 
 `<IAI_MCP_STORE>/orion/vault-markdown-ingest-state.json`
 
-The state records SHA-256, size, mtime, and iai document tag for each relative
-path.
+The state records:
+
+- schema version;
+- vault root identity;
+- `session_id`;
+- iai version;
+- successful-run UTC timestamp;
+- relative path;
+- file size;
+- mtime in nanoseconds;
+- SHA-256;
+- iai document tag.
+
+No raw note content is written to the checkpoint. Existing state is validated
+before it can drive a plan; malformed/corrupt JSON, incompatible schema/session/
+iai version, unsafe source names, invalid hashes/metadata, or persisted doc-tag
+collisions fail closed.
 
 Content SHA-256, not mtime alone, decides whether a current note requires
 restudy. This avoids reinforcing an unchanged note merely because a sync tool
 touched its timestamp.
 
-The checkpoint advances only after the complete apply succeeds.
+The checkpoint advances only after the complete apply succeeds and the native
+store closes cleanly. The state write is temp file -> flush/fsync -> atomic
+replace.
 
 ### Apply order
 
 1. new files;
 2. content-changed files;
-3. vanished paths as empty documents.
+3. vanished paths as empty documents;
+4. cleanly close the native store;
+5. atomically advance the Orion checkpoint.
 
-This intentionally mirrors iai watch semantics and makes rename/shared-owner
-behavior safe.
+This intentionally mirrors iai watch semantics and makes normal rename/shared-
+owner behavior safe.
+
+Each current note is fingerprint-checked immediately before and after the
+vendor study call. A changed source aborts the run and leaves the checkpoint at
+the last successful state.
 
 ### Fail-closed conditions
 
 No checkpoint is committed if any of these occurs:
 
 - iai package version is not exactly 3.3.0;
+- expected vendor study/doc-tag signature is unavailable;
 - unsafe/reparse path or containment failure;
 - invalid UTF-8;
+- non-regular Markdown source;
 - source file exceeds the configured limit;
 - corpus exceeds the configured file limit;
 - case-insensitive path collision;
-- iai document-tag collision;
+- iai document-tag collision in the current corpus;
 - state file or iai store is placed inside the vault;
-- state belongs to a different vault root/session/schema;
-- canonical `hippo/brain.sqlite3` is absent;
-- the native store cannot be opened (including writer/lock conflicts);
+- persisted state is corrupt or incompatible;
+- canonical `hippo/brain.sqlite3` is absent for apply;
+- the native store cannot be opened;
+- a native study/fade call raises;
 - iai reports any skipped or truncated study chunk;
-- a note changes while it is being studied;
-- the store cannot be cleanly closed.
+- a source changes before or during study;
+- deletion/fade processing is incomplete;
+- the store cannot be cleanly closed;
+- the checkpoint cannot be atomically written.
 
 Partial iai writes can exist if a later file fails. The state checkpoint does
 not advance, so the next operator run retries the same batch. iai's study
@@ -160,8 +195,9 @@ capture is idempotent/reinforcing, making this retry behavior intentional.
 
 ### Plan-only (default)
 
-This imports iai 3.3.0 for version/doc-tag compatibility and reads the vault,
-but does not open or mutate the semantic store.
+This imports iai 3.3.0 for version/doc-tag compatibility and reads the vault and
+Orion checkpoint, but does not open or mutate the semantic store and does not
+write the checkpoint.
 
 Example:
 
@@ -180,6 +216,12 @@ Optional bootstrap guard after observing the current inventory:
   --expected-files 248
 ```
 
+Plan output reports the vault/store/state targets, session, iai version, file
+counts, new/changed/unchanged/deleted counts, zero rejected/collision counts
+when validation passes, canonical-store presence, and whether apply prechecks
+permit proceeding. `--json` exposes the path lists and computed current doc
+ownership map.
+
 ### Apply
 
 Apply is intentionally separate and explicit:
@@ -197,6 +239,25 @@ canonical native store directly.
 The first full bootstrap is a MODERATE-memory operation because it reads every
 Markdown note and invokes iai embedding/study work. It does not load the Orion
 qwen model and does not write the vault.
+
+## Source verification
+
+Disposable tests live under:
+
+`tests/dc02/test_orion_vault_markdown_ingest.py`
+
+They use temporary directories and fake store/vendor call surfaces; they do not
+read Steven's real vault or open the canonical store. CI runs them on both
+Ubuntu and Windows before the broader vault-action disposable suite so their
+platform result remains observable even if an unrelated later suite fails.
+
+The tests cover Markdown-only admission, case handling, deterministic ordering,
+UTF-8 and size/count boundaries, symlink/reparse refusal, containment,
+case-insensitive collisions, vendor doc-tag/signature compatibility, SHA-based
+planning, rename/new/deleted behavior, vendor call parameters/order,
+skip/truncation rejection, source mutation races, strict state validation,
+no-content checkpointing, plan-only no-write behavior, failure no-advance, and
+successful close-before-checkpoint ordering.
 
 ## Non-goals
 
@@ -220,7 +281,9 @@ This ticket does not:
 - content-hash planning;
 - current-before-deleted apply ordering;
 - partial-study and concurrent-file-change failure;
-- atomic state checkpoint outside vault;
+- validated atomic state checkpoint outside vault;
+- plan-only performs no semantic-store/checkpoint writes;
 - source tests pass on Windows and Ubuntu.
 
-Runtime bootstrap/calibration is a later operator action.
+Runtime bootstrap/calibration is a later operator action and requires separate
+Steven approval.
