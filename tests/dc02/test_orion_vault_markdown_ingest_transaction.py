@@ -146,7 +146,7 @@ class TransactionTests(unittest.TestCase):
     def test_invalid_portable_source_fails_before_recovery_owner_or_store_open(self):
         with tempfile.TemporaryDirectory() as td:
             vault, store, paths = self._fixture(td)
-            (vault / "a\\b.md").write_text("invalid portable source content", encoding="utf-8")
+            (vault / ("a" + chr(92) + "b.md")).write_text("invalid portable source content", encoding="utf-8")
             opened: list[Path] = []
             runtime = self._runtime(native_study([]), lambda root: opened.append(root) or FakeStore())
             out = io.StringIO()

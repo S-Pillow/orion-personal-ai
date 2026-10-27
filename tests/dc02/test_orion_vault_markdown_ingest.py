@@ -29,7 +29,7 @@ class AdmissionAndPlanningTests(unittest.TestCase):
         for name in accepted:
             self.assertEqual(mod.validate_source_name(name), name)
         rejected = [
-            r"a\b.md",
+            r"a\\b.md",
             "/absolute.md",
             "../escape.md",
             "a/../b.md",
@@ -52,7 +52,7 @@ class AdmissionAndPlanningTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             vault = Path(td) / "vault"
             vault.mkdir()
-            (vault / "a\b.md").write_text("portable boundary test", encoding="utf-8")
+            (vault / ("a" + chr(92) + "b.md")).write_text("portable boundary test", encoding="utf-8")
             with self.assertRaisesRegex(mod.AdapterError, "source_name_invalid"):
                 mod.scan_markdown_vault(vault)
 
