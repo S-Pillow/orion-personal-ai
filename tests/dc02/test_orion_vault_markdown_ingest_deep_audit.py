@@ -177,17 +177,16 @@ class DeepAuditTests(unittest.TestCase):
             result = json.loads(output.getvalue())
             self.assertIn("owned_store_missing_state_and_pending", result["error"])
 
-    def test_below_vendor_capture_floor_fails_before_vendor_call(self):
+    def test_below_vendor_capture_floor_fails_before_transaction_or_vendor_call(self):
         with tempfile.TemporaryDirectory() as td:
-            root = Path(td) / "vault"
-            root.mkdir()
-            path = root / "tiny.md"
-            path.write_text("tiny", encoding="utf-8")
-            note = mod.scan_markdown_vault(root)[0]
-            calls: list[str] = []
+            base, vault, store = self._fixture(td)
+            state = base / "state.json"
+            (vault / "tiny.md").write_text("tiny", encoding="utf-8")
+            study_calls: list[str] = []
+            open_calls: list[Path] = []
 
-            def study(_store, **kwargs):
-                calls.append(kwargs["source_name"])
+            def native_shaped_study(_store, **kwargs):
+                study_calls.append(kwargs["source_name"])
                 return {
                     "chunks_total": 0,
                     "inserted": 0,
@@ -195,19 +194,24 @@ class DeepAuditTests(unittest.TestCase):
                     "skipped": 0,
                 }
 
-            with self.assertRaisesRegex(
-                mod.AdapterError, "markdown_below_iai_capture_floor:tiny.md:4<12"
-            ):
-                mod.apply_plan(
-                    store=object(),
-                    vault_root=root,
-                    notes=[note],
-                    plan=mod.SyncPlan(
-                        new=("tiny.md",), changed=(), unchanged=(), deleted=()
-                    ),
-                    study_document=study,
-                )
-            self.assertEqual(calls, [])
+            # Match the exact identity returned by pinned load_iai_runtime().
+            native_shaped_study.__module__ = "iai_mcp.study"
+            native_shaped_study.__name__ = "study_document"
+            runtime = self._runtime(
+                native_shaped_study,
+                open_store=lambda path: open_calls.append(path) or FakeStore(),
+            )
+            output = io.StringIO()
+            with mock.patch.object(mod, "load_iai_runtime", return_value=runtime), redirect_stdout(output):
+                rc = mod.main(self._args(vault, store, state, apply=True))
+            self.assertEqual(rc, 1)
+            result = json.loads(output.getvalue())
+            self.assertIn("markdown_below_iai_capture_floor:tiny.md:4<12", result["error"])
+            self.assertEqual(study_calls, [])
+            self.assertEqual(open_calls, [])
+            self.assertFalse(state.exists())
+            self.assertFalse(mod._pending_file_for(state).exists())
+            self.assertFalse(mod._store_owner_file_for(store).exists())
 
     def test_nonempty_zero_chunk_vendor_report_is_rejected_as_second_defense(self):
         with tempfile.TemporaryDirectory() as td:
