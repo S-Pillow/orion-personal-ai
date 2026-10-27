@@ -8,6 +8,7 @@ recovery ordering, metadata integrity, and the only supported native-store apply
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import os
@@ -36,6 +37,105 @@ for _name in dir(_core):
 
 STORE_OWNER_SCHEMA_VERSION = 1
 IAI_MIN_CAPTURE_CHARS = 12
+IAI_STUDY_SELF_TEST_SAMPLE = 5
+
+
+def _bounded_binary_read(path: Path, *, max_bytes: int) -> tuple[bytes, os.stat_result, os.stat_result]:
+    """Read at most max_bytes+1 bytes from one stable regular-file handle."""
+    if max_bytes < 0:
+        raise AdapterError("bounded_read_limit_invalid")
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    fd: int | None = None
+    try:
+        fd = os.open(str(path), flags)
+        with os.fdopen(fd, "rb") as handle:
+            fd = None
+            before = os.fstat(handle.fileno())
+            if not stat.S_ISREG(before.st_mode):
+                raise AdapterError(f"markdown_not_regular_file:{path}")
+            data = handle.read(max_bytes + 1)
+            after = os.fstat(handle.fileno())
+    except AdapterError:
+        raise
+    except OSError as exc:
+        raise AdapterError(f"markdown_read_failed:{path}:{type(exc).__name__}") from exc
+    finally:
+        if fd is not None:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+    return data, before, after
+
+
+def _strict_utf8_snapshot(
+    path: Path,
+    root_real: Path,
+    *,
+    max_file_bytes: int = MAX_SOURCE_FILE_BYTES,
+) -> NoteSnapshot:
+    """Strict bounded snapshot; never buffers more than the configured ceiling+1."""
+    if max_file_bytes < 1:
+        raise AdapterError("max_file_bytes_must_be_positive")
+    if _is_reparse_point(path):
+        raise AdapterError(f"unsafe_reparse_markdown:{path}")
+    try:
+        resolved = path.resolve(strict=True)
+    except OSError as exc:
+        raise AdapterError(f"markdown_resolve_failed:{path}:{type(exc).__name__}") from exc
+    if not _contained(resolved, root_real):
+        raise AdapterError(f"markdown_escaped_vault:{path}")
+
+    data, before, after = _bounded_binary_read(resolved, max_bytes=max_file_bytes)
+    rel = resolved.relative_to(root_real).as_posix()
+    if before.st_size > max_file_bytes or len(data) > max_file_bytes:
+        observed = max(before.st_size, len(data))
+        raise AdapterError(f"markdown_file_too_large:{rel}:{observed}>{max_file_bytes}")
+    try:
+        data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise AdapterError(f"markdown_not_utf8:{resolved}") from exc
+    if before.st_size != after.st_size or before.st_mtime_ns != after.st_mtime_ns:
+        raise AdapterError(f"markdown_changed_during_snapshot:{resolved}")
+    if after.st_size != len(data):
+        raise AdapterError(f"markdown_changed_during_snapshot:{resolved}")
+    try:
+        path_after = resolved.stat()
+    except OSError as exc:
+        raise AdapterError(f"markdown_changed_during_snapshot:{resolved}") from exc
+    if path_after.st_size != after.st_size or path_after.st_mtime_ns != after.st_mtime_ns:
+        raise AdapterError(f"markdown_changed_during_snapshot:{resolved}")
+    if getattr(after, "st_ino", 0) and getattr(path_after, "st_ino", 0):
+        if after.st_ino != path_after.st_ino or after.st_dev != path_after.st_dev:
+            raise AdapterError(f"markdown_changed_during_snapshot:{resolved}")
+
+    return NoteSnapshot(
+        relative_path=rel,
+        absolute_path=str(resolved),
+        size=len(data),
+        mtime_ns=after.st_mtime_ns,
+        sha256=hashlib.sha256(data).hexdigest(),
+    )
+
+
+# Core scan/resnapshot helpers resolve this symbol through their own module
+# globals. Rebind it so every public path uses the bounded implementation.
+_core._strict_utf8_snapshot = _strict_utf8_snapshot
+globals()["_strict_utf8_snapshot"] = _strict_utf8_snapshot
+
+
+def _report_count(report: Mapping[str, Any], key: str, relative_path: str) -> int:
+    """Accept only actual non-negative integer vendor counters."""
+    value = report.get(key, 0)
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise AdapterError(f"study_report_invalid:{relative_path}:{key}")
+    return value
+
+
+# _validate_study_report lives in the core module and resolves _report_count
+# there, so bind the stricter counter validator into that namespace too.
+_core._report_count = _report_count
+globals()["_report_count"] = _report_count
 
 
 def _store_owner_file_for(store_root: Path) -> Path:
@@ -208,6 +308,35 @@ def validate_owned_store_recovery_presence(
         raise AdapterError("owned_store_missing_state_and_pending")
 
 
+def _fsync_directory(path: Path) -> None:
+    if os.name == "nt":
+        return
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    fd = os.open(str(path), flags)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _ensure_directory_durable(path: Path) -> None:
+    """Create a directory chain and persist each new parent entry on POSIX."""
+    canonical = Path(_canonical_path_text(path))
+    missing: list[Path] = []
+    cursor = canonical
+    while not os.path.lexists(cursor):
+        missing.append(cursor)
+        parent = cursor.parent
+        if parent == cursor:
+            break
+        cursor = parent
+    canonical.mkdir(parents=True, exist_ok=True)
+    if os.name != "nt":
+        for created in reversed(missing):
+            _fsync_directory(created.parent)
+        _fsync_directory(canonical)
+
+
 def _replace_atomic_durable(source: Path, destination: Path) -> None:
     """Atomically replace a metadata file with crash-durable rename semantics."""
     if os.name == "nt":
@@ -226,19 +355,14 @@ def _replace_atomic_durable(source: Path, destination: Path) -> None:
         return
 
     os.replace(source, destination)
-    directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
-    directory_fd = os.open(str(destination.parent), directory_flags)
-    try:
-        os.fsync(directory_fd)
-    finally:
-        os.close(directory_fd)
+    _fsync_directory(destination.parent)
 
 
 def _write_atomic(path: Path, payload: Mapping[str, Any], error_prefix: str) -> None:
     """Write metadata via fsynced temp file + durable atomic replacement."""
     tmp_path: Path | None = None
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
+        _ensure_directory_durable(path.parent)
         encoded = json.dumps(payload, indent=2, sort_keys=True) + "\n"
         fd, tmp_name = tempfile.mkstemp(
             prefix=path.name + ".", suffix=".tmp", dir=str(path.parent), text=True
@@ -278,26 +402,34 @@ def clear_pending_journal(pending_file: Path) -> None:
     try:
         pending_file.unlink(missing_ok=True)
         if existed and os.name != "nt":
-            directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
-            directory_fd = os.open(str(pending_file.parent), directory_flags)
-            try:
-                os.fsync(directory_fd)
-            finally:
-                os.close(directory_fd)
+            _fsync_directory(pending_file.parent)
     except OSError as exc:
         raise AdapterError(f"pending_clear_failed:{type(exc).__name__}") from exc
 
 
-def _validate_native_chunk_floor(relative_path: str, note: NoteSnapshot) -> None:
-    """Reject a source that pinned iai 3.3.0 would convert to zero chunks."""
+def _read_note_text_matching_snapshot(relative_path: str, note: NoteSnapshot) -> str:
+    """Bound the chunk-floor read and require it to match the admitted snapshot."""
+    path = Path(note.absolute_path)
+    if _is_reparse_point(path):
+        raise AdapterError(f"markdown_changed_before_chunk_floor:{relative_path}")
+    data, before, after = _bounded_binary_read(path, max_bytes=note.size)
+    if len(data) != note.size or before.st_size != note.size or after.st_size != note.size:
+        raise AdapterError(f"markdown_changed_before_chunk_floor:{relative_path}")
+    if before.st_mtime_ns != note.mtime_ns or after.st_mtime_ns != note.mtime_ns:
+        raise AdapterError(f"markdown_changed_before_chunk_floor:{relative_path}")
+    if hashlib.sha256(data).hexdigest() != note.sha256:
+        raise AdapterError(f"markdown_changed_before_chunk_floor:{relative_path}")
     try:
-        text = Path(note.absolute_path).read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as exc:
-        raise AdapterError(
-            f"markdown_chunk_floor_read_failed:{relative_path}:{type(exc).__name__}"
-        ) from exc
+        return data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise AdapterError(f"markdown_changed_before_chunk_floor:{relative_path}") from exc
+
+
+def _validate_native_chunk_floor(relative_path: str, note: NoteSnapshot) -> None:
+    """Reject every nonzero source that pinned iai 3.3.0 converts to zero chunks."""
+    text = _read_note_text_matching_snapshot(relative_path, note)
     stripped = text.strip()
-    if stripped and len(stripped) < IAI_MIN_CAPTURE_CHARS:
+    if note.size > 0 and len(stripped) < IAI_MIN_CAPTURE_CHARS:
         raise AdapterError(
             f"markdown_below_iai_capture_floor:{relative_path}:"
             f"{len(stripped)}<{IAI_MIN_CAPTURE_CHARS}"
@@ -326,21 +458,45 @@ def _validate_native_study_accounting(
     relative_path: str,
     note: NoteSnapshot,
     report: Mapping[str, Any],
+    *,
+    require_recall_self_test: bool = False,
 ) -> None:
     """Reject vendor reports that would silently checkpoint missing source data."""
     if "chunks_total" not in report:
+        if require_recall_self_test:
+            raise AdapterError(f"study_report_missing:{relative_path}:chunks_total")
         return
     total = _report_count(report, "chunks_total", relative_path)
     if note.size > 0 and total == 0:
         raise AdapterError(f"study_no_chunks_for_nonempty_source:{relative_path}")
-    if all(key in report for key in ("inserted", "reinforced", "skipped")):
-        accounted = sum(
-            _report_count(report, key, relative_path)
-            for key in ("inserted", "reinforced", "skipped")
-        )
+
+    counters = ("inserted", "reinforced", "skipped")
+    if all(key in report for key in counters):
+        accounted = sum(_report_count(report, key, relative_path) for key in counters)
         if accounted != total:
             raise AdapterError(
                 f"study_chunk_accounting_mismatch:{relative_path}:{accounted}!={total}"
+            )
+    elif require_recall_self_test:
+        missing = next(key for key in counters if key not in report)
+        raise AdapterError(f"study_report_missing:{relative_path}:{missing}")
+
+    if require_recall_self_test and total > 0:
+        for key in ("recall_tested", "recall_verified"):
+            if key not in report:
+                raise AdapterError(f"study_report_missing:{relative_path}:{key}")
+        inserted = _report_count(report, "inserted", relative_path)
+        reinforced = _report_count(report, "reinforced", relative_path)
+        tested = _report_count(report, "recall_tested", relative_path)
+        verified = _report_count(report, "recall_verified", relative_path)
+        expected = min(IAI_STUDY_SELF_TEST_SAMPLE, inserted + reinforced)
+        if tested != expected:
+            raise AdapterError(
+                f"study_recall_test_count_mismatch:{relative_path}:{tested}!={expected}"
+            )
+        if verified != tested:
+            raise AdapterError(
+                f"study_recall_self_test_miss:{relative_path}:{verified}!={tested}"
             )
 
 
@@ -356,6 +512,7 @@ def apply_plan(
     note_list = list(notes)
     by_rel = {note.relative_path: note for note in note_list}
     reports: dict[str, Any] = {"studied": {}, "faded": {}}
+    require_native_self_test = _is_pinned_native_study_document(study_document)
 
     for rel in (*plan.new, *plan.changed):
         note = by_rel.get(rel)
@@ -376,7 +533,12 @@ def apply_plan(
         if not isinstance(report, Mapping):
             raise AdapterError(f"study_invalid_report:{rel}")
         _validate_study_report(rel, report)
-        _validate_native_study_accounting(rel, note, report)
+        _validate_native_study_accounting(
+            rel,
+            note,
+            report,
+            require_recall_self_test=require_native_self_test,
+        )
         if not _resnapshot_matches(note, vault_root):
             raise AdapterError(f"markdown_changed_during_study:{rel}")
         reports["studied"][rel] = dict(report)
@@ -453,6 +615,12 @@ def main(argv: list[str] | None = None) -> int:
         if args.apply:
             if not canonical_store_present:
                 raise AdapterError(f"canonical_store_missing:{db_path}")
+            # Create and persist lock-parent directories before any lock file is
+            # materialized. This closes the first-run POSIX power-loss window in
+            # which a newly-created metadata directory could disappear even
+            # though the pending journal file itself had been fsynced.
+            _ensure_directory_durable(state_lock_file.parent)
+            _ensure_directory_durable(store_lock_file.parent)
             apply_locks = _acquire_apply_locks((state_lock_file, store_lock_file))
 
         doc_tags = validate_doc_tag_uniqueness(notes, runtime.doc_tag)
