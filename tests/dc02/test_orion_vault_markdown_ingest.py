@@ -484,8 +484,16 @@ class StateTests(unittest.TestCase):
             root.mkdir()
             (root / "a.md").write_text("hello", encoding="utf-8")
             note = mod.scan_markdown_vault(root)[0]
-            payload = mod._state_payload(root, [note], {"a.md": "doc:a.md"}, "3.3.0")
+            checkpoint_id = "1" * 64
+            payload = mod._state_payload(
+                root,
+                [note],
+                {"a.md": "doc:a.md"},
+                "3.3.0",
+                checkpoint_id,
+            )
             self.assertEqual(payload["iai_version"], "3.3.0")
+            self.assertEqual(payload["checkpoint_id"], checkpoint_id)
             self.assertIn("successful_run_utc", payload)
             self.assertEqual(payload["files"]["a.md"]["size"], 5)
             self.assertEqual(payload["files"]["a.md"]["doc_tag"], "doc:a.md")
