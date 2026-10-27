@@ -17,6 +17,10 @@ _MODULES = tuple(
         "orion_vault_ingest_fs",
         "orion_vault_ingest_state",
         "orion_vault_ingest_runtime",
+        # Cross-module invariants load last so the public/core surface uses
+        # the hardened store/state contracts rather than the lower-level
+        # module primitives directly.
+        "orion_vault_ingest_contract",
     )
 )
 for _module in _MODULES:
