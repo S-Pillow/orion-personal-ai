@@ -119,6 +119,23 @@ The marker prevents a fresh second state file or a different vault from sequenti
 
 Plan-only validates an existing owner marker but never creates one. On the first mutating apply to an unowned store, pending recovery is made durable first, then the owner is claimed, then the native store is opened. A no-mutation first apply commits its successful state before claiming ownership.
 
+## Reserved metadata and semantic-store path identity
+
+The following roles are treated as reserved file identities:
+
+- successful state;
+- pending recovery journal;
+- state apply lock;
+- store-wide apply lock;
+- store-owner marker;
+- native `hippo/brain.sqlite3` semantic database.
+
+Their canonical paths must be pairwise disjoint. Exact aliases and ancestor/descendant overlaps are rejected before lock-parent creation, so a custom state path cannot turn a reserved owner/lock/database filename into a directory or otherwise poison another role.
+
+Existing reserved files must be regular, non-reparse files with a single filesystem link. A multi-link/hardlinked state, pending, lock, owner, or semantic DB fails closed. The semantic DB is checked both during preflight and immediately before native store open.
+
+The lock acquisition helper repeats the regular-file and link-count check on the **opened lock handle** before taking the OS lock. On Windows that check occurs before the one-byte `msvcrt.locking` backing byte can be written, preventing a hardlinked lock pathname from modifying an aliased file such as a vault sentinel.
+
 ## Apply serialization
 
 iai's `AccessMode.SHARED` permits multiple SHARED holders, so vendor locking alone does not serialize two Orion writers. Apply therefore acquires both:
@@ -148,6 +165,8 @@ Current files are re-snapshotted before and after native study calls. A planned 
 
 After all semantic calls and a clean native store close, Orion performs a complete second Markdown inventory. The successful checkpoint is written only if that inventory exactly matches the inventory that defined the apply. Unrelated mid-run source drift therefore cannot be silently checkpointed.
 
+Because the pinned vendor API accepts `path=` and reopens that path internally, the pre/post snapshot fence cannot prove that a hostile or extremely fast external writer did not change a file and restore the exact original bytes/metadata entirely inside the vendor reopen window. The operator apply/bootstrap should therefore use a quiescent source vault. Orion intentionally does not replace `path=` with a parallel custom ingestion path merely to close this theoretical race.
+
 ## Fail-closed conditions
 
 No successful checkpoint is committed when any of these occurs:
@@ -160,6 +179,8 @@ No successful checkpoint is committed when any of these occurs:
 - state/pending schema, session, vault root, iai version, or store root is inconsistent;
 - an existing store-owner marker does not match the selected vault/store/state tuple;
 - state, pending, owner, either lock file, or the iai store is inside the vault;
+- reserved metadata/DB roles are equal or have an ancestor/descendant path overlap;
+- an existing reserved metadata, lock, owner, or semantic DB file has multiple filesystem links;
 - canonical `hippo/brain.sqlite3` is absent for apply;
 - either Orion apply lock is already held;
 - owner or pending metadata cannot be written atomically before direct-store open;
@@ -178,7 +199,8 @@ The adapter does not invent semantics that iai 3.3.0 does not expose reliably:
 
 - iai's internal `_supersede_missing()` catches/logs some failures and exposes only a superseded count, so Orion cannot prove from the public `study_document()` report that every requested fade succeeded when zero is also a legitimate result;
 - native tag-add failures inside iai capture paths may be logged internally rather than surfaced as a dedicated report error;
-- on a first Orion bootstrap with no historical Orion checkpoint, current files can all be studied, but Orion has no authoritative prior path inventory from which to decide that arbitrary pre-existing `doc:` tags in an already-populated unmanaged store should be faded. Bootstrap calibration must therefore inspect/confirm the canonical store rather than auto-sweeping unknown ownership.
+- on a first Orion bootstrap with no historical Orion checkpoint, current files can all be studied, but Orion has no authoritative prior path inventory from which to decide that arbitrary pre-existing `doc:` tags in an already-populated unmanaged store should be faded. Bootstrap calibration must therefore inspect/confirm the canonical store rather than auto-sweeping unknown ownership;
+- pre/post snapshots and the final inventory detect normal/persistent vault drift, but the vendor `path=` primitive still implies a narrow change-and-exact-revert race; operator apply should use a quiescent vault.
 
 Those are vendor/API or bootstrap-calibration boundaries, not reasons to add a parallel semantic engine in Orion.
 
@@ -214,7 +236,7 @@ Apply remains explicit:
   --apply
 ```
 
-The iai daemon/Hermes writer must be stopped for the first operator bootstrap so direct-store maintenance is isolated from normal runtime work.
+The iai daemon/Hermes writer must be stopped for the first operator bootstrap so direct-store maintenance is isolated from normal runtime work. The source vault should also be quiescent during apply so the vendor `path=` reopen boundary is not racing an external note writer/sync client.
 
 The first full bootstrap is a later MODERATE-memory operation. It does not load the Orion qwen model and does not write the vault.
 
@@ -245,7 +267,8 @@ This ticket does not:
 - deleted-source reappearance and full-inventory drift fail closed;
 - schema-v2 state/pending metadata bind to the canonical iai store;
 - a schema-v1 store-owner marker prevents sequential cross-vault/cross-state store reuse;
-- same-state and same-store Orion applies are serialized by cross-platform advisory locks;
+- reserved metadata/DB paths cannot alias or nest inside each other, and existing multi-link reserved files are refused;
+- same-state and same-store Orion applies are serialized by cross-platform advisory locks whose opened file identity is rechecked before locking;
 - atomic metadata-only checkpoint/pending/owner writes outside the vault;
 - plan-only performs zero semantic/checkpoint/pending/owner/lock mutation;
 - source tests pass on Windows and Ubuntu.
