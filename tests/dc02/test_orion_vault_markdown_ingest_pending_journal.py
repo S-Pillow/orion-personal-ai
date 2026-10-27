@@ -95,11 +95,7 @@ class PendingJournalRecoveryTests(unittest.TestCase):
             old_b = b"original-b"
             (root / "a.md").write_bytes(b"edited-a")
             (root / "b.md").write_bytes(b"edited-b")
-            write_success_state(
-                state_file,
-                root,
-                {"a.md": old_a, "b.md": old_b},
-            )
+            write_success_state(state_file, root, {"a.md": old_a, "b.md": old_b})
 
             first_calls: list[str] = []
 
@@ -197,6 +193,11 @@ class PendingJournalRecoveryTests(unittest.TestCase):
             self.assertTrue(state_file.is_file())
             self.assertTrue(pending_file.is_file())
 
+            pending = json.loads(pending_file.read_text(encoding="utf-8"))
+            state = json.loads(state_file.read_text(encoding="utf-8"))
+            self.assertEqual(state["checkpoint_id"], pending["target_checkpoint_id"])
+            self.assertNotEqual(pending["base_checkpoint_id"], pending["target_checkpoint_id"])
+
             retry_calls: list[str] = []
 
             def should_not_study(_store, **kwargs):
@@ -223,11 +224,7 @@ class PendingJournalRecoveryTests(unittest.TestCase):
             old_b = b"original-b"
             (root / "a.md").write_bytes(b"edited-a")
             (root / "b.md").write_bytes(b"edited-b")
-            write_success_state(
-                state_file,
-                root,
-                {"a.md": old_a, "b.md": old_b},
-            )
+            write_success_state(state_file, root, {"a.md": old_a, "b.md": old_b})
 
             def fail_second(_store, **kwargs):
                 if kwargs["source_name"] == "b.md":
@@ -262,6 +259,63 @@ class PendingJournalRecoveryTests(unittest.TestCase):
             self.assertEqual(result["plan"]["changed"], ["a.md", "b.md"])
             self.assertEqual(pending_file.read_bytes(), before_pending)
             self.assertEqual(state_file.read_bytes(), before_state)
+
+    def test_second_failed_recovery_with_equal_file_maps_remains_active(self):
+        """P1 regression: equal base/target file maps cannot mean completed."""
+        with tempfile.TemporaryDirectory() as td:
+            root, store_root, state_file = self._paths(td)
+            (root / "a.md").write_text("a", encoding="utf-8")
+            (root / "b.md").write_text("b", encoding="utf-8")
+
+            first_calls: list[str] = []
+
+            def initial_study(_store, **kwargs):
+                rel = kwargs["source_name"]
+                first_calls.append(rel)
+                if rel == "b.md":
+                    raise RuntimeError("initial failure")
+                return {}
+
+            with mock.patch.object(mod, "load_iai_runtime", return_value=self._runtime(initial_study)):
+                self.assertEqual(mod.main(self._apply_args(root, store_root, state_file)), 1)
+            self.assertEqual(first_calls, ["a.md", "b.md"])
+            self.assertFalse(state_file.exists())
+
+            (root / "a.md").unlink()
+            (root / "b.md").unlink()
+            second_calls: list[str] = []
+
+            def failed_recovery(_store, **kwargs):
+                rel = kwargs["source_name"]
+                second_calls.append(rel)
+                if rel == "b.md":
+                    raise RuntimeError("recovery failure")
+                return {}
+
+            with mock.patch.object(mod, "load_iai_runtime", return_value=self._runtime(failed_recovery)):
+                self.assertEqual(mod.main(self._apply_args(root, store_root, state_file)), 1)
+            self.assertEqual(second_calls, ["a.md", "b.md"])
+
+            pending_file = mod._pending_file_for(state_file)
+            pending = json.loads(pending_file.read_text(encoding="utf-8"))
+            self.assertEqual(pending["base_files_sha256"], pending["target_files_sha256"])
+            self.assertNotEqual(pending["base_checkpoint_id"], pending["target_checkpoint_id"])
+
+            final_calls: list[dict[str, object]] = []
+
+            def final_recovery(_store, **kwargs):
+                final_calls.append(dict(kwargs))
+                return {}
+
+            with mock.patch.object(mod, "load_iai_runtime", return_value=self._runtime(final_recovery)):
+                self.assertEqual(mod.main(self._apply_args(root, store_root, state_file)), 0)
+            self.assertEqual(
+                [call["source_name"] for call in final_calls], ["a.md", "b.md"]
+            )
+            self.assertTrue(all(call.get("text") == "" for call in final_calls))
+            self.assertFalse(pending_file.exists())
+            persisted = json.loads(state_file.read_text(encoding="utf-8"))
+            self.assertRegex(persisted["checkpoint_id"], r"^[0-9a-f]{64}$")
 
 
 if __name__ == "__main__":
