@@ -78,6 +78,38 @@ class IaiRuntime:
     open_store: Callable[[Path], Any]
 
 
+class _ApplyLockHandle:
+    """Own one cross-process advisory byte/file lock for an apply run."""
+
+    def __init__(self, path: Path, fd: int) -> None:
+        self.path = path
+        self.fd = fd
+        self.closed = False
+
+    def close(self) -> None:
+        if self.closed:
+            return
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                os.lseek(self.fd, 0, os.SEEK_SET)
+                try:
+                    msvcrt.locking(self.fd, msvcrt.LK_UNLCK, 1)
+                except OSError:
+                    pass
+            else:
+                import fcntl
+
+                try:
+                    fcntl.flock(self.fd, fcntl.LOCK_UN)
+                except OSError:
+                    pass
+        finally:
+            os.close(self.fd)
+            self.closed = True
+
+
 def _is_reparse_point(path: Path) -> bool:
     """Return True for symlinks/junctions/reparse points or unreadable entries."""
     try:
@@ -256,6 +288,38 @@ def _default_state_file(store_root: Path) -> Path:
 
 def _pending_file_for(state_file: Path) -> Path:
     return state_file.with_name(state_file.name + ".pending.json")
+
+
+def _apply_lock_file_for(state_file: Path) -> Path:
+    return state_file.with_name(state_file.name + ".apply.lock")
+
+
+def _acquire_apply_lock(lock_file: Path) -> _ApplyLockHandle:
+    """Acquire a nonblocking cross-process lock for the full apply state machine."""
+    fd: int | None = None
+    try:
+        lock_file.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(str(lock_file), os.O_CREAT | os.O_RDWR, 0o600)
+        if os.name == "nt":
+            import msvcrt
+
+            if os.fstat(fd).st_size == 0:
+                os.write(fd, b"\0")
+                os.fsync(fd)
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return _ApplyLockHandle(lock_file, fd)
+    except OSError as exc:
+        if fd is not None:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        raise AdapterError(f"apply_lock_unavailable:{lock_file}:{type(exc).__name__}") from exc
 
 
 def _path_is_within(path: Path, root: Path) -> bool:
@@ -948,6 +1012,8 @@ def main(argv: list[str] | None = None) -> int:
         else _default_state_file(store_root)
     )
     pending_file = _pending_file_for(state_file)
+    lock_file = _apply_lock_file_for(state_file)
+    apply_lock: _ApplyLockHandle | None = None
     try:
         runtime = load_iai_runtime()
         notes = scan_markdown_vault(
@@ -959,7 +1025,15 @@ def main(argv: list[str] | None = None) -> int:
             )
         validate_state_location(state_file, vault_root)
         validate_state_location(pending_file, vault_root)
+        validate_state_location(lock_file, vault_root)
         validate_store_location(store_root, vault_root)
+        db_path = store_root / "hippo" / "brain.sqlite3"
+        canonical_store_present = db_path.is_file()
+        if args.apply:
+            if not canonical_store_present:
+                raise AdapterError(f"canonical_store_missing:{db_path}")
+            apply_lock = _acquire_apply_lock(lock_file)
+
         doc_tags = validate_doc_tag_uniqueness(notes, runtime.doc_tag)
         state = load_state(state_file, vault_root)
         validate_cross_generation_doc_tags(state, doc_tags, runtime.doc_tag)
@@ -975,8 +1049,6 @@ def main(argv: list[str] | None = None) -> int:
             plan = reconcile_plan_with_pending(
                 plan, notes=notes, state=state, pending_paths=pending_paths
             )
-        db_path = store_root / "hippo" / "brain.sqlite3"
-        canonical_store_present = db_path.is_file()
 
         if not args.apply:
             result = _json_result(
@@ -1007,9 +1079,6 @@ def main(argv: list[str] | None = None) -> int:
                 print("ORION_VAULT_MARKDOWN_INGEST_STORE_MUTATION=false")
                 print("ORION_VAULT_MARKDOWN_INGEST=PLAN_PASS")
             return 0
-
-        if not canonical_store_present:
-            raise AdapterError(f"canonical_store_missing:{db_path}")
 
         if pending_status == "completed":
             clear_pending_journal(pending_file)
@@ -1107,6 +1176,9 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(f"ORION_VAULT_MARKDOWN_INGEST=FAIL:{exc}", file=sys.stderr)
         return 1
+    finally:
+        if apply_lock is not None:
+            apply_lock.close()
 
 
 if __name__ == "__main__":
