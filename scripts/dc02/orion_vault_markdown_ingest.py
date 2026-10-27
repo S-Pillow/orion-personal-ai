@@ -40,7 +40,9 @@ IAI_MIN_CAPTURE_CHARS = 12
 IAI_STUDY_SELF_TEST_SAMPLE = 5
 
 
-def _bounded_binary_read(path: Path, *, max_bytes: int) -> tuple[bytes, os.stat_result, os.stat_result]:
+def _bounded_binary_read(
+    path: Path, *, max_bytes: int
+) -> tuple[bytes, os.stat_result, os.stat_result]:
     """Read at most max_bytes+1 bytes from one stable regular-file handle."""
     if max_bytes < 0:
         raise AdapterError("bounded_read_limit_invalid")
@@ -226,8 +228,13 @@ def validate_state_store_namespace(state_file: Path, store_root: Path) -> None:
         )
 
 
+def _link_count(info: os.stat_result) -> int:
+    value = getattr(info, "st_nlink", 1)
+    return value if isinstance(value, int) and not isinstance(value, bool) else 1
+
+
 def validate_metadata_path_integrity(path: Path, role: str) -> None:
-    """Reject existing metadata sidecars that are links/reparse/special files."""
+    """Reject existing metadata/store files that are links, aliases, or special."""
     if not os.path.lexists(path):
         return
     if _is_reparse_point(path):
@@ -240,6 +247,9 @@ def validate_metadata_path_integrity(path: Path, role: str) -> None:
         ) from exc
     if not stat.S_ISREG(info.st_mode):
         raise AdapterError(f"metadata_path_not_regular:{role}:{path}")
+    links = _link_count(info)
+    if links > 1:
+        raise AdapterError(f"metadata_path_has_multiple_links:{role}:{path}:{links}")
 
 
 def validate_store_metadata_root(store_root: Path) -> None:
@@ -259,18 +269,36 @@ def validate_store_metadata_root(store_root: Path) -> None:
         raise AdapterError(f"store_metadata_root_not_directory:{metadata_root}")
 
 
+def _path_components_within(candidate: Path, boundary: Path) -> bool:
+    try:
+        candidate.relative_to(boundary)
+    except ValueError:
+        return False
+    return True
+
+
 def validate_metadata_path_disjointness(paths: Mapping[str, Path]) -> None:
-    """Reject canonical path reuse across state/recovery/owner/store roles."""
-    seen: dict[str, str] = {}
-    for role, path in paths.items():
-        canonical = _canonical_path_text(path)
-        key = os.path.normcase(canonical)
-        prior_role = seen.get(key)
-        if prior_role is not None:
-            raise AdapterError(
-                f"metadata_path_collision:{prior_role}:{role}:{canonical}"
-            )
-        seen[key] = role
+    """Reject equality or ancestor/descendant overlap across reserved file roles."""
+    canonical: list[tuple[str, Path, str]] = []
+    for role, raw in paths.items():
+        text = _canonical_path_text(raw)
+        path = Path(text)
+        key = os.path.normcase(text)
+        canonical.append((role, path, key))
+
+    for index, (role, path, key) in enumerate(canonical):
+        for other_role, other_path, other_key in canonical[index + 1 :]:
+            if key == other_key:
+                raise AdapterError(
+                    f"metadata_path_collision:{role}:{other_role}:{path}"
+                )
+            if _path_components_within(path, other_path) or _path_components_within(
+                other_path, path
+            ):
+                raise AdapterError(
+                    "metadata_path_overlap:"
+                    f"{role}:{other_role}:{path}:{other_path}"
+                )
 
 
 def validate_store_semantic_boundary(
@@ -405,6 +433,60 @@ def clear_pending_journal(pending_file: Path) -> None:
             _fsync_directory(pending_file.parent)
     except OSError as exc:
         raise AdapterError(f"pending_clear_failed:{type(exc).__name__}") from exc
+
+
+def _hardened_acquire_apply_lock(lock_file: Path) -> _ApplyLockHandle:
+    """Acquire one lock only after checking the opened inode/file identity."""
+    fd: int | None = None
+    canonical = Path(_canonical_path_text(lock_file))
+    try:
+        _ensure_directory_durable(canonical.parent)
+        flags = os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0)
+        fd = os.open(str(canonical), flags, 0o600)
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            raise AdapterError(f"apply_lock_not_regular:{canonical}")
+        links = _link_count(info)
+        if links > 1:
+            raise AdapterError(f"apply_lock_has_multiple_links:{canonical}:{links}")
+
+        if os.name == "nt":
+            import msvcrt
+
+            # Check file identity before this write: a hardlinked lock path must
+            # never mutate another pathname (including a vault file).
+            if info.st_size == 0:
+                os.write(fd, b"\0")
+                os.fsync(fd)
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return _ApplyLockHandle(canonical, fd)
+    except AdapterError:
+        if fd is not None:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        raise
+    except OSError as exc:
+        if fd is not None:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        raise AdapterError(
+            f"apply_lock_unavailable:{canonical}:{type(exc).__name__}"
+        ) from exc
+
+
+# _acquire_apply_locks is defined in the core module and resolves its single-lock
+# helper there, so harden that namespace as well as the coordinator export.
+_core._acquire_apply_lock = _hardened_acquire_apply_lock
+globals()["_acquire_apply_lock"] = _hardened_acquire_apply_lock
 
 
 def _read_note_text_matching_snapshot(relative_path: str, note: NoteSnapshot) -> str:
@@ -610,9 +692,8 @@ def main(argv: list[str] | None = None) -> int:
         validate_state_store_namespace(state_file, store_root)
 
         db_path = store_root / "hippo" / "brain.sqlite3"
-        validate_metadata_path_disjointness(
-            {**metadata_paths, "semantic_db": db_path}
-        )
+        validate_metadata_path_disjointness({**metadata_paths, "semantic_db": db_path})
+        validate_metadata_path_integrity(db_path, "semantic_db")
 
         canonical_store_present = db_path.is_file()
         if canonical_store_present:
@@ -620,12 +701,6 @@ def main(argv: list[str] | None = None) -> int:
         if args.apply:
             if not canonical_store_present:
                 raise AdapterError(f"canonical_store_missing:{db_path}")
-            # Create and persist lock-parent directories before any lock file is
-            # materialized. This closes the first-run POSIX power-loss window in
-            # which a newly-created metadata directory could disappear even
-            # though the pending journal file itself had been fsynced.
-            _ensure_directory_durable(state_lock_file.parent)
-            _ensure_directory_durable(store_lock_file.parent)
             apply_locks = _acquire_apply_locks((state_lock_file, store_lock_file))
 
         doc_tags = validate_doc_tag_uniqueness(notes, runtime.doc_tag)
@@ -735,6 +810,11 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 owner_claimed_for_mutation = True
 
+            # Re-check the semantic DB after locks/metadata writes and immediately
+            # before direct native open so an accidental alias change cannot slip
+            # through the earlier preflight unnoticed.
+            validate_metadata_path_integrity(db_path, "semantic_db")
+            validate_store_semantic_boundary(store_root, vault_root, db_path)
             try:
                 store = runtime.open_store(store_root)
             except Exception as exc:
