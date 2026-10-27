@@ -29,7 +29,8 @@ class AdmissionAndPlanningTests(unittest.TestCase):
         for name in accepted:
             self.assertEqual(mod.validate_source_name(name), name)
         rejected = [
-            r"a\\b.md",
+            "a" + chr(92) + "b.md",
+            "bad" + chr(0xDCFF) + ".md",
             "/absolute.md",
             "../escape.md",
             "a/../b.md",
@@ -141,6 +142,14 @@ class AdmissionAndPlanningTests(unittest.TestCase):
             current = [mod.NoteSnapshot("a-b.md", str(vault / "a-b.md"), 1, 1, "1" * 64)]
             with self.assertRaisesRegex(mod.AdapterError, "historical_doc_tag_collision"):
                 mod.validate_doc_tags(current, state, doc_tag)
+
+    def test_unpersistable_snapshot_metadata_fails_before_serialization(self):
+        with tempfile.TemporaryDirectory() as td:
+            vault = Path(td) / "vault"; store = Path(td) / "store"
+            vault.mkdir(); store.mkdir()
+            note = mod.NoteSnapshot("old.md", str(vault / "old.md"), 1, -1, "0" * 64)
+            with self.assertRaisesRegex(mod.AdapterError, "snapshot_mtime_invalid:old.md"):
+                mod._state_payload(vault, store, [note], {"old.md": doc_tag("old.md")}, "c" * 64)
 
     def test_fixed_metadata_namespace_has_one_lock(self):
         paths = mod.metadata_paths(Path("/tmp/store"))

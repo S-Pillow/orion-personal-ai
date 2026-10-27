@@ -39,6 +39,15 @@ class NoteSnapshot:
     sha256: str
 
     def state_value(self, doc_tag: str) -> dict[str, Any]:
+        validate_source_name(self.relative_path)
+        if not isinstance(self.size, int) or isinstance(self.size, bool) or self.size < 0:
+            raise AdapterError(f"snapshot_size_invalid:{self.relative_path}")
+        if not isinstance(self.mtime_ns, int) or isinstance(self.mtime_ns, bool) or self.mtime_ns < 0:
+            raise AdapterError(f"snapshot_mtime_invalid:{self.relative_path}")
+        if not isinstance(self.sha256, str) or not _SHA256_RE.fullmatch(self.sha256):
+            raise AdapterError(f"snapshot_sha256_invalid:{self.relative_path}")
+        if not isinstance(doc_tag, str) or not doc_tag.startswith("doc:") or len(doc_tag) <= 4:
+            raise AdapterError(f"snapshot_doc_tag_invalid:{self.relative_path}")
         return {
             "size": self.size,
             "mtime_ns": self.mtime_ns,
@@ -112,6 +121,10 @@ def validate_source_name(relative_path: str) -> str:
     """Validate one canonical POSIX source name against the Windows vault grammar."""
     if not isinstance(relative_path, str) or not relative_path or "\\" in relative_path:
         raise AdapterError(f"source_name_invalid:{relative_path}")
+    try:
+        relative_path.encode("utf-8", errors="strict")
+    except UnicodeEncodeError as exc:
+        raise AdapterError("source_name_invalid_unicode") from exc
     posix = PurePosixPath(relative_path)
     if posix.is_absolute() or any(part in {"", ".", ".."} for part in posix.parts):
         raise AdapterError(f"source_name_invalid:{relative_path}")
