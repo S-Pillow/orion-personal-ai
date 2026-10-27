@@ -164,9 +164,10 @@ def scan_markdown_vault(
 ) -> list[NoteSnapshot]:
     """Return a deterministic snapshot of contained, non-reparse ``*.md`` only.
 
-    Reparse directories and Markdown reparse files fail the entire scan rather
-    than being silently omitted. A hidden subtree could otherwise make a plan
-    look complete while excluding authoritative vault material.
+    Reparse directories, Markdown reparse files, and directory-enumeration
+    errors fail the entire scan rather than being silently omitted. An
+    incomplete inventory must never be authoritative enough to generate
+    deletion/fade work.
     """
     if max_files < 1:
         raise AdapterError("max_files_must_be_positive")
@@ -185,7 +186,18 @@ def scan_markdown_vault(
     notes: list[NoteSnapshot] = []
     seen_casefold: dict[str, str] = {}
 
-    for dirpath, dirnames, filenames in os.walk(root_real, followlinks=False):
+    def _walk_error(exc: OSError) -> None:
+        failed_path = getattr(exc, "filename", None) or str(root_real)
+        raise AdapterError(
+            f"vault_walk_failed:{failed_path}:{type(exc).__name__}"
+        ) from exc
+
+    for dirpath, dirnames, filenames in os.walk(
+        root_real,
+        topdown=True,
+        onerror=_walk_error,
+        followlinks=False,
+    ):
         current = Path(dirpath)
         safe_dirs: list[str] = []
         for name in sorted(dirnames, key=lambda value: (value.casefold(), value)):
@@ -585,7 +597,8 @@ def apply_plan(
 
     # A rename is new-current + deleted-old. Current-first lets native exact or
     # near-duplicate reinforcement attach the new doc owner before the old doc
-    # owner is disowned/faded by the empty-document study.
+    # owner is disowned/faded by the empty-document study. Cross-generation
+    # same-tag ownership is rejected before this function is reached.
     for rel in plan.deleted:
         try:
             report = study_document(
