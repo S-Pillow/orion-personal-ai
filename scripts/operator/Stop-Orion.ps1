@@ -72,13 +72,21 @@ function Get-OrionOwnedDescendantSnapshot {
 
     $allProcesses = @(Get-CimInstance Win32_Process -ErrorAction Stop)
     $childrenByParent = @{}
+    $processByPid = @{}
 
     foreach ($process in $allProcesses) {
+        $processPid = [int]$process.ProcessId
+        $processByPid[$processPid] = $process
+
         $parentPid = [int]$process.ParentProcessId
         if (-not $childrenByParent.ContainsKey($parentPid)) {
             $childrenByParent[$parentPid] = @()
         }
         $childrenByParent[$parentPid] += $process
+    }
+
+    if (-not $processByPid.ContainsKey($RootPid)) {
+        throw "Orion-owned Ollama root PID $RootPid was not present during descendant snapshot."
     }
 
     $queue = New-Object 'System.Collections.Generic.Queue[int]'
@@ -88,6 +96,15 @@ function Get-OrionOwnedDescendantSnapshot {
 
     while ($queue.Count -gt 0) {
         $parentPid = $queue.Dequeue()
+        if (-not $processByPid.ContainsKey($parentPid)) {
+            throw "Cannot validate Orion-owned descendant parent PID $parentPid."
+        }
+
+        $parentProcess = $processByPid[$parentPid]
+        if ($null -eq $parentProcess.CreationDate) {
+            throw "Cannot validate creation time for Orion-owned descendant parent PID $parentPid."
+        }
+
         if (-not $childrenByParent.ContainsKey($parentPid)) {
             continue
         }
@@ -95,6 +112,14 @@ function Get-OrionOwnedDescendantSnapshot {
         foreach ($child in @($childrenByParent[$parentPid])) {
             $childPid = [int]$child.ProcessId
             if ($childPid -le 0 -or $seen.ContainsKey($childPid)) {
+                continue
+            }
+
+            if ($null -eq $child.CreationDate) {
+                throw "Cannot validate creation time for candidate Orion-owned descendant PID $childPid."
+            }
+
+            if ([datetime]$child.CreationDate -lt [datetime]$parentProcess.CreationDate) {
                 continue
             }
 
