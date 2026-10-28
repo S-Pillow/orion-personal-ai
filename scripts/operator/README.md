@@ -43,6 +43,29 @@ The first full ROCm operator acceptance run proved Start, direct health, session
 
 Stop Orion now treats the pre-stop descendant snapshot as part of the same Orion-owned lifecycle boundary. Creation order validation rejects stale parent links caused by Windows PID reuse. Valid descendants are persisted before parent termination, receive a grace period after the parent exits, and any survivor is revalidated and force-stopped through a verified process handle only when its identity still matches the captured snapshot. If cleanup fails, the state is retained for retry and Start Orion will not overwrite that pending cleanup state. Unrelated `llama-server.exe` or other processes are not selected by name and remain untouched.
 
+## Final Windows acceptance — PASS (2026-10-28)
+
+The complete operator correction is accepted on the real Orion workstation.
+
+Accepted source chain:
+
+- PR #74 / merge `6e862102df1e68fd6f707aff3ddb3ced1ea8fa25` — process-local ROCm 7.1 startup for Orion-owned Ollama;
+- PR #75 / merge `40f96933e9e429b885c9c7a11cfac781c8b99104` — durable, identity-checked cleanup of Orion-owned Ollama descendants;
+- PR #76 / merge `3cbc1fa4831966fefce5f2711d82032965080fb2` — Windows PowerShell empty-descendant binding correction.
+
+Final live acceptance proved all of the following in one bounded run:
+
+- installed Start/Stop controls matched the accepted source hashes;
+- no process-, user-, or machine-level persistent `OLLAMA_LLM_LIBRARY` mutation was introduced;
+- Orion-started Ollama used `rocm_v7_1` and both Ollama and Hermes became healthy;
+- the actual `qwen3.5-hermes:9b` model completed an `/api/generate` request with HTTP 200;
+- the owned descendant tree was observed, including the live `llama-server.exe` model runner;
+- Stop Orion persisted the owned descendant identities before parent termination, stopped the recorded Ollama parent, identity-checked and force-stopped the surviving owned model runner, and left unrelated processes untouched;
+- Hermes and Ollama APIs were down after Stop, port 11434 was clear, and launcher session state was removed;
+- a final Start returned Orion to a healthy running state on `rocm_v7_1` with zero pending descendant cleanup identities.
+
+The durable acceptance record is `docs/evidence/operator-lifecycle-acceptance-2026-10-28.md`.
+
 ## Known separate gap
 
 Orion Master PRD v2.9 states that Start Orion should open the accepted HUD after Hermes/API health is confirmed. The current operator launcher does not yet perform that HUD-open step. This lifecycle-hardening change does not silently add a HUD launch mechanism; that remains a separate bounded integration item requiring the accepted HUD entry point and verification path.

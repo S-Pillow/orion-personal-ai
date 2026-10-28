@@ -26,6 +26,37 @@ Historical Docker/s6/JARVIS implementation records remain useful provenance but 
 
 ## Current status
 
+### Operator lifecycle hardening — PASS / CLOSED (2026-10-28)
+
+The native Windows manual-off Start Orion / Stop Orion lifecycle is live-accepted on the real Orion workstation.
+
+Accepted code checkpoint before this documentation-only closure:
+
+`3cbc1fa4831966fefce5f2711d82032965080fb2`
+
+Final acceptance proved:
+
+- Orion-started Ollama uses process-local `OLLAMA_LLM_LIBRARY=rocm_v7_1` on the accepted AMD Radeon RX 9070 XT workstation without writing persistent user/machine Ollama environment state;
+- Ollama and Hermes direct loopback health checks pass;
+- the actual `qwen3.5-hermes:9b` model completes a real `/api/generate` request on ROCm 7.1;
+- Stop Orion persists and identity-checks the Orion-owned Ollama descendant tree before cleanup, including a surviving `llama-server.exe` model runner when present;
+- cleanup never performs a broad name-based Ollama/llama-server kill;
+- failed cleanup evidence is durable and blocks Start from overwriting pending recovery state;
+- the clean empty-descendant Stop path works under Windows PowerShell;
+- a final Start leaves Orion healthy and running on `rocm_v7_1` with zero pending descendant cleanup identities.
+
+Source chain:
+
+- PR #74 / `6e862102df1e68fd6f707aff3ddb3ced1ea8fa25` — ROCm 7.1 process-local startup correction;
+- PR #75 / `40f96933e9e429b885c9c7a11cfac781c8b99104` — owned Ollama descendant cleanup + durable retry state;
+- PR #76 / `3cbc1fa4831966fefce5f2711d82032965080fb2` — empty descendant collection binding correction.
+
+Durable acceptance record:
+
+`docs/evidence/operator-lifecycle-acceptance-2026-10-28.md`
+
+The remaining PRD lifecycle/presentation gap is separate: **after healthy Ollama + Hermes startup, Start Orion still needs to open the accepted Orion HUD**. That should be handled as the next coherent lifecycle outcome without reopening the accepted ROCm/ownership correction.
+
 ### Phase 0 — PASS / CLOSED
 
 Accepted native baseline:
@@ -224,15 +255,23 @@ iai remains vendor-managed and is intentionally not force-killed by Orion Stop.
 
 ## Operator controls and recovery note
 
-The accepted installed operator version is `2.7.4-candidate1`.
+The currently accepted installed operator controls are the source-controlled one-shot scripts accepted on 2026-10-28 through code checkpoint:
 
-During final recovery acceptance, the original `win_process.boot_id()` implementation was proven unsuitable because `NtQuerySystemInformation(90)` returned an identifier that remained unchanged across a real Windows Restart. The accepted correction uses kernel `SystemTimeOfDayInformation` (class 3) `BootTime`. It was proven stable within a boot and different after Restart; supported recovery then archived the prior-boot journal without acting on old PIDs.
+`3cbc1fa4831966fefce5f2711d82032965080fb2`
 
-Source-controlled correction:
+They include direct proxy-bypassing loopback health checks, process-local ROCm 7.1 selection for Orion-started Ollama on the accepted workstation, durable identity-checked cleanup of Orion-owned Ollama descendants, and Windows PowerShell support for an empty first-use descendant list. The final live acceptance is recorded in:
+
+`docs/evidence/operator-lifecycle-acceptance-2026-10-28.md`
+
+The older `2.7.4-candidate1` package and its BootTime recovery work remain historical accepted provenance for the earlier lifecycle recovery path, not the current top-level operator checkpoint.
+
+During that earlier recovery acceptance, the original `win_process.boot_id()` implementation was proven unsuitable because `NtQuerySystemInformation(90)` returned an identifier that remained unchanged across a real Windows Restart. The accepted correction uses kernel `SystemTimeOfDayInformation` (class 3) `BootTime`. It was proven stable within a boot and different after Restart; supported recovery then archived the prior-boot journal without acting on old PIDs.
+
+Source-controlled historical correction:
 
 `scripts/operator/patches/or-life-recovery-boottime.patch`
 
-**Do not reinstall an original unpatched v2.7.4 candidate package and assume recovery is accepted.** Any repackaged/rebuilt operator controls must include the accepted BootTime correction and pass the relevant recovery preflight.
+**Do not reinstall an original unpatched v2.7.4 candidate package and assume it represents the current accepted operator controls.** The current accepted path is the source-controlled Start/Stop implementation documented above.
 
 ## Governing architecture
 
@@ -307,11 +346,12 @@ Reference/code-donor fork. Reuse only proven patterns that still close a current
 
 ## Resume point
 
-- Review the current main-based [P6-05 integration PR #59](https://github.com/S-Pillow/orion-personal-ai/pull/59), its latest diff, and its qualification evidence. The Phase 6 foundation through P6-04A is already on `main`.
-- P6-05 is committed and qualified; do not regenerate the implementation or rerun the obsolete twelve-file correction/finalization flow.
-- Merge and deployment remain separate actions. P6-06 live reminder acceptance has not been established by source tests.
-- Preserve the accepted Hermes pin and qualified overlays, manual-off lifecycle, and server-side credentials.
-- Phase 4 remains parked at the live voice acceptance gate.
+- **Operator lifecycle hardening is PASS / CLOSED.** Do not reopen the accepted ROCm 7.1 or owned-descendant correction unless a dependency/runtime change invalidates its evidence. Durable record: `docs/evidence/operator-lifecycle-acceptance-2026-10-28.md`.
+- **Next lifecycle outcome:** identify the accepted HUD entry point and complete the bounded `Start Orion -> healthy Ollama/Hermes -> open/reconnect HUD` integration. Preserve one-shot/manual-off semantics; do not add a supervisor, login startup, watcher, or second lifecycle owner.
+- For that HUD integration, begin with read-only discovery of the accepted launch command, single-instance/reconnect behavior, and observable launch success/failure signal; then implement health-before-HUD ordering and finish with a real desktop-shortcut Windows smoke.
+- Before resuming broader Phase 4 or Phase 6 work, refresh the live GitHub state for their active PRs/issues rather than assuming the older roadmap checkpoint below is still current.
+- The Phase 6 foundation through P6-04A is already on `main`; the README's P6-05/PR #59 status was last verified 2026-10-10 and must be rechecked before action.
+- Phase 4 remains parked at the live voice acceptance gate unless its external/runtime conditions and current branch state are revalidated.
 - Persistent Goal Mode remains deferred and must not become a second autonomous runtime, scheduler, memory system, or approval path.
 
-Current shorthand: Phase 3 presentation foundation accepted; Phase 4 voice acceptance parked; Phase 5 vault-action/reconnect track closed through P5-03C; Phase 6 foundation through P6-04A merged; qualified P6-05 HUD awaiting Stage B integration; P6-06 live acceptance separate.
+Current shorthand: **operator lifecycle closed and live-accepted; next lifecycle item is HUD launch-after-health integration.** Phase 3 presentation foundation accepted; Phase 4 voice acceptance parked; Phase 5 vault-action/reconnect track closed through P5-03C; Phase 6 roadmap state requires a fresh GitHub check before continuation.
