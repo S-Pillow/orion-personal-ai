@@ -51,6 +51,19 @@ class TestOperatorLifecycleScripts(unittest.TestCase):
         self.assertIn("ollamaLibrary = $ollamaLibraryUsed", self.start)
         self.assertIn('Write-Host "Ollama backend: $ollamaLaunchLibrary"', self.start)
 
+    def test_start_refuses_to_overwrite_pending_descendant_cleanup(self):
+        self.assertIn('PSObject.Properties.Name -contains "ollamaDescendants"', self.start)
+        self.assertIn('@($priorState.ollamaDescendants).Count -gt 0', self.start)
+        self.assertIn(
+            "Pending Orion-owned Ollama descendant cleanup exists. Run Stop Orion again before Start Orion.",
+            self.start,
+        )
+        self.assertIn("ollamaDescendants = @()", self.start)
+        self.assertLess(
+            self.start.index("Pending Orion-owned Ollama descendant cleanup exists"),
+            self.start.index("Start-Process"),
+        )
+
     def test_start_captures_ollama_diagnostics(self):
         self.assertIn("-RedirectStandardOutput $ollamaStdoutPath", self.start)
         self.assertIn("-RedirectStandardError $ollamaStderrPath", self.start)
@@ -86,21 +99,10 @@ class TestOperatorLifecycleScripts(unittest.TestCase):
         self.assertIn("function Get-VerifiedSnapshotProcessHandle", self.stop)
         self.assertIn("CreationDate", self.stop)
         self.assertIn("ExecutablePath", self.stop)
-        self.assertIn(
-            "Get-CimInstance Win32_Process -ErrorAction Stop",
-            self.stop,
-        )
+        self.assertIn("Get-CimInstance Win32_Process -ErrorAction Stop", self.stop)
         self.assertIn(
             'Get-CimInstance Win32_Process -Filter "ProcessId = $($Snapshot.ProcessId)" -ErrorAction Stop',
             self.stop,
-        )
-        self.assertIn(
-            "$ownedDescendants = @(Get-OrionOwnedDescendantSnapshot -RootPid $ownedPid)",
-            self.stop,
-        )
-        self.assertLess(
-            self.stop.index("$ownedDescendants = @(Get-OrionOwnedDescendantSnapshot -RootPid $ownedPid)"),
-            self.stop.index("Stop-Process -Id $ownedPid -ErrorAction SilentlyContinue"),
         )
         self.assertIn(
             "$verifiedHandle = Get-VerifiedSnapshotProcessHandle -Snapshot $snapshot",
@@ -110,10 +112,40 @@ class TestOperatorLifecycleScripts(unittest.TestCase):
         self.assertIn("$processHandle.MainModule.FileName", self.stop)
         self.assertIn("$verifiedHandle.Kill()", self.stop)
         self.assertIn("$verifiedHandle.WaitForExit(5000)", self.stop)
-        self.assertIn("Orion-owned Ollama descendant PID(s) still running after stop attempt", self.stop)
         self.assertNotIn("Stop-Process -Id ([int]$snapshot.ProcessId)", self.stop)
         self.assertNotIn("Get-Process llama-server | Stop-Process", self.stop)
         self.assertNotIn("Get-Process -Name llama-server | Stop-Process", self.stop)
+
+    def test_stop_persists_descendants_before_parent_shutdown_and_retries_them(self):
+        self.assertIn("function Write-OrionSessionState", self.stop)
+        self.assertIn("function Get-PersistedOwnedDescendants", self.stop)
+        self.assertIn("function Merge-OwnedDescendantSnapshots", self.stop)
+        self.assertIn("function Save-OwnedDescendantSnapshots", self.stop)
+        self.assertIn("function Stop-OrionOwnedDescendants", self.stop)
+        self.assertIn('Add-Member -NotePropertyName "ollamaDescendants"', self.stop)
+        self.assertIn(
+            "Save-OwnedDescendantSnapshots -SessionState $sessionState -Snapshots $ownedDescendants",
+            self.stop,
+        )
+        self.assertLess(
+            self.stop.index(
+                "Save-OwnedDescendantSnapshots -SessionState $sessionState -Snapshots $ownedDescendants"
+            ),
+            self.stop.index("Stop-Process -Id $ownedPid -ErrorAction SilentlyContinue"),
+        )
+        self.assertIn(
+            "recorded parent is gone or no longer matches; retrying persisted Orion-owned descendant cleanup",
+            self.stop,
+        )
+        self.assertIn("Stop-OrionOwnedDescendants -Snapshots $ownedDescendants", self.stop)
+        self.assertLess(
+            self.stop.rindex("Stop-OrionOwnedDescendants -Snapshots $ownedDescendants"),
+            self.stop.rindex("Remove-Item -LiteralPath $statePath -Force"),
+        )
+        self.assertIn(
+            "Launcher session state was retained for a safe Stop Orion retry when available.",
+            self.stop,
+        )
 
     def test_stop_leaves_iai_under_vendor_lifecycle(self):
         self.assertIn("iai remains under its vendor idle/HIBERNATION lifecycle", self.stop)
@@ -125,7 +157,7 @@ class TestOperatorLifecycleScripts(unittest.TestCase):
         self.assertLess(self.start.index("Hermes COMPANION: ready"), self.start.index("ORION READY"))
         self.assertLess(self.stop.index("Wait-HermesDown"), self.stop.index("ORION STOPPED"))
         self.assertLess(
-            self.stop.index("Ollama: Orion-owned descendants stopped"),
+            self.stop.rindex("Stop-OrionOwnedDescendants -Snapshots $ownedDescendants"),
             self.stop.index("ORION STOPPED"),
         )
 
@@ -139,6 +171,7 @@ class TestOperatorLifecycleScripts(unittest.TestCase):
         self.assertIn("descendant", self.readme)
         self.assertIn("identity-checked", self.readme)
         self.assertIn("creation order", self.readme)
+        self.assertIn("pending cleanup", self.readme)
 
 
 if __name__ == "__main__":
