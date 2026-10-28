@@ -19,6 +19,7 @@ from orion_vault_ingest_model import (
     MAX_VAULT_FILES,
     SESSION_ID,
     SyncPlan,
+    canonical_path,
 )
 
 
@@ -109,11 +110,22 @@ def load_iai_runtime(expected_version: str = EXPECTED_IAI_VERSION) -> IaiRuntime
         raise AdapterError("iai_study_signature_mismatch")
 
     def open_store(root: Path):
+        # Hippo's lower-level resolver gives IAI_MCP_STORE precedence over an
+        # explicit path. Refuse a stale/conflicting env override before native
+        # construction so Orion's pinned metadata/lock root cannot diverge from
+        # the semantic DB root actually opened by iai.
+        pinned = canonical_path(root)
+        env_store = os.environ.get("IAI_MCP_STORE")
+        if env_store:
+            env_root = canonical_path(Path(env_store))
+            if os.path.normcase(str(env_root)) != os.path.normcase(str(pinned)):
+                raise AdapterError("iai_store_env_mismatch")
+
         # Mutating DC-02 applies are maintenance operations. Use iai's own
         # EXCLUSIVE Hippo lock so compliant daemon/Hermes/native clients cannot
         # coexist with this semantic write window. As the index-owning EXCLUSIVE
         # handle, persist the native derived recall index on clean close.
-        return MemoryStore(root, access_mode=AccessMode.EXCLUSIVE, persist_index=True)
+        return MemoryStore(pinned, access_mode=AccessMode.EXCLUSIVE, persist_index=True)
 
     return IaiRuntime(
         version=version,
