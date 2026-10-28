@@ -1,0 +1,77 @@
+from __future__ import annotations
+
+import re
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+OPERATOR = ROOT / "scripts" / "operator"
+START = OPERATOR / "Start-Orion.ps1"
+STOP = OPERATOR / "Stop-Orion.ps1"
+README = OPERATOR / "README.md"
+
+
+class TestOperatorLifecycleScripts(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.start = START.read_text(encoding="utf-8")
+        cls.stop = STOP.read_text(encoding="utf-8")
+        cls.readme = README.read_text(encoding="utf-8")
+
+    def test_loopback_health_checks_explicitly_bypass_proxy(self):
+        for name, text in (("Start-Orion.ps1", self.start), ("Stop-Orion.ps1", self.stop)):
+            with self.subTest(script=name):
+                self.assertIn("function Test-DirectHttpEndpoint", text)
+                self.assertIn("$request.Proxy = $null", text)
+                self.assertNotIn("Invoke-WebRequest", text)
+
+    def test_start_uses_condition_based_health_waits(self):
+        self.assertIn("function Wait-DirectHttpEndpoint", self.start)
+        self.assertIn('$ollamaHealthUri = "http://127.0.0.1:11434/api/tags"', self.start)
+        self.assertIn('$hermesHealthUri = "http://127.0.0.1:8642/health"', self.start)
+        self.assertIn("-TimeoutSeconds $OllamaHealthTimeoutSeconds", self.start)
+        self.assertIn("-TimeoutSeconds $HermesHealthTimeoutSeconds", self.start)
+        self.assertRegex(
+            self.start,
+            r"\[int\]\$OllamaHealthTimeoutSeconds\s*=\s*(?:[3-9]\d|\d{3,})",
+        )
+
+    def test_start_captures_ollama_diagnostics(self):
+        self.assertIn("-RedirectStandardOutput $ollamaStdoutPath", self.start)
+        self.assertIn("-RedirectStandardError $ollamaStderrPath", self.start)
+        self.assertIn("Ollama exited before becoming healthy", self.start)
+        self.assertIn("Ollama bound port 11434 but direct health checks failed", self.start)
+        self.assertIn("Ollama did not bind port 11434 or become healthy", self.start)
+
+    def test_start_preserves_one_shot_ownership_model(self):
+        self.assertIn("ollamaStartedByOrion", self.start)
+        self.assertIn("ollamaPid", self.start)
+        self.assertIn("Get-ListenerOwnerPid -Port 11434", self.start)
+        self.assertNotIn("iai-mcp daemon start", self.start)
+        self.assertNotIn("schtasks /Run", self.start)
+
+    def test_stop_verifies_specific_owned_ollama_pid_exits(self):
+        self.assertIn("ollamaStartedByOrion", self.stop)
+        self.assertIn("Ollama: stopping Orion-owned server PID", self.stop)
+        self.assertIn("Orion-owned Ollama PID $ownedPid is still running after stop attempt", self.stop)
+        self.assertIn("leaving other Ollama processes alone", self.stop)
+        self.assertNotIn("Get-Process ollama | Stop-Process", self.stop)
+
+    def test_stop_leaves_iai_under_vendor_lifecycle(self):
+        self.assertIn("iai remains under its vendor idle/HIBERNATION lifecycle", self.stop)
+        self.assertNotIn("iai-mcp daemon stop", self.stop)
+        self.assertNotIn("schtasks", self.stop)
+
+    def test_success_markers_follow_health_or_shutdown_proof(self):
+        self.assertLess(self.start.index("Ollama: ready"), self.start.index("ORION READY"))
+        self.assertLess(self.start.index("Hermes COMPANION: ready"), self.start.index("ORION READY"))
+        self.assertLess(self.stop.index("Wait-HermesDown"), self.stop.index("ORION STOPPED"))
+
+    def test_operator_readme_tracks_current_prd(self):
+        self.assertIn("Master PRD v2.9", self.readme)
+        self.assertNotIn("Master PRD v2.8", self.readme)
+        self.assertNotIn("Current Phase 2 relationship", self.readme)
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

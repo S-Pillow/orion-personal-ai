@@ -10,13 +10,33 @@ $stateRoot = Join-Path $env:LOCALAPPDATA "Orion\operator"
 $statePath = Join-Path $stateRoot "launcher-session.json"
 $hermesHealthUri = "http://127.0.0.1:8642/health"
 
-function Test-HermesHealth {
+function Test-DirectHttpEndpoint {
+    param(
+        [Parameter(Mandatory=$true)][string]$Uri,
+        [int]$TimeoutSeconds = 2
+    )
+
+    $response = $null
     try {
-        $response = Invoke-WebRequest -Uri $hermesHealthUri -UseBasicParsing -TimeoutSec 2
-        return ($response.StatusCode -ge 200 -and $response.StatusCode -lt 300)
+        $request = [System.Net.HttpWebRequest]::Create($Uri)
+        $request.Method = "GET"
+        $request.Proxy = $null
+        $request.KeepAlive = $false
+        $request.AllowAutoRedirect = $false
+        $timeoutMs = [Math]::Max(1, $TimeoutSeconds * 1000)
+        $request.Timeout = $timeoutMs
+        $request.ReadWriteTimeout = $timeoutMs
+        $response = [System.Net.HttpWebResponse]$request.GetResponse()
+        $statusCode = [int]$response.StatusCode
+        return ($statusCode -ge 200 -and $statusCode -lt 300)
     }
     catch {
         return $false
+    }
+    finally {
+        if ($null -ne $response) {
+            try { $response.Close() } catch {}
+        }
     }
 }
 
@@ -25,7 +45,7 @@ function Wait-HermesDown {
 
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     do {
-        if (-not (Test-HermesHealth)) {
+        if (-not (Test-DirectHttpEndpoint -Uri $hermesHealthUri)) {
             return $true
         }
         Start-Sleep -Milliseconds 500
@@ -85,11 +105,26 @@ try {
 
             Write-Host "Ollama: stopping Orion-owned server PID $ownedPid"
             Stop-Process -Id $ownedPid -ErrorAction SilentlyContinue
-            Start-Sleep -Seconds 2
+
+            $deadline = (Get-Date).AddSeconds(5)
+            do {
+                if (-not (Get-Process -Id $ownedPid -ErrorAction SilentlyContinue)) {
+                    break
+                }
+                Start-Sleep -Milliseconds 250
+            } while ((Get-Date) -lt $deadline)
 
             if (Get-Process -Id $ownedPid -ErrorAction SilentlyContinue) {
+                Write-Host "Ollama: graceful stop did not exit; forcing Orion-owned PID $ownedPid"
                 Stop-Process -Id $ownedPid -Force -ErrorAction SilentlyContinue
+                Start-Sleep -Milliseconds 500
             }
+
+            if (Get-Process -Id $ownedPid -ErrorAction SilentlyContinue) {
+                throw "Orion-owned Ollama PID $ownedPid is still running after stop attempt."
+            }
+
+            Write-Host "Ollama: Orion-owned server stopped"
         }
         else {
             Write-Host "Ollama: recorded Orion-owned PID no longer matches a live Ollama process; leaving other Ollama processes alone"
@@ -105,14 +140,13 @@ try {
 
     Write-Host ""
     Write-Host "ORION STOPPED"
-    Write-Host "iai will remain under its vendor idle/HIBERNATION lifecycle."
-    Start-Sleep -Seconds 3
+    Write-Host "Hermes API: down"
+    Write-Host "iai remains under its vendor idle/HIBERNATION lifecycle."
     exit 0
 }
 catch {
     Write-Host ""
     Write-Host "STOP ORION FAILED"
     Write-Host $_.Exception.Message
-    Start-Sleep -Seconds 10
     exit 1
 }
