@@ -67,6 +67,78 @@ function Read-OrionSessionState {
     }
 }
 
+function Get-OrionOwnedDescendantSnapshot {
+    param([Parameter(Mandatory=$true)][int]$RootPid)
+
+    $allProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
+    $childrenByParent = @{}
+
+    foreach ($process in $allProcesses) {
+        $parentPid = [int]$process.ParentProcessId
+        if (-not $childrenByParent.ContainsKey($parentPid)) {
+            $childrenByParent[$parentPid] = @()
+        }
+        $childrenByParent[$parentPid] += $process
+    }
+
+    $queue = New-Object 'System.Collections.Generic.Queue[int]'
+    $queue.Enqueue($RootPid)
+    $seen = @{}
+    $snapshots = @()
+
+    while ($queue.Count -gt 0) {
+        $parentPid = $queue.Dequeue()
+        if (-not $childrenByParent.ContainsKey($parentPid)) {
+            continue
+        }
+
+        foreach ($child in @($childrenByParent[$parentPid])) {
+            $childPid = [int]$child.ProcessId
+            if ($childPid -le 0 -or $seen.ContainsKey($childPid)) {
+                continue
+            }
+
+            $seen[$childPid] = $true
+            $snapshots += [PSCustomObject]@{
+                ProcessId = $childPid
+                Name = [string]$child.Name
+                ExecutablePath = [string]$child.ExecutablePath
+                CreationDate = [string]$child.CreationDate
+            }
+            $queue.Enqueue($childPid)
+        }
+    }
+
+    return @($snapshots)
+}
+
+function Get-MatchingSnapshotProcess {
+    param([Parameter(Mandatory=$true)]$Snapshot)
+
+    $current = Get-CimInstance Win32_Process -Filter "ProcessId = $($Snapshot.ProcessId)" -ErrorAction SilentlyContinue
+    if ($null -eq $current) {
+        return $null
+    }
+
+    if ([string]$current.Name -ne [string]$Snapshot.Name) {
+        return $null
+    }
+
+    if (-not [string]::IsNullOrEmpty([string]$Snapshot.ExecutablePath) -and
+        -not [string]::IsNullOrEmpty([string]$current.ExecutablePath) -and
+        [string]$current.ExecutablePath -ne [string]$Snapshot.ExecutablePath) {
+        return $null
+    }
+
+    if (-not [string]::IsNullOrEmpty([string]$Snapshot.CreationDate) -and
+        -not [string]::IsNullOrEmpty([string]$current.CreationDate) -and
+        [string]$current.CreationDate -ne [string]$Snapshot.CreationDate) {
+        return $null
+    }
+
+    return $current
+}
+
 try {
     Write-Host "=== STOP ORION ==="
 
@@ -103,6 +175,11 @@ try {
         if ($null -ne $ownedProcess -and
             ($ownedProcess.Name -match '^(?i)ollama\.exe$' -or $ownedProcess.ExecutablePath -match '(?i)ollama')) {
 
+            $ownedDescendants = @(Get-OrionOwnedDescendantSnapshot -RootPid $ownedPid)
+            if ($ownedDescendants.Count -gt 0) {
+                Write-Host "Ollama: captured $($ownedDescendants.Count) Orion-owned descendant process(es)"
+            }
+
             Write-Host "Ollama: stopping Orion-owned server PID $ownedPid"
             Stop-Process -Id $ownedPid -ErrorAction SilentlyContinue
 
@@ -122,6 +199,48 @@ try {
 
             if (Get-Process -Id $ownedPid -ErrorAction SilentlyContinue) {
                 throw "Orion-owned Ollama PID $ownedPid is still running after stop attempt."
+            }
+
+            if ($ownedDescendants.Count -gt 0) {
+                $descendantDeadline = (Get-Date).AddSeconds(5)
+                do {
+                    $remainingDescendants = @(
+                        foreach ($snapshot in $ownedDescendants) {
+                            if ($null -ne (Get-MatchingSnapshotProcess -Snapshot $snapshot)) {
+                                $snapshot
+                            }
+                        }
+                    )
+
+                    if ($remainingDescendants.Count -eq 0) {
+                        break
+                    }
+
+                    Start-Sleep -Milliseconds 250
+                } while ((Get-Date) -lt $descendantDeadline)
+
+                if ($remainingDescendants.Count -gt 0) {
+                    foreach ($snapshot in $remainingDescendants) {
+                        Write-Host "Ollama: forcing Orion-owned descendant PID $($snapshot.ProcessId) ($($snapshot.Name))"
+                        Stop-Process -Id ([int]$snapshot.ProcessId) -Force -ErrorAction SilentlyContinue
+                    }
+                    Start-Sleep -Milliseconds 500
+                }
+
+                $stillRunningDescendants = @(
+                    foreach ($snapshot in $ownedDescendants) {
+                        if ($null -ne (Get-MatchingSnapshotProcess -Snapshot $snapshot)) {
+                            $snapshot
+                        }
+                    }
+                )
+
+                if ($stillRunningDescendants.Count -gt 0) {
+                    $remainingIds = ($stillRunningDescendants | ForEach-Object { $_.ProcessId }) -join ","
+                    throw "Orion-owned Ollama descendant PID(s) still running after stop attempt: $remainingIds"
+                }
+
+                Write-Host "Ollama: Orion-owned descendants stopped"
             }
 
             Write-Host "Ollama: Orion-owned server stopped"
