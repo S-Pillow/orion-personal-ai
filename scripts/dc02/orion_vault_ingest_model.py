@@ -74,6 +74,7 @@ class IaiRuntime:
     doc_tag: Callable[[str], str]
     study_document: Callable[..., Mapping[str, Any]]
     open_store: Callable[[Path], Any]
+    verify_open_store: Callable[[Any, Mapping[str, Any]], None] | None = None
 
 
 @dataclass(frozen=True)
