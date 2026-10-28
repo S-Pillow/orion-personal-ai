@@ -9,6 +9,7 @@ $ErrorActionPreference = "Stop"
 $stateRoot = Join-Path $env:LOCALAPPDATA "Orion\operator"
 $statePath = Join-Path $stateRoot "launcher-session.json"
 $hermesHealthUri = "http://127.0.0.1:8642/health"
+$utf8NoBom = [Text.UTF8Encoding]::new($false)
 
 function Test-DirectHttpEndpoint {
     param(
@@ -63,8 +64,99 @@ function Read-OrionSessionState {
         return (Get-Content $statePath -Raw | ConvertFrom-Json)
     }
     catch {
-        return $null
+        throw "Orion launcher session state is unreadable: $($_.Exception.Message)"
     }
+}
+
+function Write-OrionSessionState {
+    param([Parameter(Mandatory=$true)]$State)
+
+    $tmpPath = "$statePath.tmp"
+    $json = $State | ConvertTo-Json -Depth 10
+    [IO.File]::WriteAllText($tmpPath, $json, $utf8NoBom)
+    Move-Item -LiteralPath $tmpPath -Destination $statePath -Force
+}
+
+function ConvertTo-OwnedDescendantSnapshot {
+    param([Parameter(Mandatory=$true)]$Process)
+
+    return [PSCustomObject]@{
+        ProcessId = [int]$Process.ProcessId
+        Name = [string]$Process.Name
+        ExecutablePath = [string]$Process.ExecutablePath
+        CreationDate = [datetime]$Process.CreationDate
+    }
+}
+
+function Get-PersistedOwnedDescendants {
+    param([Parameter(Mandatory=$true)]$SessionState)
+
+    if (-not ($SessionState.PSObject.Properties.Name -contains "ollamaDescendants") -or
+        $null -eq $SessionState.ollamaDescendants) {
+        return @()
+    }
+
+    $snapshots = @()
+    foreach ($item in @($SessionState.ollamaDescendants)) {
+        foreach ($required in @("ProcessId", "Name", "CreationDate")) {
+            if (-not ($item.PSObject.Properties.Name -contains $required) -or
+                $null -eq $item.$required -or
+                [string]::IsNullOrWhiteSpace([string]$item.$required)) {
+                throw "Persisted Orion-owned Ollama descendant state is missing $required."
+            }
+        }
+
+        $executablePath = $null
+        if ($item.PSObject.Properties.Name -contains "ExecutablePath") {
+            $executablePath = [string]$item.ExecutablePath
+        }
+
+        $snapshots += [PSCustomObject]@{
+            ProcessId = [int]$item.ProcessId
+            Name = [string]$item.Name
+            ExecutablePath = $executablePath
+            CreationDate = [datetime]$item.CreationDate
+        }
+    }
+
+    return @($snapshots)
+}
+
+function Merge-OwnedDescendantSnapshots {
+    param(
+        [Parameter(Mandatory=$true)]$Existing,
+        [Parameter(Mandatory=$true)]$Fresh
+    )
+
+    $byIdentity = [ordered]@{}
+    foreach ($snapshot in @($Existing) + @($Fresh)) {
+        $creationKey = ([datetime]$snapshot.CreationDate).ToUniversalTime().Ticks
+        $key = "$([int]$snapshot.ProcessId)|$creationKey"
+        $byIdentity[$key] = $snapshot
+    }
+
+    return @($byIdentity.Values)
+}
+
+function Save-OwnedDescendantSnapshots {
+    param(
+        [Parameter(Mandatory=$true)]$SessionState,
+        [Parameter(Mandatory=$true)]$Snapshots
+    )
+
+    $persisted = @(
+        foreach ($snapshot in @($Snapshots)) {
+            [ordered]@{
+                ProcessId = [int]$snapshot.ProcessId
+                Name = [string]$snapshot.Name
+                ExecutablePath = [string]$snapshot.ExecutablePath
+                CreationDate = ([datetime]$snapshot.CreationDate).ToString("o")
+            }
+        }
+    )
+
+    $SessionState | Add-Member -NotePropertyName "ollamaDescendants" -NotePropertyValue $persisted -Force
+    Write-OrionSessionState -State $SessionState
 }
 
 function Get-OrionOwnedDescendantSnapshot {
@@ -124,12 +216,7 @@ function Get-OrionOwnedDescendantSnapshot {
             }
 
             $seen[$childPid] = $true
-            $snapshots += [PSCustomObject]@{
-                ProcessId = $childPid
-                Name = [string]$child.Name
-                ExecutablePath = [string]$child.ExecutablePath
-                CreationDate = $child.CreationDate
-            }
+            $snapshots += ConvertTo-OwnedDescendantSnapshot -Process $child
             $queue.Enqueue($childPid)
         }
     }
@@ -191,14 +278,12 @@ function Get-VerifiedSnapshotProcessHandle {
     }
 
     try {
-        if ($null -ne $Snapshot.CreationDate) {
-            $startDeltaSeconds = [Math]::Abs(
-                ($processHandle.StartTime - [datetime]$Snapshot.CreationDate).TotalSeconds
-            )
-            if ($startDeltaSeconds -gt 1) {
-                $processHandle.Dispose()
-                return $null
-            }
+        $startDeltaSeconds = [Math]::Abs(
+            ($processHandle.StartTime - [datetime]$Snapshot.CreationDate).TotalSeconds
+        )
+        if ($startDeltaSeconds -gt 1) {
+            $processHandle.Dispose()
+            return $null
         }
 
         if (-not [string]::IsNullOrEmpty([string]$Snapshot.ExecutablePath)) {
@@ -215,6 +300,64 @@ function Get-VerifiedSnapshotProcessHandle {
     }
 
     return $processHandle
+}
+
+function Stop-OrionOwnedDescendants {
+    param([Parameter(Mandatory=$true)]$Snapshots)
+
+    $snapshotsArray = @($Snapshots)
+    if ($snapshotsArray.Count -eq 0) {
+        return
+    }
+
+    $descendantDeadline = (Get-Date).AddSeconds(5)
+    do {
+        $remainingDescendants = @(
+            foreach ($snapshot in $snapshotsArray) {
+                if ($null -ne (Get-MatchingSnapshotProcess -Snapshot $snapshot)) {
+                    $snapshot
+                }
+            }
+        )
+
+        if ($remainingDescendants.Count -eq 0) {
+            Write-Host "Ollama: Orion-owned descendants stopped"
+            return
+        }
+
+        Start-Sleep -Milliseconds 250
+    } while ((Get-Date) -lt $descendantDeadline)
+
+    foreach ($snapshot in $remainingDescendants) {
+        $verifiedHandle = Get-VerifiedSnapshotProcessHandle -Snapshot $snapshot
+        if ($null -eq $verifiedHandle) {
+            continue
+        }
+
+        try {
+            Write-Host "Ollama: forcing Orion-owned descendant PID $($snapshot.ProcessId) ($($snapshot.Name))"
+            $verifiedHandle.Kill()
+            [void]$verifiedHandle.WaitForExit(5000)
+        }
+        finally {
+            $verifiedHandle.Dispose()
+        }
+    }
+
+    $stillRunningDescendants = @(
+        foreach ($snapshot in $snapshotsArray) {
+            if ($null -ne (Get-MatchingSnapshotProcess -Snapshot $snapshot)) {
+                $snapshot
+            }
+        }
+    )
+
+    if ($stillRunningDescendants.Count -gt 0) {
+        $remainingIds = ($stillRunningDescendants | ForEach-Object { $_.ProcessId }) -join ","
+        throw "Orion-owned Ollama descendant PID(s) still running after stop attempt: $remainingIds"
+    }
+
+    Write-Host "Ollama: Orion-owned descendants stopped"
 }
 
 try {
@@ -241,108 +384,72 @@ try {
     }
 
     $sessionState = Read-OrionSessionState
-    if ($null -ne $sessionState -and
-        $sessionState.PSObject.Properties.Name -contains "ollamaStartedByOrion" -and
-        $sessionState.ollamaStartedByOrion -eq $true -and
-        $sessionState.PSObject.Properties.Name -contains "ollamaPid" -and
-        $null -ne $sessionState.ollamaPid) {
-
-        $ownedPid = [int]$sessionState.ollamaPid
-        $ownedProcess = Get-CimInstance Win32_Process -Filter "ProcessId = $ownedPid" -ErrorAction Stop
-
-        if ($null -ne $ownedProcess -and
-            ($ownedProcess.Name -match '^(?i)ollama\.exe$' -or $ownedProcess.ExecutablePath -match '(?i)ollama')) {
-
-            $ownedDescendants = @(Get-OrionOwnedDescendantSnapshot -RootPid $ownedPid)
-            if ($ownedDescendants.Count -gt 0) {
-                Write-Host "Ollama: captured $($ownedDescendants.Count) Orion-owned descendant process(es)"
-            }
-
-            Write-Host "Ollama: stopping Orion-owned server PID $ownedPid"
-            Stop-Process -Id $ownedPid -ErrorAction SilentlyContinue
-
-            $deadline = (Get-Date).AddSeconds(5)
-            do {
-                if (-not (Get-Process -Id $ownedPid -ErrorAction SilentlyContinue)) {
-                    break
-                }
-                Start-Sleep -Milliseconds 250
-            } while ((Get-Date) -lt $deadline)
-
-            if (Get-Process -Id $ownedPid -ErrorAction SilentlyContinue) {
-                Write-Host "Ollama: graceful stop did not exit; forcing Orion-owned PID $ownedPid"
-                Stop-Process -Id $ownedPid -Force -ErrorAction SilentlyContinue
-                Start-Sleep -Milliseconds 500
-            }
-
-            if (Get-Process -Id $ownedPid -ErrorAction SilentlyContinue) {
-                throw "Orion-owned Ollama PID $ownedPid is still running after stop attempt."
-            }
-
-            if ($ownedDescendants.Count -gt 0) {
-                $descendantDeadline = (Get-Date).AddSeconds(5)
-                do {
-                    $remainingDescendants = @(
-                        foreach ($snapshot in $ownedDescendants) {
-                            if ($null -ne (Get-MatchingSnapshotProcess -Snapshot $snapshot)) {
-                                $snapshot
-                            }
-                        }
-                    )
-
-                    if ($remainingDescendants.Count -eq 0) {
-                        break
-                    }
-
-                    Start-Sleep -Milliseconds 250
-                } while ((Get-Date) -lt $descendantDeadline)
-
-                if ($remainingDescendants.Count -gt 0) {
-                    foreach ($snapshot in $remainingDescendants) {
-                        $verifiedHandle = Get-VerifiedSnapshotProcessHandle -Snapshot $snapshot
-                        if ($null -eq $verifiedHandle) {
-                            continue
-                        }
-
-                        try {
-                            Write-Host "Ollama: forcing Orion-owned descendant PID $($snapshot.ProcessId) ($($snapshot.Name))"
-                            $verifiedHandle.Kill()
-                            [void]$verifiedHandle.WaitForExit(5000)
-                        }
-                        finally {
-                            $verifiedHandle.Dispose()
-                        }
-                    }
-                }
-
-                $stillRunningDescendants = @(
-                    foreach ($snapshot in $ownedDescendants) {
-                        if ($null -ne (Get-MatchingSnapshotProcess -Snapshot $snapshot)) {
-                            $snapshot
-                        }
-                    }
-                )
-
-                if ($stillRunningDescendants.Count -gt 0) {
-                    $remainingIds = ($stillRunningDescendants | ForEach-Object { $_.ProcessId }) -join ","
-                    throw "Orion-owned Ollama descendant PID(s) still running after stop attempt: $remainingIds"
-                }
-
-                Write-Host "Ollama: Orion-owned descendants stopped"
-            }
-
-            Write-Host "Ollama: Orion-owned server stopped"
-        }
-        else {
-            Write-Host "Ollama: recorded Orion-owned PID no longer matches a live Ollama process; leaving other Ollama processes alone"
-        }
-    }
-    else {
+    if ($null -eq $sessionState) {
         Write-Host "Ollama: not owned by this Orion launcher session; leaving it alone"
     }
+    else {
+        $ownedDescendants = @(Get-PersistedOwnedDescendants -SessionState $sessionState)
+        $hasOwnedParent = (
+            $sessionState.PSObject.Properties.Name -contains "ollamaStartedByOrion" -and
+            $sessionState.ollamaStartedByOrion -eq $true -and
+            $sessionState.PSObject.Properties.Name -contains "ollamaPid" -and
+            $null -ne $sessionState.ollamaPid
+        )
 
-    if (Test-Path $statePath) {
-        Remove-Item -LiteralPath $statePath -Force
+        if ($hasOwnedParent) {
+            $ownedPid = [int]$sessionState.ollamaPid
+            $ownedProcess = Get-CimInstance Win32_Process -Filter "ProcessId = $ownedPid" -ErrorAction Stop
+
+            if ($null -ne $ownedProcess -and
+                ($ownedProcess.Name -match '^(?i)ollama\.exe$' -or $ownedProcess.ExecutablePath -match '(?i)ollama')) {
+
+                $freshDescendants = @(Get-OrionOwnedDescendantSnapshot -RootPid $ownedPid)
+                $ownedDescendants = @(Merge-OwnedDescendantSnapshots -Existing $ownedDescendants -Fresh $freshDescendants)
+
+                Save-OwnedDescendantSnapshots -SessionState $sessionState -Snapshots $ownedDescendants
+                if ($ownedDescendants.Count -gt 0) {
+                    Write-Host "Ollama: persisted $($ownedDescendants.Count) Orion-owned descendant process identity/identities"
+                }
+
+                Write-Host "Ollama: stopping Orion-owned server PID $ownedPid"
+                Stop-Process -Id $ownedPid -ErrorAction SilentlyContinue
+
+                $deadline = (Get-Date).AddSeconds(5)
+                do {
+                    if (-not (Get-Process -Id $ownedPid -ErrorAction SilentlyContinue)) {
+                        break
+                    }
+                    Start-Sleep -Milliseconds 250
+                } while ((Get-Date) -lt $deadline)
+
+                if (Get-Process -Id $ownedPid -ErrorAction SilentlyContinue) {
+                    Write-Host "Ollama: graceful stop did not exit; forcing Orion-owned PID $ownedPid"
+                    Stop-Process -Id $ownedPid -Force -ErrorAction SilentlyContinue
+                    Start-Sleep -Milliseconds 500
+                }
+
+                if (Get-Process -Id $ownedPid -ErrorAction SilentlyContinue) {
+                    throw "Orion-owned Ollama PID $ownedPid is still running after stop attempt."
+                }
+
+                Write-Host "Ollama: Orion-owned server stopped"
+            }
+            elseif ($ownedDescendants.Count -gt 0) {
+                Write-Host "Ollama: recorded parent is gone or no longer matches; retrying persisted Orion-owned descendant cleanup"
+            }
+            else {
+                Write-Host "Ollama: recorded Orion-owned PID no longer matches a live Ollama process; leaving other Ollama processes alone"
+            }
+        }
+        elseif ($ownedDescendants.Count -eq 0) {
+            Write-Host "Ollama: not owned by this Orion launcher session; leaving it alone"
+        }
+
+        Stop-OrionOwnedDescendants -Snapshots $ownedDescendants
+
+        if (Test-Path $statePath) {
+            Remove-Item -LiteralPath $statePath -Force
+        }
     }
 
     Write-Host ""
@@ -355,5 +462,6 @@ catch {
     Write-Host ""
     Write-Host "STOP ORION FAILED"
     Write-Host $_.Exception.Message
+    Write-Host "Launcher session state was retained for a safe Stop Orion retry when available."
     exit 1
 }
