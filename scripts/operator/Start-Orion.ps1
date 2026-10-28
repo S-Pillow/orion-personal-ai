@@ -116,6 +116,13 @@ try {
 
     $priorState = Read-OrionSessionState
     if ($null -ne $priorState -and
+        $priorState.PSObject.Properties.Name -contains "ollamaDescendants" -and
+        $null -ne $priorState.ollamaDescendants -and
+        @($priorState.ollamaDescendants).Count -gt 0) {
+        throw "Pending Orion-owned Ollama descendant cleanup exists. Run Stop Orion again before Start Orion."
+    }
+
+    if ($null -ne $priorState -and
         $priorState.PSObject.Properties.Name -contains "ollamaStartedByOrion" -and
         $priorState.ollamaStartedByOrion -eq $true -and
         $priorState.PSObject.Properties.Name -contains "ollamaPid" -and
@@ -216,6 +223,7 @@ try {
         ollamaStartedByOrion = $ollamaStartedByOrion
         ollamaPid = $ollamaPid
         ollamaLibrary = $ollamaLibraryUsed
+        ollamaDescendants = @()
         hermesHealthUri = $hermesHealthUri
     }
     Write-OrionSessionState -State $state
