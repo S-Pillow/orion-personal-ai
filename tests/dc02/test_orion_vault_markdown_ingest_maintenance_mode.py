@@ -51,7 +51,7 @@ native_study.__name__ = "study_document"
 
 
 class MaintenanceModeTests(unittest.TestCase):
-    def test_pinned_runtime_requests_native_exclusive_store_lock(self):
+    def test_pinned_runtime_requests_native_exclusive_index_owning_store(self):
         package = types.ModuleType("iai_mcp")
         package.__path__ = []
         hippo = types.ModuleType("iai_mcp.hippo")
@@ -94,7 +94,7 @@ class MaintenanceModeTests(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0][0], root)
         self.assertIs(calls[0][1], AccessMode.EXCLUSIVE)
-        self.assertFalse(calls[0][2])
+        self.assertTrue(calls[0][2])
         self.assertFalse(hasattr(runtime, "verify_open_store"))
         self.assertFalse(hasattr(core, "verify_open_store_db_identity"))
         self.assertFalse(hasattr(core, "_open_descriptor_matches_identity"))
