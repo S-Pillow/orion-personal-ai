@@ -76,6 +76,12 @@ class TestOperatorLifecycleScripts(unittest.TestCase):
     def test_stop_cleans_only_snapshotted_owned_descendants(self):
         self.assertIn("function Get-OrionOwnedDescendantSnapshot", self.stop)
         self.assertIn("ParentProcessId", self.stop)
+        self.assertIn("$processByPid", self.stop)
+        self.assertIn("$parentProcess = $processByPid[$parentPid]", self.stop)
+        self.assertIn(
+            "[datetime]$child.CreationDate -lt [datetime]$parentProcess.CreationDate",
+            self.stop,
+        )
         self.assertIn("function Get-MatchingSnapshotProcess", self.stop)
         self.assertIn("function Get-VerifiedSnapshotProcessHandle", self.stop)
         self.assertIn("CreationDate", self.stop)
@@ -132,6 +138,7 @@ class TestOperatorLifecycleScripts(unittest.TestCase):
         self.assertIn("does not rewrite", self.readme)
         self.assertIn("descendant", self.readme)
         self.assertIn("identity-checked", self.readme)
+        self.assertIn("creation order", self.readme)
 
 
 if __name__ == "__main__":
