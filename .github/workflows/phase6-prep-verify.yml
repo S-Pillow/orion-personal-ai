@@ -11,6 +11,9 @@ on:
       - "compat/hermes/**"
       - ".github/workflows/phase6-prep-verify.yml"
 
+permissions:
+  contents: read
+
 jobs:
   verify-prep:
     runs-on: windows-latest
