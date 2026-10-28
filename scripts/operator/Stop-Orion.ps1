@@ -70,7 +70,7 @@ function Read-OrionSessionState {
 function Get-OrionOwnedDescendantSnapshot {
     param([Parameter(Mandatory=$true)][int]$RootPid)
 
-    $allProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
+    $allProcesses = @(Get-CimInstance Win32_Process -ErrorAction Stop)
     $childrenByParent = @{}
 
     foreach ($process in $allProcesses) {
@@ -103,7 +103,7 @@ function Get-OrionOwnedDescendantSnapshot {
                 ProcessId = $childPid
                 Name = [string]$child.Name
                 ExecutablePath = [string]$child.ExecutablePath
-                CreationDate = [string]$child.CreationDate
+                CreationDate = $child.CreationDate
             }
             $queue.Enqueue($childPid)
         }
@@ -115,7 +115,7 @@ function Get-OrionOwnedDescendantSnapshot {
 function Get-MatchingSnapshotProcess {
     param([Parameter(Mandatory=$true)]$Snapshot)
 
-    $current = Get-CimInstance Win32_Process -Filter "ProcessId = $($Snapshot.ProcessId)" -ErrorAction SilentlyContinue
+    $current = Get-CimInstance Win32_Process -Filter "ProcessId = $($Snapshot.ProcessId)" -ErrorAction Stop
     if ($null -eq $current) {
         return $null
     }
@@ -130,13 +130,66 @@ function Get-MatchingSnapshotProcess {
         return $null
     }
 
-    if (-not [string]::IsNullOrEmpty([string]$Snapshot.CreationDate) -and
-        -not [string]::IsNullOrEmpty([string]$current.CreationDate) -and
-        [string]$current.CreationDate -ne [string]$Snapshot.CreationDate) {
+    if ($null -ne $Snapshot.CreationDate -and
+        $null -ne $current.CreationDate -and
+        [datetime]$current.CreationDate -ne [datetime]$Snapshot.CreationDate) {
         return $null
     }
 
     return $current
+}
+
+function Get-VerifiedSnapshotProcessHandle {
+    param([Parameter(Mandatory=$true)]$Snapshot)
+
+    $current = Get-MatchingSnapshotProcess -Snapshot $Snapshot
+    if ($null -eq $current) {
+        return $null
+    }
+
+    $processHandle = $null
+    try {
+        $processHandle = Get-Process -Id ([int]$Snapshot.ProcessId) -ErrorAction Stop
+    }
+    catch {
+        $recheck = Get-MatchingSnapshotProcess -Snapshot $Snapshot
+        if ($null -eq $recheck) {
+            return $null
+        }
+        throw
+    }
+
+    $expectedProcessName = [IO.Path]::GetFileNameWithoutExtension([string]$Snapshot.Name)
+    if ($processHandle.ProcessName -ne $expectedProcessName) {
+        $processHandle.Dispose()
+        return $null
+    }
+
+    try {
+        if ($null -ne $Snapshot.CreationDate) {
+            $startDeltaSeconds = [Math]::Abs(
+                ($processHandle.StartTime - [datetime]$Snapshot.CreationDate).TotalSeconds
+            )
+            if ($startDeltaSeconds -gt 1) {
+                $processHandle.Dispose()
+                return $null
+            }
+        }
+
+        if (-not [string]::IsNullOrEmpty([string]$Snapshot.ExecutablePath)) {
+            $handlePath = [string]$processHandle.MainModule.FileName
+            if ($handlePath -ne [string]$Snapshot.ExecutablePath) {
+                $processHandle.Dispose()
+                return $null
+            }
+        }
+    }
+    catch {
+        $processHandle.Dispose()
+        throw
+    }
+
+    return $processHandle
 }
 
 try {
@@ -170,7 +223,7 @@ try {
         $null -ne $sessionState.ollamaPid) {
 
         $ownedPid = [int]$sessionState.ollamaPid
-        $ownedProcess = Get-CimInstance Win32_Process -Filter "ProcessId = $ownedPid" -ErrorAction SilentlyContinue
+        $ownedProcess = Get-CimInstance Win32_Process -Filter "ProcessId = $ownedPid" -ErrorAction Stop
 
         if ($null -ne $ownedProcess -and
             ($ownedProcess.Name -match '^(?i)ollama\.exe$' -or $ownedProcess.ExecutablePath -match '(?i)ollama')) {
@@ -221,10 +274,20 @@ try {
 
                 if ($remainingDescendants.Count -gt 0) {
                     foreach ($snapshot in $remainingDescendants) {
-                        Write-Host "Ollama: forcing Orion-owned descendant PID $($snapshot.ProcessId) ($($snapshot.Name))"
-                        Stop-Process -Id ([int]$snapshot.ProcessId) -Force -ErrorAction SilentlyContinue
+                        $verifiedHandle = Get-VerifiedSnapshotProcessHandle -Snapshot $snapshot
+                        if ($null -eq $verifiedHandle) {
+                            continue
+                        }
+
+                        try {
+                            Write-Host "Ollama: forcing Orion-owned descendant PID $($snapshot.ProcessId) ($($snapshot.Name))"
+                            $verifiedHandle.Kill()
+                            [void]$verifiedHandle.WaitForExit(5000)
+                        }
+                        finally {
+                            $verifiedHandle.Dispose()
+                        }
                     }
-                    Start-Sleep -Milliseconds 500
                 }
 
                 $stillRunningDescendants = @(
