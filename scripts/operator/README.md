@@ -19,7 +19,7 @@ These scripts implement the accepted manual-off operator lifecycle under Orion M
 - When Orion starts `ollama serve`, stdout/stderr are captured under `%LOCALAPPDATA%\Orion\operator\logs`. Startup failures distinguish process exit, port binding without a healthy API, and failure to bind, and include the selected backend when known.
 - Ollama ownership remains tied to the process that this launcher started. Listener inspection is diagnostic only and does not transfer ownership to another Ollama process.
 - `Stop-Orion.ps1` verifies the supported Hermes stop path by observing the loopback health endpoint go down. It may stop only the recorded Orion-owned Ollama PID and verifies that specific process exits; unrelated Ollama processes are left alone.
-- Before stopping an Orion-owned Ollama process, `Stop-Orion.ps1` snapshots its descendant process tree from `Win32_Process`. After the parent exits, descendants are given time to terminate naturally. Only descendants from that pre-stop snapshot whose PID, name, executable path, and creation identity still match may be force-stopped. This prevents an Ollama-owned `llama-server.exe` runner from being orphaned without introducing a broad process-name kill.
+- Before stopping an Orion-owned Ollama process, `Stop-Orion.ps1` snapshots its descendant process tree from `Win32_Process`. After the parent exits, descendants are given time to terminate naturally. A surviving descendant is revalidated immediately before termination and is stopped through its verified process handle only when PID, name, executable path, and creation identity still match the pre-stop snapshot. Process-query failures fail Stop instead of being treated as proof of exit. This prevents an Ollama-owned `llama-server.exe` runner from being orphaned without introducing a broad process-name kill.
 - The scripts do not directly start or stop `iai-mcp-daemon`; iai demand-wake, idle, and HIBERNATION behavior remain iai/Hermes-owned.
 
 ## ROCm 7.1 correction evidence
@@ -37,7 +37,7 @@ The operator script therefore uses the same process-local ROCm selection only fo
 
 The first full ROCm operator acceptance run proved Start, direct health, session ownership, environment restoration, ROCm runtime selection, and actual model inference, but it also exposed a shutdown gap: after the recorded Orion-owned `ollama.exe` PID exited, its `llama-server.exe` model runner could remain alive. The API was already down, so parent-only shutdown evidence was insufficient.
 
-Stop Orion now treats the pre-stop descendant snapshot as part of the same Orion-owned lifecycle boundary. Descendants receive a grace period after the parent exits; any survivor is force-stopped only when its process identity still matches the captured snapshot. Unrelated `llama-server.exe` or other processes are not selected by name and remain untouched.
+Stop Orion now treats the pre-stop descendant snapshot as part of the same Orion-owned lifecycle boundary. Descendants receive a grace period after the parent exits; any survivor is revalidated and force-stopped through a verified process handle only when its identity still matches the captured snapshot. Unrelated `llama-server.exe` or other processes are not selected by name and remain untouched.
 
 ## Known separate gap
 
