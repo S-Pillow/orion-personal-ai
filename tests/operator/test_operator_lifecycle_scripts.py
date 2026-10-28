@@ -147,6 +147,21 @@ class TestOperatorLifecycleScripts(unittest.TestCase):
             self.stop,
         )
 
+    def test_stop_accepts_empty_descendant_collections(self):
+        self.assertGreaterEqual(self.stop.count("[AllowEmptyCollection()]"), 4)
+        self.assertIn(
+            "[AllowEmptyCollection()]\n        [object[]]$Existing",
+            self.stop,
+        )
+        self.assertIn(
+            "[AllowEmptyCollection()]\n        [object[]]$Fresh",
+            self.stop,
+        )
+        self.assertIn(
+            "[AllowEmptyCollection()]\n        [object[]]$Snapshots",
+            self.stop,
+        )
+
     def test_stop_leaves_iai_under_vendor_lifecycle(self):
         self.assertIn("iai remains under its vendor idle/HIBERNATION lifecycle", self.stop)
         self.assertNotIn("iai-mcp daemon stop", self.stop)
