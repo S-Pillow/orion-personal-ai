@@ -111,9 +111,9 @@ def load_iai_runtime(expected_version: str = EXPECTED_IAI_VERSION) -> IaiRuntime
     def open_store(root: Path):
         # Mutating DC-02 applies are maintenance operations. Use iai's own
         # EXCLUSIVE Hippo lock so compliant daemon/Hermes/native clients cannot
-        # coexist with this semantic write window. Out-of-band filesystem
-        # replacement while the store is open is outside the supported contract.
-        return MemoryStore(root, access_mode=AccessMode.EXCLUSIVE, persist_index=False)
+        # coexist with this semantic write window. As the index-owning EXCLUSIVE
+        # handle, persist the native derived recall index on clean close.
+        return MemoryStore(root, access_mode=AccessMode.EXCLUSIVE, persist_index=True)
 
     return IaiRuntime(
         version=version,
