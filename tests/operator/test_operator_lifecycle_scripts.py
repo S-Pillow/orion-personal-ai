@@ -73,6 +73,32 @@ class TestOperatorLifecycleScripts(unittest.TestCase):
         self.assertIn("leaving other Ollama processes alone", self.stop)
         self.assertNotIn("Get-Process ollama | Stop-Process", self.stop)
 
+    def test_stop_cleans_only_snapshotted_owned_descendants(self):
+        self.assertIn("function Get-OrionOwnedDescendantSnapshot", self.stop)
+        self.assertIn("ParentProcessId", self.stop)
+        self.assertIn("function Get-MatchingSnapshotProcess", self.stop)
+        self.assertIn("CreationDate", self.stop)
+        self.assertIn("ExecutablePath", self.stop)
+        self.assertIn(
+            "$ownedDescendants = @(Get-OrionOwnedDescendantSnapshot -RootPid $ownedPid)",
+            self.stop,
+        )
+        self.assertLess(
+            self.stop.index("$ownedDescendants = @(Get-OrionOwnedDescendantSnapshot -RootPid $ownedPid)"),
+            self.stop.index("Stop-Process -Id $ownedPid -ErrorAction SilentlyContinue"),
+        )
+        self.assertIn(
+            'Write-Host "Ollama: forcing Orion-owned descendant PID $($snapshot.ProcessId) ($($snapshot.Name))"',
+            self.stop,
+        )
+        self.assertIn(
+            "Stop-Process -Id ([int]$snapshot.ProcessId) -Force -ErrorAction SilentlyContinue",
+            self.stop,
+        )
+        self.assertIn("Orion-owned Ollama descendant PID(s) still running after stop attempt", self.stop)
+        self.assertNotIn("Get-Process llama-server | Stop-Process", self.stop)
+        self.assertNotIn("Get-Process -Name llama-server | Stop-Process", self.stop)
+
     def test_stop_leaves_iai_under_vendor_lifecycle(self):
         self.assertIn("iai remains under its vendor idle/HIBERNATION lifecycle", self.stop)
         self.assertNotIn("iai-mcp daemon stop", self.stop)
@@ -82,6 +108,10 @@ class TestOperatorLifecycleScripts(unittest.TestCase):
         self.assertLess(self.start.index("Ollama: ready"), self.start.index("ORION READY"))
         self.assertLess(self.start.index("Hermes COMPANION: ready"), self.start.index("ORION READY"))
         self.assertLess(self.stop.index("Wait-HermesDown"), self.stop.index("ORION STOPPED"))
+        self.assertLess(
+            self.stop.index("Ollama: Orion-owned descendants stopped"),
+            self.stop.index("ORION STOPPED"),
+        )
 
     def test_operator_readme_tracks_current_prd_and_rocm_correction(self):
         self.assertIn("Master PRD v2.9", self.readme)
@@ -90,6 +120,8 @@ class TestOperatorLifecycleScripts(unittest.TestCase):
         self.assertIn("rocm_v7_1", self.readme)
         self.assertIn("process-local", self.readme)
         self.assertIn("does not rewrite", self.readme)
+        self.assertIn("descendant", self.readme)
+        self.assertIn("identity-checked", self.readme)
 
 
 if __name__ == "__main__":
