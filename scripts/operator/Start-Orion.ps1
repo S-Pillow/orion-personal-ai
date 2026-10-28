@@ -169,14 +169,6 @@ try {
             throw "Ollama did not bind port 11434 or become healthy within $OllamaHealthTimeoutSeconds seconds. Logs: $ollamaStdoutPath ; $ollamaStderrPath"
         }
 
-        $listenerOwnerPid = Get-ListenerOwnerPid -Port 11434
-        if ($null -ne $listenerOwnerPid) {
-            $listenerProcess = Get-Process -Id $listenerOwnerPid -ErrorAction SilentlyContinue
-            if ($null -ne $listenerProcess -and $listenerProcess.ProcessName -match '^(?i)ollama$') {
-                $ollamaPid = [int]$listenerOwnerPid
-            }
-        }
-
         Write-Host "Ollama: ready"
     }
 
