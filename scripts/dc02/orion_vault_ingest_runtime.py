@@ -1,10 +1,9 @@
-"""DC-02 pinned iai 3.3.0 adapter and native report acceptance."""
+"""DC-02 pinned iai 3.3.0 maintenance runtime and native report acceptance."""
 from __future__ import annotations
 
 import importlib.metadata
 import inspect
 import os
-import stat
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Callable, Mapping
@@ -86,113 +85,6 @@ def apply_plan(store: Any, staged: Mapping[str, Path], plan: SyncPlan, study_doc
     return reports
 
 
-def _normalize_expected_identity(expected: Mapping[str, Any]) -> tuple[str, int, int]:
-    path = expected.get("path")
-    device = expected.get("device")
-    inode = expected.get("inode")
-    if not isinstance(path, str) or not path:
-        raise AdapterError("open_store_expected_db_identity_invalid")
-    if not isinstance(device, int) or isinstance(device, bool) or device < 0:
-        raise AdapterError("open_store_expected_db_identity_invalid")
-    if not isinstance(inode, int) or isinstance(inode, bool) or inode <= 0:
-        raise AdapterError("open_store_expected_db_identity_invalid")
-    return path, device, inode
-
-
-def _open_descriptor_matches_identity(device: int, inode: int) -> bool | None:
-    """Confirm a live process descriptor references the expected file instance.
-
-    Linux exposes descriptors through /proc/self/fd; macOS and other POSIX
-    systems commonly expose /dev/fd. Windows has no equivalent portable
-    process-FD namespace, so its live-connection check relies on the driver
-    connection plus the open-time path identity below.
-    """
-    if os.name == "nt":
-        return None
-    roots = (Path("/proc/self/fd"), Path("/dev/fd"))
-    fd_root = next((root for root in roots if root.is_dir()), None)
-    if fd_root is None:
-        return None
-    try:
-        names = os.listdir(fd_root)
-    except OSError as exc:
-        raise AdapterError(f"open_store_fd_probe_failed:{type(exc).__name__}") from exc
-    for name in names:
-        if not name.isdigit():
-            continue
-        try:
-            info = os.stat(fd_root / name)
-        except OSError:
-            continue
-        if stat.S_ISREG(info.st_mode) and int(info.st_dev) == device and int(info.st_ino) == inode:
-            return True
-    return False
-
-
-def verify_open_store_db_identity(store: Any, expected: Mapping[str, Any]) -> None:
-    """Bind the transaction identity to the DB used by the live native store.
-
-    Pinned iai 3.3.0 exposes MemoryStore.db (HippoDB), whose _conn is the live
-    writer connection and whose _db_path is the path passed to that connection.
-    This probe runs after MemoryStore construction but before any study/fade call.
-    It therefore closes the swap window between the surrounding pre-open and
-    post-close filesystem identity checks.
-    """
-    wanted_path, wanted_dev, wanted_ino = _normalize_expected_identity(expected)
-    db = getattr(store, "db", None)
-    if db is None:
-        raise AdapterError("open_store_db_handle_unavailable")
-    conn = getattr(db, "_conn", None)
-    db_path_text = getattr(db, "_db_path", None)
-    driver = getattr(db, "_storage_driver", None)
-    if conn is None or not isinstance(db_path_text, str) or not db_path_text:
-        raise AdapterError("open_store_db_handle_unavailable")
-    if driver not in {"stdlib", "lilli"}:
-        raise AdapterError("open_store_storage_driver_unexpected")
-
-    db_path = Path(db_path_text)
-    try:
-        resolved = db_path.resolve(strict=True)
-        info = os.stat(db_path, follow_symlinks=False)
-        wanted_resolved = Path(wanted_path).resolve(strict=True)
-    except OSError as exc:
-        raise AdapterError(f"open_store_db_identity_stat_failed:{type(exc).__name__}") from exc
-    if os.path.normcase(str(resolved)) != os.path.normcase(str(wanted_resolved)):
-        raise AdapterError("open_store_db_path_mismatch")
-    if int(info.st_dev) != wanted_dev or int(info.st_ino) != wanted_ino:
-        raise AdapterError("open_store_db_identity_mismatch")
-
-    if driver == "stdlib":
-        try:
-            cursor = conn.execute("PRAGMA database_list")
-            rows = cursor.fetchall()
-        except Exception as exc:
-            raise AdapterError(f"open_store_connection_probe_failed:{type(exc).__name__}") from exc
-        main_paths: list[str] = []
-        for row in rows:
-            try:
-                name = row[1]
-                filename = row[2]
-            except (IndexError, KeyError, TypeError):
-                continue
-            if str(name) == "main" and filename:
-                main_paths.append(str(filename))
-        if len(main_paths) != 1:
-            raise AdapterError("open_store_connection_main_db_unavailable")
-        try:
-            connection_path = Path(main_paths[0]).resolve(strict=True)
-        except OSError as exc:
-            raise AdapterError(f"open_store_connection_path_failed:{type(exc).__name__}") from exc
-        if os.path.normcase(str(connection_path)) != os.path.normcase(str(wanted_resolved)):
-            raise AdapterError("open_store_connection_db_path_mismatch")
-
-    descriptor_match = _open_descriptor_matches_identity(wanted_dev, wanted_ino)
-    if descriptor_match is False:
-        raise AdapterError("open_store_db_handle_identity_mismatch")
-    if descriptor_match is None and os.name != "nt":
-        raise AdapterError("open_store_db_handle_probe_unavailable")
-
-
 def load_iai_runtime(expected_version: str = EXPECTED_IAI_VERSION) -> IaiRuntime:
     try:
         version = importlib.metadata.version("iai-pme")
@@ -217,14 +109,17 @@ def load_iai_runtime(expected_version: str = EXPECTED_IAI_VERSION) -> IaiRuntime
         raise AdapterError("iai_study_signature_mismatch")
 
     def open_store(root: Path):
-        return MemoryStore(root, access_mode=AccessMode.SHARED, persist_index=False)
+        # Mutating DC-02 applies are maintenance operations. Use iai's own
+        # EXCLUSIVE Hippo lock so compliant daemon/Hermes/native clients cannot
+        # coexist with this semantic write window. Out-of-band filesystem
+        # replacement while the store is open is outside the supported contract.
+        return MemoryStore(root, access_mode=AccessMode.EXCLUSIVE, persist_index=False)
 
     return IaiRuntime(
         version=version,
         doc_tag=_doc_tag,
         study_document=study_document,
         open_store=open_store,
-        verify_open_store=verify_open_store_db_identity,
     )
 
 

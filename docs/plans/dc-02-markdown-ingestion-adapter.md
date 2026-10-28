@@ -8,10 +8,10 @@ DC-02 restores the authoritative Obsidian Markdown corpus to the canonical nativ
 
 The implementation boundary is intentionally narrow:
 
-- Orion owns source admission, immutable transaction snapshots, synchronization state, recovery metadata, store ownership, semantic-store identity, and apply serialization.
-- pinned `iai-pme==3.3.0` owns Markdown extraction, chunking, embeddings, deduplication, native `doc:` tags, graph weaving, shared document ownership, supersession/fade behavior, recall self-test, and persistence.
+- Orion owns source admission, immutable transaction snapshots, synchronization state, recovery metadata, store ownership, semantic-store identity, and Orion apply serialization.
+- pinned `iai-pme==3.3.0` owns Markdown extraction, chunking, embeddings, deduplication, native `doc:` tags, graph weaving, shared document ownership, supersession/fade behavior, recall self-test, native store locking, and persistence.
 - the source vault is read-only.
-- the adapter is operator-run only.
+- mutating apply is an operator-run maintenance operation.
 - this PR is source/review work only; it does not merge, deploy, touch the real vault/store, or run bootstrap.
 
 ## Supported entry point
@@ -23,26 +23,27 @@ The only supported transaction entry point is:
 Implementation is split by invariant:
 
 - `orion_vault_ingest_model.py` — immutable data model, schema versions, and one Windows-portable source-name grammar.
-- `orion_vault_ingest_fs.py` — fail-closed filesystem admission, crash-durable metadata writes, immutable staging, and the one advisory lock primitive.
-- `orion_vault_ingest_state.py` — checkpoint, owner, planning, and pending-journal state machine primitives.
-- `orion_vault_ingest_runtime.py` — pinned iai 3.3.0 runtime loading, live native-store DB verification, native report acceptance, CLI arguments, and result envelopes.
-- `orion_vault_ingest_contract.py` — cross-module invariants: vault/store separation, semantic-store topology, semantic DB file identity, and persisted checkpoint validity.
+- `orion_vault_ingest_fs.py` — fail-closed filesystem admission, crash-durable metadata writes, immutable staging, and the one Orion advisory lock primitive.
+- `orion_vault_ingest_state.py` — checkpoint, owner, planning, and pending-journal state-machine primitives.
+- `orion_vault_ingest_runtime.py` — pinned iai 3.3.0 runtime loading, explicit native EXCLUSIVE maintenance open, native report acceptance, CLI arguments, and result envelopes.
+- `orion_vault_ingest_contract.py` — vault/store separation, semantic-store topology, semantic DB file identity, and persisted checkpoint validity.
 - `orion_vault_markdown_ingest_core.py` — import-only compatibility/re-export surface. Direct execution fails closed.
 
 There is no executable legacy sidecar and no secondary apply CLI.
 
 ## Rebuilt transaction invariants
 
-The earlier live-path prototype was replaced rather than patched further. The rebuilt transaction is organized around these invariants:
+The transaction core is frozen around these invariants:
 
 1. **Validated source names** — a source name is admitted once through one canonical grammar before it may enter planning, state, pending recovery, vendor tagging, or fade operations.
 2. **Immutable staging** — iai studies private staged `.md` files, never the mutable live vault path.
 3. **Fixed metadata namespace** — state, pending, owner, and lock have fixed locations under the canonical store root; there is no custom `--state-file`.
 4. **One pinned store root and one Orion apply lock** — the supplied store root is canonicalized once at transaction entry and that immutable path is used throughout the run.
-5. **One physical semantic DB identity** — state, pending recovery, owner metadata, and the live native store are bound to the actual `brain.sqlite3` file instance, not just its pathname.
-6. **Explicit pending-journal state machine** — recovery is absent, active, or completed according to checkpoint identity plus file-map digest.
+5. **Persisted semantic DB identity** — state, pending recovery, and owner metadata are bound to the actual `brain.sqlite3` file identity, not only its pathname.
+6. **Native EXCLUSIVE maintenance semantics** — every mutating native store open requests iai `AccessMode.EXCLUSIVE`; compliant native clients cannot coexist with the semantic write window.
+7. **Explicit pending-journal state machine** — recovery is absent, active, or completed according to checkpoint identity plus file-map digest.
 
-The objective is to remove whole bug classes rather than accumulate edge-case guards around a mutable live-path transaction.
+The objective is to keep guarantees at layers that actually expose the required primitives. Orion does not attempt to infer the OS descriptor used by an opaque native database connection.
 
 ## Source-name contract
 
@@ -60,7 +61,7 @@ Admission rejects, among other invalid forms:
 - non-strict-UTF-8/surrogate source identity;
 - full source-path case-fold collisions in one admitted inventory.
 
-The same source-name validator is reused by checkpoint, pending recovery, native tag ownership, and fade paths. Generated state/pending metadata revalidates snapshot size, mtime, SHA-256, source name, and tag before serialization.
+The same validator is reused by checkpoint, pending recovery, native tag ownership, and fade paths. Generated state/pending metadata revalidates snapshot size, mtime, SHA-256, source name, and tag before serialization.
 
 ## Filesystem admission
 
@@ -105,7 +106,7 @@ Once staging succeeds, the frozen snapshot defines the in-flight semantic transa
 
 ## Native iai 3.3.0 contract
 
-Orion does not implement a parallel semantic engine. iai 3.3.0 remains authoritative for extraction, chunking, embeddings, dedup, shared document ownership, native tags, supersession, graph work, recall self-test, and persistence.
+Orion does not implement a parallel semantic engine. iai 3.3.0 remains authoritative for extraction, chunking, embeddings, dedup, shared document ownership, native tags, supersession, graph work, recall self-test, store locking, and persistence.
 
 Whitespace-only, zero-byte, and sub-capture-floor Markdown remain native iai behavior.
 
@@ -135,11 +136,30 @@ The semantic store path is:
 
 The DB, lock, state, pending, and owner files must be regular non-reparse, single-link files when they exist.
 
-## Semantic DB file identity and live-store binding
+## Maintenance threat model
 
-Pathname binding alone is insufficient: replacing/restoring `brain.sqlite3` while leaving Orion metadata in place must not allow the replacement DB to inherit an old checkpoint, and sampling only before native open/after native close is insufficient if the pathname is swapped during `MemoryStore` construction and restored during close.
+Mutating apply is supported only during a quiescent maintenance window.
 
-DC-02 therefore persists a semantic DB file identity consisting of:
+Required operator conditions:
+
+- stop the normal iai daemon/Hermes writer before `--apply`;
+- do not run another maintenance command against the same store concurrently;
+- do not rename, unlink, replace, restore, hardlink, synchronize, or externally overwrite files under the live semantic store while apply is running;
+- use a filesystem whose normal local locking semantics are functioning.
+
+Orion then requests `MemoryStore(..., access_mode=AccessMode.EXCLUSIVE, persist_index=False)` for semantic mutation. iai's native Hippo lock is the authority for excluding other **compliant iai clients**. If another compliant client still owns the store, native open fails and Orion leaves the pending journal active for retry.
+
+Out of scope by design:
+
+- a rogue or out-of-band process that bypasses iai/Hippo locking and overwrites store files;
+- renaming/unlinking/replacing an open SQLite database underneath the native connection;
+- a filesystem with broken advisory-lock semantics.
+
+These are not conditions Orion can make safe from outside an opaque vendor connection. SQLite itself documents rename/unlink of an open database as undefined and states that it cannot defend against a rogue process overwriting the database file.
+
+## Semantic DB file identity
+
+DC-02 persists a semantic DB file identity consisting of:
 
 - canonical resolved DB path;
 - filesystem device identifier (`st_dev`);
@@ -147,18 +167,18 @@ DC-02 therefore persists a semantic DB file identity consisting of:
 
 The identity is captured through an opened regular single-link DB handle and verified against the current pathname. A missing/zero file identifier fails closed.
 
-Successful state, pending recovery, and owner metadata all carry the identity. Apply captures it after acquiring the Orion lock and validates persisted metadata against it. The same identity is checked at four boundaries:
+Successful state, pending recovery, and owner metadata all carry this identity. Apply uses it to detect replacement/restoration **between successful runs and at transaction boundaries**. It is checked:
 
-- immediately before native store open;
-- **while the native `MemoryStore` is open and before the first study/fade call**;
+- after the Orion lock is acquired and before persisted metadata is trusted;
+- immediately before native EXCLUSIVE store open;
 - after a clean native store close;
 - immediately before successful checkpoint write, including a no-op apply.
 
-The while-open verifier uses the pinned iai 3.3.0 `MemoryStore.db` / `HippoDB` seam. It requires the live writer connection and bound `_db_path` to match the checkpoint-owned DB. For the stdlib driver it also queries `PRAGMA database_list` through that exact writer connection. On POSIX, Orion additionally confirms that the process has an open regular-file descriptor whose `(st_dev, st_ino)` matches the expected semantic DB while the native store is live. A mismatch closes the store and leaves pending recovery active before semantic study begins.
+Normal in-place native writes retain file identity. Replacing the DB between runs invalidates prior ownership/checkpoint metadata rather than allowing another file to inherit source completion.
 
-Replacing the DB therefore invalidates prior ownership/checkpoint metadata even when source files are unchanged. A replacement during native open cannot pass through to `study_document` merely because the original pathname is restored on close. Normal in-place DB writes retain file identity and do not invalidate the binding.
+DC-02 deliberately does **not** claim a while-open descriptor identity proof. Python's supported DB-API surface and pinned iai 3.3.0 do not expose a portable cross-driver primitive that identifies the OS descriptor belonging specifically to the active writer connection. The previous `/proc/self/fd`/`PRAGMA database_list` heuristic was removed because it could be satisfied by an unrelated descriptor and therefore overstated the guarantee.
 
-This source-only schema change has not been deployed, so no production DC-02 metadata requires migration.
+This source-only schema remains state v4 / pending v4 / owner v3; no schema bump is required because the persisted identity representation did not change.
 
 ## Fixed metadata namespace and schemas
 
@@ -179,13 +199,15 @@ Current schemas:
 
 Successful state records runtime identity, vault/store identity, semantic DB identity, successful UTC timestamp, checkpoint ID, and per-source snapshot/tag metadata.
 
-A persisted state file must contain a non-null timezone-aware successful timestamp. `successful_run_utc: null` is valid only for the synthetic in-memory empty state before any checkpoint exists. Broken persisted aliases are treated as persisted and fail closed rather than being reinterpreted as “no state”.
+A persisted state file must contain a non-null timezone-aware successful timestamp. `successful_run_utc: null` is valid only for the synthetic in-memory empty state before any checkpoint exists. Broken persisted aliases are treated as persisted and fail closed rather than being reinterpreted as "no state".
 
 Store owner binds one vault + canonical store + semantic DB file identity + `vault-study` session + iai 3.3.0.
 
-## One Orion apply lock
+## Two serialization layers
 
-Apply uses exactly one store-local advisory lock:
+### Orion transaction lock
+
+Apply uses exactly one store-local Orion advisory lock:
 
 `<canonical-store>/orion/vault-markdown-ingest.apply.lock`
 
@@ -194,9 +216,13 @@ Apply uses exactly one store-local advisory lock:
 
 The opened lock handle is verified as a regular single-link file before Windows can write its backing lock byte.
 
-The lock covers metadata classification, source inventory, staging, journal creation, native work, checkpoint commit, and cleanup. Plan-only does not create or acquire it.
+This lock serializes Orion's metadata classification, source inventory, staging, journal creation, native work, checkpoint commit, and cleanup. Plan-only does not create or acquire it.
 
-This lock serializes Orion adapter processes only. It does not exclude unrelated native iai `AccessMode.SHARED` clients. The first real bootstrap therefore requires the normal iai daemon/Hermes writer to be stopped for the maintenance window.
+### Native iai store lock
+
+When semantic mutation is required, the pinned runtime opens `MemoryStore` with `AccessMode.EXCLUSIVE`. This is the supported store-level exclusion mechanism for iai clients. Orion does not replace it with a second inferred lock or a process-wide descriptor search.
+
+The maintenance run still requires the daemon/Hermes writer to be stopped before apply. The EXCLUSIVE native open is the fail-closed enforcement layer if a compliant client was not actually stopped.
 
 ## Explicit pending-journal state machine
 
@@ -233,11 +259,11 @@ Any other identity/digest relationship fails closed.
 
 ## Apply ordering
 
-For one apply transaction:
+For one mutating apply transaction:
 
 1. canonicalize and pin the store root;
 2. validate vault/store separation and store topology;
-3. acquire the one Orion store lock;
+3. acquire the one Orion transaction lock;
 4. revalidate metadata/store topology and capture semantic DB file identity;
 5. load/validate state and owner against that DB identity;
 6. admit the current Markdown inventory and native document tags;
@@ -249,29 +275,27 @@ For one apply transaction:
 12. durably write pending recovery with the pinned DB identity;
 13. claim store ownership if needed;
 14. revalidate topology and DB file identity;
-15. open native `MemoryStore`;
-16. verify the **live native store/writer connection** is bound to the expected DB file instance;
-17. study staged new files, staged changed files, then fade deleted sources;
-18. require clean native store close;
-19. revalidate topology and DB file identity;
-20. revalidate DB identity again before checkpoint write, including no-op applies;
-21. atomically commit state with the pending target checkpoint identity;
-22. claim owner after state for a first no-mutation apply if needed;
-23. clear pending recovery;
-24. remove staged files and release the Orion lock.
+15. open native `MemoryStore` with `AccessMode.EXCLUSIVE`;
+16. study staged new files, staged changed files, then fade deleted sources;
+17. require clean native store close;
+18. revalidate topology and DB file identity;
+19. revalidate DB identity again before checkpoint write, including no-op applies;
+20. atomically commit state with the pending target checkpoint identity;
+21. claim owner after state for a first no-mutation apply if needed;
+22. clear pending recovery;
+23. remove staged files and release the Orion lock.
 
 POSIX metadata replacement fsyncs the destination directory. Newly created metadata directories are durably fsynced through their parent chain. Windows replacement uses `MoveFileExW(REPLACE_EXISTING | WRITE_THROUGH)`.
 
 ## Crash/retry behavior
 
 - failure before pending creation: no semantic store mutation has occurred;
-- failure after pending but before/during store open: pending remains active;
-- failure in the while-open DB identity probe: native store is closed, no study/fade call is made, and pending remains active;
+- failure after pending but before/during native EXCLUSIVE store open: pending remains active;
 - failure after one or more study/fade calls: pending remains active and all affected paths are forced through reconciliation;
 - failure after successful state commit but before pending deletion: pending is completed and a retry clears it without semantic replay;
 - a newly studied source deleted before retry retains its pending `doc:` ownership tag and is faded;
 - equal base/target file maps remain active until the target checkpoint ID is actually committed;
-- a semantic DB file replacement invalidates state/pending/owner identity rather than allowing the new DB to inherit old source completion.
+- a semantic DB file replacement between runs or at checked boundaries invalidates state/pending/owner identity rather than allowing another file to inherit old source completion.
 
 ## Operator modes
 
@@ -296,6 +320,8 @@ Plan-only validates the source and any existing Orion metadata. It does not crea
 
 ### Apply
 
+Before apply, stop the normal iai daemon/Hermes writer and keep the store quiescent for the maintenance window.
+
 ```powershell
 & $Python .\scripts\dc02\orion_vault_markdown_ingest.py `
   --vault-root "C:\Personal\Me" `
@@ -303,17 +329,29 @@ Plan-only validates the source and any existing Orion metadata. It does not crea
   --apply
 ```
 
-The first real full-vault bootstrap remains separately authorized and **MODERATE memory**. The vault remains read-only and the normal iai daemon/Hermes writer must be stopped for that maintenance window.
+The first real full-vault bootstrap remains separately authorized and **MODERATE memory**. The vault remains read-only. Native EXCLUSIVE open is expected to fail if another compliant iai client still owns the store.
 
-## Known vendor boundaries
+## Research basis for the maintenance boundary
 
-Orion intentionally does not claim guarantees not exposed by iai 3.3.0:
+This threat-model correction follows the storage layers' own documented contracts rather than inventing a stronger external guarantee:
+
+- SQLite, "How To Corrupt An SQLite Database File": a rogue process can overwrite an SQLite file and SQLite cannot defend against it; unlinking/renaming an open database is undefined and probably undesirable: <https://www.sqlite.org/howtocorrupt.html>.
+- SQLite locking documentation: EXCLUSIVE mode exists when an application wants to prevent other processes from accessing the database: <https://www.sqlite.org/pragma.html#pragma_locking_mode>.
+- pinned iai 3.3.0 `MemoryStore`/`HippoDB`: `MemoryStore` defaults to `AccessMode.EXCLUSIVE`, and Hippo implements its own native store lock.
+- pinned iai maintenance CLI: mutating maintenance commands refuse a running daemon and tell the operator to stop it first.
+
+Upstream iai also uses whole-store snapshots for several destructive maintenance/migration operations. That is useful operational precedent for a separately authorized backup strategy, but DC-02 does not replace its existing pending-journal reconciliation with snapshot rollback in this ticket.
+
+## Known vendor and maintenance boundaries
+
+Orion intentionally does not claim guarantees not exposed by iai 3.3.0 or SQLite:
 
 - some internal supersession/tag-update operations log additive failures without a dedicated fatal report field;
 - a first Orion bootstrap has no authoritative historical Orion inventory from which to infer ownership of arbitrary pre-existing unmanaged `doc:` tags;
-- native `AccessMode.SHARED` is not an exclusive maintenance lock.
+- native EXCLUSIVE locking excludes compliant iai clients, not a rogue process that ignores locks and manipulates store files directly;
+- out-of-band rename/unlink/replace of the semantic DB while it is open is an unsupported maintenance-window violation, not a condition Orion attempts to make safe.
 
-These remain bootstrap/runtime calibration boundaries rather than reasons to implement a second semantic engine.
+These are runtime/maintenance boundaries rather than reasons to implement a second semantic engine or unsupported connection-descriptor introspection.
 
 ## Source acceptance
 
@@ -321,7 +359,8 @@ Before the source/review cycle is complete:
 
 - rebuilt DC-02 invariant tests must pass on Ubuntu and Windows;
 - broader source suites must remain green;
-- prior bug classes must remain represented as regression/invariant tests, including enumeration failure, FIFO/special files, source portability, immutable staging, store-root retargeting, redirected `hippo`, vault/store overlap, hardlink aliases, DB replacement identity, **DB swap during native open/live-store binding**, store-open failure, partial native mutation, reverted sources, new-then-deleted recovery, equal-map recovery, completed-journal cleanup/no replay, and real cross-process lock contention;
-- a fresh independent review must evaluate the final frozen exact head rather than an older prototype or intermediate rebuilt commit.
+- prior bug classes must remain represented as regression/invariant tests, including enumeration failure, FIFO/special files, source portability, immutable staging, store-root retargeting, redirected `hippo`, vault/store overlap, hardlink aliases, inter-run DB replacement identity, native EXCLUSIVE maintenance-open failure, partial native mutation, reverted sources, new-then-deleted recovery, equal-map recovery, completed-journal cleanup/no replay, and real cross-process Orion lock contention;
+- the unsupported `/proc/self/fd` / `PRAGMA database_list` live-writer identity heuristic must remain absent;
+- a fresh independent review must evaluate the final frozen exact head against the corrected maintenance threat model rather than demand guarantees outside it.
 
 Runtime bootstrap remains out of scope until separately approved.

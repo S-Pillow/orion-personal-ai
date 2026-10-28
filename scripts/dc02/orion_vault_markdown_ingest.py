@@ -19,18 +19,16 @@ _SPEC.loader.exec_module(core)
 AdapterError = core.AdapterError
 
 
-def _open_and_apply(runtime, store_root: Path, staged, plan, db_identity):
+def _open_and_apply(runtime, store_root: Path, staged, plan):
     try:
+        # The pinned runtime opens MemoryStore with iai AccessMode.EXCLUSIVE.
+        # That native lock is the supported maintenance boundary against other
+        # compliant iai clients. Orion does not attempt to reconstruct or prove
+        # the vendor connection's private OS descriptor identity.
         store = runtime.open_store(store_root)
     except Exception as exc:
         raise AdapterError(f"store_open_failed:{type(exc).__name__}:{exc}") from exc
     try:
-        # The surrounding pathname checks are not sufficient: a DB can be
-        # swapped during MemoryStore construction and restored before close.
-        # Verify the live HippoDB/writer connection before the first semantic
-        # call so native work is bound to the checkpoint-owned file instance.
-        if runtime.verify_open_store is not None:
-            runtime.verify_open_store(store, db_identity)
         reports = core.apply_plan(store, staged.paths, plan, runtime.study_document)
     except Exception as apply_exc:
         try:
@@ -162,17 +160,21 @@ def main(argv: list[str] | None = None) -> int:
                 core._atomic_write(paths.owner, owner_payload, "owner")
                 owner = owner_payload
 
+            # DB file identity is an inter-run and transaction-boundary sanity
+            # check. Native EXCLUSIVE locking owns compliant-client exclusion.
+            # Renaming/replacing store files underneath an open database is an
+            # unsupported maintenance-window violation, not a guarantee Orion
+            # can establish through an opaque vendor connection.
             db_path = core.validate_store(vault_root, store_root, require_db=True)
             core.assert_semantic_db_identity(db_path, db_identity)
-            reports = _open_and_apply(runtime, store_root, staged, plan, db_identity)
-            # Native close completed. Refuse checkpoint commit if the path now
-            # names a different DB file than the one bound to this transaction.
+            reports = _open_and_apply(runtime, store_root, staged, plan)
             db_path = core.validate_store(vault_root, store_root, require_db=True)
             core.assert_semantic_db_identity(db_path, db_identity)
             checkpoint_id = target_checkpoint_id
 
-        # This also protects no-op applies: an external DB replacement cannot
-        # inherit a prior checkpoint merely because no source digest changed.
+        # This protects no-op applies and catches replacement between successful
+        # runs or at checked transaction boundaries. It intentionally does not
+        # claim to detect a hostile rename/replace performed while iai owns the DB.
         db_path = core.validate_store(vault_root, store_root, require_db=True)
         core.assert_semantic_db_identity(db_path, db_identity)
         core._atomic_write(
