@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [int]$HermesHealthTimeoutSeconds = 30,
-    [int]$OllamaHealthTimeoutSeconds = 20
+    [int]$OllamaHealthTimeoutSeconds = 60
 )
 
 Set-StrictMode -Version Latest
@@ -9,26 +9,43 @@ $ErrorActionPreference = "Stop"
 
 $stateRoot = Join-Path $env:LOCALAPPDATA "Orion\operator"
 $statePath = Join-Path $stateRoot "launcher-session.json"
+$logRoot = Join-Path $stateRoot "logs"
 $utf8NoBom = [Text.UTF8Encoding]::new($false)
 
 New-Item -ItemType Directory -Path $stateRoot -Force | Out-Null
+New-Item -ItemType Directory -Path $logRoot -Force | Out-Null
 
-function Test-HttpEndpoint {
+function Test-DirectHttpEndpoint {
     param(
         [Parameter(Mandatory=$true)][string]$Uri,
         [int]$TimeoutSeconds = 2
     )
 
+    $response = $null
     try {
-        $response = Invoke-WebRequest -Uri $Uri -UseBasicParsing -TimeoutSec $TimeoutSeconds
-        return ($response.StatusCode -ge 200 -and $response.StatusCode -lt 300)
+        $request = [System.Net.HttpWebRequest]::Create($Uri)
+        $request.Method = "GET"
+        $request.Proxy = $null
+        $request.KeepAlive = $false
+        $request.AllowAutoRedirect = $false
+        $timeoutMs = [Math]::Max(1, $TimeoutSeconds * 1000)
+        $request.Timeout = $timeoutMs
+        $request.ReadWriteTimeout = $timeoutMs
+        $response = [System.Net.HttpWebResponse]$request.GetResponse()
+        $statusCode = [int]$response.StatusCode
+        return ($statusCode -ge 200 -and $statusCode -lt 300)
     }
     catch {
         return $false
     }
+    finally {
+        if ($null -ne $response) {
+            try { $response.Close() } catch {}
+        }
+    }
 }
 
-function Wait-HttpEndpoint {
+function Wait-DirectHttpEndpoint {
     param(
         [Parameter(Mandatory=$true)][string]$Uri,
         [Parameter(Mandatory=$true)][bool]$ExpectedUp,
@@ -37,7 +54,7 @@ function Wait-HttpEndpoint {
 
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     do {
-        $isUp = Test-HttpEndpoint -Uri $Uri
+        $isUp = Test-DirectHttpEndpoint -Uri $Uri
         if ($isUp -eq $ExpectedUp) {
             return $true
         }
@@ -45,6 +62,22 @@ function Wait-HttpEndpoint {
     } while ((Get-Date) -lt $deadline)
 
     return $false
+}
+
+function Get-ListenerOwnerPid {
+    param([Parameter(Mandatory=$true)][int]$Port)
+
+    try {
+        $listeners = @(
+            Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+        )
+        if ($listeners.Count -gt 0) {
+            return [int]$listeners[0].OwningProcess
+        }
+    }
+    catch {}
+
+    return $null
 }
 
 function Read-OrionSessionState {
@@ -73,6 +106,8 @@ $hermesHealthUri = "http://127.0.0.1:8642/health"
 $ollamaHealthUri = "http://127.0.0.1:11434/api/tags"
 $ollamaStartedByOrion = $false
 $ollamaPid = $null
+$ollamaStdoutPath = $null
+$ollamaStderrPath = $null
 
 try {
     Write-Host "=== START ORION ==="
@@ -91,7 +126,7 @@ try {
         }
     }
 
-    if (Test-HttpEndpoint -Uri $ollamaHealthUri) {
+    if (Test-DirectHttpEndpoint -Uri $ollamaHealthUri) {
         Write-Host "Ollama: already available"
     }
     else {
@@ -103,14 +138,43 @@ try {
             throw "Ollama is not running and the ollama executable was not found on PATH."
         }
 
+        $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+        $ollamaStdoutPath = Join-Path $logRoot "ollama-$stamp.stdout.log"
+        $ollamaStderrPath = Join-Path $logRoot "ollama-$stamp.stderr.log"
+
         Write-Host "Ollama: starting"
-        $ollamaProcess = Start-Process -FilePath $ollamaCommand.Source -ArgumentList @("serve") -WindowStyle Hidden -PassThru
+        $ollamaProcess = Start-Process `
+            -FilePath $ollamaCommand.Source `
+            -ArgumentList @("serve") `
+            -WindowStyle Hidden `
+            -RedirectStandardOutput $ollamaStdoutPath `
+            -RedirectStandardError $ollamaStderrPath `
+            -PassThru
+
         $ollamaPid = $ollamaProcess.Id
         $ollamaStartedByOrion = $true
 
-        if (-not (Wait-HttpEndpoint -Uri $ollamaHealthUri -ExpectedUp $true -TimeoutSeconds $OllamaHealthTimeoutSeconds)) {
-            try { Stop-Process -Id $ollamaPid -ErrorAction SilentlyContinue } catch {}
-            throw "Ollama did not become ready within $OllamaHealthTimeoutSeconds seconds."
+        if (-not (Wait-DirectHttpEndpoint -Uri $ollamaHealthUri -ExpectedUp $true -TimeoutSeconds $OllamaHealthTimeoutSeconds)) {
+            $ollamaProcess.Refresh()
+            $listenerOwnerPid = Get-ListenerOwnerPid -Port 11434
+
+            if ($ollamaProcess.HasExited) {
+                throw "Ollama exited before becoming healthy (exit code $($ollamaProcess.ExitCode)). Logs: $ollamaStdoutPath ; $ollamaStderrPath"
+            }
+
+            if ($null -ne $listenerOwnerPid) {
+                throw "Ollama bound port 11434 but direct health checks failed. Listener PID: $listenerOwnerPid. Logs: $ollamaStdoutPath ; $ollamaStderrPath"
+            }
+
+            throw "Ollama did not bind port 11434 or become healthy within $OllamaHealthTimeoutSeconds seconds. Logs: $ollamaStdoutPath ; $ollamaStderrPath"
+        }
+
+        $listenerOwnerPid = Get-ListenerOwnerPid -Port 11434
+        if ($null -ne $listenerOwnerPid) {
+            $listenerProcess = Get-Process -Id $listenerOwnerPid -ErrorAction SilentlyContinue
+            if ($null -ne $listenerProcess -and $listenerProcess.ProcessName -match '^(?i)ollama$') {
+                $ollamaPid = [int]$listenerOwnerPid
+            }
         }
 
         Write-Host "Ollama: ready"
@@ -121,7 +185,7 @@ try {
         throw "Hermes executable was not found on PATH."
     }
 
-    if (Test-HttpEndpoint -Uri $hermesHealthUri) {
+    if (Test-DirectHttpEndpoint -Uri $hermesHealthUri) {
         Write-Host "Hermes COMPANION: already running"
     }
     else {
@@ -131,7 +195,7 @@ try {
             throw "Hermes gateway start exited with code $LASTEXITCODE."
         }
 
-        if (-not (Wait-HttpEndpoint -Uri $hermesHealthUri -ExpectedUp $true -TimeoutSeconds $HermesHealthTimeoutSeconds)) {
+        if (-not (Wait-DirectHttpEndpoint -Uri $hermesHealthUri -ExpectedUp $true -TimeoutSeconds $HermesHealthTimeoutSeconds)) {
             throw "Hermes API did not become healthy within $HermesHealthTimeoutSeconds seconds."
         }
 
@@ -149,9 +213,9 @@ try {
 
     Write-Host ""
     Write-Host "ORION READY"
+    Write-Host "Ollama API: healthy"
     Write-Host "Hermes API: healthy"
     Write-Host "iai: demand-wake managed by Hermes/iai"
-    Start-Sleep -Seconds 3
     exit 0
 }
 catch {
@@ -168,6 +232,5 @@ catch {
         } catch {}
     }
 
-    Start-Sleep -Seconds 10
     exit 1
 }
