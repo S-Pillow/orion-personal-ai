@@ -19,12 +19,18 @@ _SPEC.loader.exec_module(core)
 AdapterError = core.AdapterError
 
 
-def _open_and_apply(runtime, store_root: Path, staged, plan):
+def _open_and_apply(runtime, store_root: Path, staged, plan, db_identity):
     try:
         store = runtime.open_store(store_root)
     except Exception as exc:
         raise AdapterError(f"store_open_failed:{type(exc).__name__}:{exc}") from exc
     try:
+        # The surrounding pathname checks are not sufficient: a DB can be
+        # swapped during MemoryStore construction and restored before close.
+        # Verify the live HippoDB/writer connection before the first semantic
+        # call so native work is bound to the checkpoint-owned file instance.
+        if runtime.verify_open_store is not None:
+            runtime.verify_open_store(store, db_identity)
         reports = core.apply_plan(store, staged.paths, plan, runtime.study_document)
     except Exception as apply_exc:
         try:
@@ -158,7 +164,7 @@ def main(argv: list[str] | None = None) -> int:
 
             db_path = core.validate_store(vault_root, store_root, require_db=True)
             core.assert_semantic_db_identity(db_path, db_identity)
-            reports = _open_and_apply(runtime, store_root, staged, plan)
+            reports = _open_and_apply(runtime, store_root, staged, plan, db_identity)
             # Native close completed. Refuse checkpoint commit if the path now
             # names a different DB file than the one bound to this transaction.
             db_path = core.validate_store(vault_root, store_root, require_db=True)
