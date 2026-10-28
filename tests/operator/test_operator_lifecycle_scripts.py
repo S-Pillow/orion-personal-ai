@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 import unittest
 from pathlib import Path
 
@@ -36,12 +35,29 @@ class TestOperatorLifecycleScripts(unittest.TestCase):
             r"\[int\]\$OllamaHealthTimeoutSeconds\s*=\s*(?:[3-9]\d|\d{3,})",
         )
 
+    def test_start_pins_orion_started_ollama_to_rocm71_process_locally(self):
+        self.assertIn('$ollamaLaunchLibrary = "rocm_v7_1"', self.start)
+        self.assertIn("$previousOllamaLibrary = $env:OLLAMA_LLM_LIBRARY", self.start)
+        self.assertIn("$env:OLLAMA_LLM_LIBRARY = $ollamaLaunchLibrary", self.start)
+        self.assertIn("$env:OLLAMA_LLM_LIBRARY = $previousOllamaLibrary", self.start)
+        self.assertLess(
+            self.start.index("$env:OLLAMA_LLM_LIBRARY = $ollamaLaunchLibrary"),
+            self.start.index("Start-Process"),
+        )
+        self.assertLess(
+            self.start.index("Start-Process"),
+            self.start.index("$env:OLLAMA_LLM_LIBRARY = $previousOllamaLibrary"),
+        )
+        self.assertIn("ollamaLibrary = $ollamaLibraryUsed", self.start)
+        self.assertIn('Write-Host "Ollama backend: $ollamaLaunchLibrary"', self.start)
+
     def test_start_captures_ollama_diagnostics(self):
         self.assertIn("-RedirectStandardOutput $ollamaStdoutPath", self.start)
         self.assertIn("-RedirectStandardError $ollamaStderrPath", self.start)
         self.assertIn("Ollama exited before becoming healthy", self.start)
         self.assertIn("Ollama bound port 11434 but direct health checks failed", self.start)
         self.assertIn("Ollama did not bind port 11434 or become healthy", self.start)
+        self.assertIn("Backend: $ollamaLibraryUsed", self.start)
 
     def test_start_preserves_one_shot_ownership_model(self):
         self.assertIn("ollamaStartedByOrion", self.start)
@@ -67,10 +83,13 @@ class TestOperatorLifecycleScripts(unittest.TestCase):
         self.assertLess(self.start.index("Hermes COMPANION: ready"), self.start.index("ORION READY"))
         self.assertLess(self.stop.index("Wait-HermesDown"), self.stop.index("ORION STOPPED"))
 
-    def test_operator_readme_tracks_current_prd(self):
+    def test_operator_readme_tracks_current_prd_and_rocm_correction(self):
         self.assertIn("Master PRD v2.9", self.readme)
         self.assertNotIn("Master PRD v2.8", self.readme)
         self.assertNotIn("Current Phase 2 relationship", self.readme)
+        self.assertIn("rocm_v7_1", self.readme)
+        self.assertIn("process-local", self.readme)
+        self.assertIn("does not rewrite", self.readme)
 
 
 if __name__ == "__main__":
