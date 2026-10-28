@@ -124,8 +124,13 @@ function Get-PersistedOwnedDescendants {
 
 function Merge-OwnedDescendantSnapshots {
     param(
-        [Parameter(Mandatory=$true)]$Existing,
-        [Parameter(Mandatory=$true)]$Fresh
+        [Parameter(Mandatory=$true)]
+        [AllowEmptyCollection()]
+        [object[]]$Existing,
+
+        [Parameter(Mandatory=$true)]
+        [AllowEmptyCollection()]
+        [object[]]$Fresh
     )
 
     $byIdentity = [ordered]@{}
@@ -141,7 +146,10 @@ function Merge-OwnedDescendantSnapshots {
 function Save-OwnedDescendantSnapshots {
     param(
         [Parameter(Mandatory=$true)]$SessionState,
-        [Parameter(Mandatory=$true)]$Snapshots
+
+        [Parameter(Mandatory=$true)]
+        [AllowEmptyCollection()]
+        [object[]]$Snapshots
     )
 
     $persisted = @(
@@ -303,7 +311,11 @@ function Get-VerifiedSnapshotProcessHandle {
 }
 
 function Stop-OrionOwnedDescendants {
-    param([Parameter(Mandatory=$true)]$Snapshots)
+    param(
+        [Parameter(Mandatory=$true)]
+        [AllowEmptyCollection()]
+        [object[]]$Snapshots
+    )
 
     $snapshotsArray = @($Snapshots)
     if ($snapshotsArray.Count -eq 0) {
