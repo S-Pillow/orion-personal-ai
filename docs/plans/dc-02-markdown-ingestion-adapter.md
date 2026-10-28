@@ -25,7 +25,7 @@ Implementation is split by invariant:
 - `orion_vault_ingest_model.py` — immutable data model, schema versions, and one Windows-portable source-name grammar.
 - `orion_vault_ingest_fs.py` — fail-closed filesystem admission, crash-durable metadata writes, immutable staging, and the one advisory lock primitive.
 - `orion_vault_ingest_state.py` — checkpoint, owner, planning, and pending-journal state machine primitives.
-- `orion_vault_ingest_runtime.py` — pinned iai 3.3.0 runtime loading, native report acceptance, CLI arguments, and result envelopes.
+- `orion_vault_ingest_runtime.py` — pinned iai 3.3.0 runtime loading, live native-store DB verification, native report acceptance, CLI arguments, and result envelopes.
 - `orion_vault_ingest_contract.py` — cross-module invariants: vault/store separation, semantic-store topology, semantic DB file identity, and persisted checkpoint validity.
 - `orion_vault_markdown_ingest_core.py` — import-only compatibility/re-export surface. Direct execution fails closed.
 
@@ -39,7 +39,7 @@ The earlier live-path prototype was replaced rather than patched further. The re
 2. **Immutable staging** — iai studies private staged `.md` files, never the mutable live vault path.
 3. **Fixed metadata namespace** — state, pending, owner, and lock have fixed locations under the canonical store root; there is no custom `--state-file`.
 4. **One pinned store root and one Orion apply lock** — the supplied store root is canonicalized once at transaction entry and that immutable path is used throughout the run.
-5. **One physical semantic DB identity** — state, pending recovery, and owner metadata are bound to the actual `brain.sqlite3` file identity, not just its pathname.
+5. **One physical semantic DB identity** — state, pending recovery, owner metadata, and the live native store are bound to the actual `brain.sqlite3` file instance, not just its pathname.
 6. **Explicit pending-journal state machine** — recovery is absent, active, or completed according to checkpoint identity plus file-map digest.
 
 The objective is to remove whole bug classes rather than accumulate edge-case guards around a mutable live-path transaction.
@@ -135,9 +135,9 @@ The semantic store path is:
 
 The DB, lock, state, pending, and owner files must be regular non-reparse, single-link files when they exist.
 
-## Semantic DB file identity
+## Semantic DB file identity and live-store binding
 
-Pathname binding alone is insufficient: replacing/restoring `brain.sqlite3` while leaving Orion metadata in place must not allow the replacement DB to inherit an old checkpoint.
+Pathname binding alone is insufficient: replacing/restoring `brain.sqlite3` while leaving Orion metadata in place must not allow the replacement DB to inherit an old checkpoint, and sampling only before native open/after native close is insufficient if the pathname is swapped during `MemoryStore` construction and restored during close.
 
 DC-02 therefore persists a semantic DB file identity consisting of:
 
@@ -147,13 +147,16 @@ DC-02 therefore persists a semantic DB file identity consisting of:
 
 The identity is captured through an opened regular single-link DB handle and verified against the current pathname. A missing/zero file identifier fails closed.
 
-Successful state, pending recovery, and owner metadata all carry the identity. Apply captures it after acquiring the Orion lock and validates persisted metadata against it. The same identity is rechecked:
+Successful state, pending recovery, and owner metadata all carry the identity. Apply captures it after acquiring the Orion lock and validates persisted metadata against it. The same identity is checked at four boundaries:
 
 - immediately before native store open;
+- **while the native `MemoryStore` is open and before the first study/fade call**;
 - after a clean native store close;
 - immediately before successful checkpoint write, including a no-op apply.
 
-Replacing the DB therefore invalidates prior ownership/checkpoint metadata even when source files are unchanged. A replacement during an in-flight transaction leaves pending recovery active and prevents checkpoint commit. Normal in-place DB writes retain file identity and do not invalidate the binding.
+The while-open verifier uses the pinned iai 3.3.0 `MemoryStore.db` / `HippoDB` seam. It requires the live writer connection and bound `_db_path` to match the checkpoint-owned DB. For the stdlib driver it also queries `PRAGMA database_list` through that exact writer connection. On POSIX, Orion additionally confirms that the process has an open regular-file descriptor whose `(st_dev, st_ino)` matches the expected semantic DB while the native store is live. A mismatch closes the store and leaves pending recovery active before semantic study begins.
+
+Replacing the DB therefore invalidates prior ownership/checkpoint metadata even when source files are unchanged. A replacement during native open cannot pass through to `study_document` merely because the original pathname is restored on close. Normal in-place DB writes retain file identity and do not invalidate the binding.
 
 This source-only schema change has not been deployed, so no production DC-02 metadata requires migration.
 
@@ -247,14 +250,15 @@ For one apply transaction:
 13. claim store ownership if needed;
 14. revalidate topology and DB file identity;
 15. open native `MemoryStore`;
-16. study staged new files, staged changed files, then fade deleted sources;
-17. require clean native store close;
-18. revalidate topology and DB file identity;
-19. revalidate DB identity again before checkpoint write, including no-op applies;
-20. atomically commit state with the pending target checkpoint identity;
-21. claim owner after state for a first no-mutation apply if needed;
-22. clear pending recovery;
-23. remove staged files and release the Orion lock.
+16. verify the **live native store/writer connection** is bound to the expected DB file instance;
+17. study staged new files, staged changed files, then fade deleted sources;
+18. require clean native store close;
+19. revalidate topology and DB file identity;
+20. revalidate DB identity again before checkpoint write, including no-op applies;
+21. atomically commit state with the pending target checkpoint identity;
+22. claim owner after state for a first no-mutation apply if needed;
+23. clear pending recovery;
+24. remove staged files and release the Orion lock.
 
 POSIX metadata replacement fsyncs the destination directory. Newly created metadata directories are durably fsynced through their parent chain. Windows replacement uses `MoveFileExW(REPLACE_EXISTING | WRITE_THROUGH)`.
 
@@ -262,6 +266,7 @@ POSIX metadata replacement fsyncs the destination directory. Newly created metad
 
 - failure before pending creation: no semantic store mutation has occurred;
 - failure after pending but before/during store open: pending remains active;
+- failure in the while-open DB identity probe: native store is closed, no study/fade call is made, and pending remains active;
 - failure after one or more study/fade calls: pending remains active and all affected paths are forced through reconciliation;
 - failure after successful state commit but before pending deletion: pending is completed and a retry clears it without semantic replay;
 - a newly studied source deleted before retry retains its pending `doc:` ownership tag and is faded;
@@ -316,7 +321,7 @@ Before the source/review cycle is complete:
 
 - rebuilt DC-02 invariant tests must pass on Ubuntu and Windows;
 - broader source suites must remain green;
-- prior bug classes must remain represented as regression/invariant tests, including enumeration failure, FIFO/special files, source portability, immutable staging, store-root retargeting, redirected `hippo`, vault/store overlap, hardlink aliases, DB replacement identity, store-open failure, partial native mutation, reverted sources, new-then-deleted recovery, equal-map recovery, completed-journal cleanup/no replay, and real cross-process lock contention;
+- prior bug classes must remain represented as regression/invariant tests, including enumeration failure, FIFO/special files, source portability, immutable staging, store-root retargeting, redirected `hippo`, vault/store overlap, hardlink aliases, DB replacement identity, **DB swap during native open/live-store binding**, store-open failure, partial native mutation, reverted sources, new-then-deleted recovery, equal-map recovery, completed-journal cleanup/no replay, and real cross-process lock contention;
 - a fresh independent review must evaluate the final frozen exact head rather than an older prototype or intermediate rebuilt commit.
 
 Runtime bootstrap remains out of scope until separately approved.
