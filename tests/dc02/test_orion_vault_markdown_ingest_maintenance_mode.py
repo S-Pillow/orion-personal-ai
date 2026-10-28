@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import io
+import os
 import re
 import sys
 import tempfile
@@ -51,7 +52,7 @@ native_study.__name__ = "study_document"
 
 
 class MaintenanceModeTests(unittest.TestCase):
-    def test_pinned_runtime_requests_native_exclusive_index_owning_store(self):
+    def _fake_native_modules(self):
         package = types.ModuleType("iai_mcp")
         package.__path__ = []
         hippo = types.ModuleType("iai_mcp.hippo")
@@ -75,13 +76,16 @@ class MaintenanceModeTests(unittest.TestCase):
         store_mod.MemoryStore = MemoryStore
         study_mod._doc_tag = doc_tag
         study_mod.study_document = native_study
-
         modules = {
             "iai_mcp": package,
             "iai_mcp.hippo": hippo,
             "iai_mcp.store": store_mod,
             "iai_mcp.study": study_mod,
         }
+        return modules, AccessMode, calls
+
+    def test_pinned_runtime_requests_native_exclusive_index_owning_store(self):
+        modules, AccessMode, calls = self._fake_native_modules()
         with (
             mock.patch.dict(sys.modules, modules, clear=False),
             mock.patch.object(core.importlib.metadata, "version", return_value="3.3.0"),
@@ -89,15 +93,33 @@ class MaintenanceModeTests(unittest.TestCase):
         ):
             runtime = core.load_iai_runtime()
             root = Path(td) / "store"
-            runtime.open_store(root)
+            root.mkdir()
+            with mock.patch.dict(os.environ, {"IAI_MCP_STORE": str(root)}, clear=False):
+                runtime.open_store(root)
 
         self.assertEqual(len(calls), 1)
-        self.assertEqual(calls[0][0], root)
+        self.assertEqual(calls[0][0], root.resolve())
         self.assertIs(calls[0][1], AccessMode.EXCLUSIVE)
         self.assertTrue(calls[0][2])
         self.assertFalse(hasattr(runtime, "verify_open_store"))
         self.assertFalse(hasattr(core, "verify_open_store_db_identity"))
         self.assertFalse(hasattr(core, "_open_descriptor_matches_identity"))
+
+    def test_conflicting_iai_store_env_fails_before_native_construction(self):
+        modules, _AccessMode, calls = self._fake_native_modules()
+        with (
+            mock.patch.dict(sys.modules, modules, clear=False),
+            mock.patch.object(core.importlib.metadata, "version", return_value="3.3.0"),
+            tempfile.TemporaryDirectory() as td,
+        ):
+            runtime = core.load_iai_runtime()
+            root = Path(td) / "store-a"
+            other = Path(td) / "store-b"
+            root.mkdir(); other.mkdir()
+            with mock.patch.dict(os.environ, {"IAI_MCP_STORE": str(other)}, clear=False):
+                with self.assertRaisesRegex(core.AdapterError, "iai_store_env_mismatch"):
+                    runtime.open_store(root)
+        self.assertEqual(calls, [])
 
     def test_native_exclusive_open_failure_leaves_recovery_active(self):
         with tempfile.TemporaryDirectory() as td:
