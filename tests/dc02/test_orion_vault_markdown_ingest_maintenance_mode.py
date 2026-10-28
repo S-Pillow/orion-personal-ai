@@ -26,7 +26,7 @@ def tag(name: str) -> str:
     return f"doc:{slug or 'inline'}"
 
 
-def native_study(_store, *, path=None, text=None, source_name, session_id, critic):
+def native_study(store, *, path=None, text=None, source_name, session_id, critic):
     if path is not None:
         return {
             "chunks_total": 1,
