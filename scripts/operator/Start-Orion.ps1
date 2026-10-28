@@ -11,6 +11,7 @@ $stateRoot = Join-Path $env:LOCALAPPDATA "Orion\operator"
 $statePath = Join-Path $stateRoot "launcher-session.json"
 $logRoot = Join-Path $stateRoot "logs"
 $utf8NoBom = [Text.UTF8Encoding]::new($false)
+$ollamaLaunchLibrary = "rocm_v7_1"
 
 New-Item -ItemType Directory -Path $stateRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $logRoot -Force | Out-Null
@@ -106,6 +107,7 @@ $hermesHealthUri = "http://127.0.0.1:8642/health"
 $ollamaHealthUri = "http://127.0.0.1:11434/api/tags"
 $ollamaStartedByOrion = $false
 $ollamaPid = $null
+$ollamaLibraryUsed = $null
 $ollamaStdoutPath = $null
 $ollamaStderrPath = $null
 
@@ -123,6 +125,10 @@ try {
         if ($null -ne $priorOllama -and $priorOllama.ProcessName -match '^(?i)ollama$') {
             $ollamaStartedByOrion = $true
             $ollamaPid = [int]$priorState.ollamaPid
+            if ($priorState.PSObject.Properties.Name -contains "ollamaLibrary" -and
+                $null -ne $priorState.ollamaLibrary) {
+                $ollamaLibraryUsed = [string]$priorState.ollamaLibrary
+            }
         }
     }
 
@@ -143,33 +149,43 @@ try {
         $ollamaStderrPath = Join-Path $logRoot "ollama-$stamp.stderr.log"
 
         Write-Host "Ollama: starting"
-        $ollamaProcess = Start-Process `
-            -FilePath $ollamaCommand.Source `
-            -ArgumentList @("serve") `
-            -WindowStyle Hidden `
-            -RedirectStandardOutput $ollamaStdoutPath `
-            -RedirectStandardError $ollamaStderrPath `
-            -PassThru
+        Write-Host "Ollama backend: $ollamaLaunchLibrary"
+
+        $previousOllamaLibrary = $env:OLLAMA_LLM_LIBRARY
+        try {
+            $env:OLLAMA_LLM_LIBRARY = $ollamaLaunchLibrary
+            $ollamaProcess = Start-Process `
+                -FilePath $ollamaCommand.Source `
+                -ArgumentList @("serve") `
+                -WindowStyle Hidden `
+                -RedirectStandardOutput $ollamaStdoutPath `
+                -RedirectStandardError $ollamaStderrPath `
+                -PassThru
+        }
+        finally {
+            $env:OLLAMA_LLM_LIBRARY = $previousOllamaLibrary
+        }
 
         $ollamaPid = $ollamaProcess.Id
         $ollamaStartedByOrion = $true
+        $ollamaLibraryUsed = $ollamaLaunchLibrary
 
         if (-not (Wait-DirectHttpEndpoint -Uri $ollamaHealthUri -ExpectedUp $true -TimeoutSeconds $OllamaHealthTimeoutSeconds)) {
             $ollamaProcess.Refresh()
             $listenerOwnerPid = Get-ListenerOwnerPid -Port 11434
 
             if ($ollamaProcess.HasExited) {
-                throw "Ollama exited before becoming healthy (exit code $($ollamaProcess.ExitCode)). Logs: $ollamaStdoutPath ; $ollamaStderrPath"
+                throw "Ollama exited before becoming healthy (exit code $($ollamaProcess.ExitCode)). Backend: $ollamaLibraryUsed. Logs: $ollamaStdoutPath ; $ollamaStderrPath"
             }
 
             if ($null -ne $listenerOwnerPid) {
-                throw "Ollama bound port 11434 but direct health checks failed. Listener PID: $listenerOwnerPid. Logs: $ollamaStdoutPath ; $ollamaStderrPath"
+                throw "Ollama bound port 11434 but direct health checks failed. Listener PID: $listenerOwnerPid. Backend: $ollamaLibraryUsed. Logs: $ollamaStdoutPath ; $ollamaStderrPath"
             }
 
-            throw "Ollama did not bind port 11434 or become healthy within $OllamaHealthTimeoutSeconds seconds. Logs: $ollamaStdoutPath ; $ollamaStderrPath"
+            throw "Ollama did not bind port 11434 or become healthy within $OllamaHealthTimeoutSeconds seconds. Backend: $ollamaLibraryUsed. Logs: $ollamaStdoutPath ; $ollamaStderrPath"
         }
 
-        Write-Host "Ollama: ready"
+        Write-Host "Ollama: ready ($ollamaLibraryUsed)"
     }
 
     $hermesCommand = Get-Command "hermes" -CommandType Application -ErrorAction SilentlyContinue
@@ -199,6 +215,7 @@ try {
         startedAt = (Get-Date).ToString("o")
         ollamaStartedByOrion = $ollamaStartedByOrion
         ollamaPid = $ollamaPid
+        ollamaLibrary = $ollamaLibraryUsed
         hermesHealthUri = $hermesHealthUri
     }
     Write-OrionSessionState -State $state
@@ -206,6 +223,9 @@ try {
     Write-Host ""
     Write-Host "ORION READY"
     Write-Host "Ollama API: healthy"
+    if ($null -ne $ollamaLibraryUsed) {
+        Write-Host "Ollama backend: $ollamaLibraryUsed"
+    }
     Write-Host "Hermes API: healthy"
     Write-Host "iai: demand-wake managed by Hermes/iai"
     exit 0
