@@ -77,8 +77,17 @@ class TestOperatorLifecycleScripts(unittest.TestCase):
         self.assertIn("function Get-OrionOwnedDescendantSnapshot", self.stop)
         self.assertIn("ParentProcessId", self.stop)
         self.assertIn("function Get-MatchingSnapshotProcess", self.stop)
+        self.assertIn("function Get-VerifiedSnapshotProcessHandle", self.stop)
         self.assertIn("CreationDate", self.stop)
         self.assertIn("ExecutablePath", self.stop)
+        self.assertIn(
+            "Get-CimInstance Win32_Process -ErrorAction Stop",
+            self.stop,
+        )
+        self.assertIn(
+            'Get-CimInstance Win32_Process -Filter "ProcessId = $($Snapshot.ProcessId)" -ErrorAction Stop',
+            self.stop,
+        )
         self.assertIn(
             "$ownedDescendants = @(Get-OrionOwnedDescendantSnapshot -RootPid $ownedPid)",
             self.stop,
@@ -88,14 +97,15 @@ class TestOperatorLifecycleScripts(unittest.TestCase):
             self.stop.index("Stop-Process -Id $ownedPid -ErrorAction SilentlyContinue"),
         )
         self.assertIn(
-            'Write-Host "Ollama: forcing Orion-owned descendant PID $($snapshot.ProcessId) ($($snapshot.Name))"',
+            "$verifiedHandle = Get-VerifiedSnapshotProcessHandle -Snapshot $snapshot",
             self.stop,
         )
-        self.assertIn(
-            "Stop-Process -Id ([int]$snapshot.ProcessId) -Force -ErrorAction SilentlyContinue",
-            self.stop,
-        )
+        self.assertIn("$processHandle.StartTime", self.stop)
+        self.assertIn("$processHandle.MainModule.FileName", self.stop)
+        self.assertIn("$verifiedHandle.Kill()", self.stop)
+        self.assertIn("$verifiedHandle.WaitForExit(5000)", self.stop)
         self.assertIn("Orion-owned Ollama descendant PID(s) still running after stop attempt", self.stop)
+        self.assertNotIn("Stop-Process -Id ([int]$snapshot.ProcessId)", self.stop)
         self.assertNotIn("Get-Process llama-server | Stop-Process", self.stop)
         self.assertNotIn("Get-Process -Name llama-server | Stop-Process", self.stop)
 
