@@ -6,6 +6,9 @@ on:
       - feature/orion-ui-visual-convergence-pass
       - feature/orion-phase5-p5-03c-reconnect-hydration
 
+permissions:
+  contents: read
+
 jobs:
   verify:
     runs-on: ubuntu-latest
