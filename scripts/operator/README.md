@@ -14,7 +14,7 @@ These scripts implement the accepted manual-off operator lifecycle under Orion M
 - Local loopback health checks bypass configured HTTP proxies explicitly. This prevents host proxy settings from turning a healthy `127.0.0.1` Ollama or Hermes endpoint into a false failure.
 - `Start-Orion.ps1` polls observable health instead of relying on a fixed sleep. The default Ollama health window is 60 seconds and remains configurable through `-OllamaHealthTimeoutSeconds`.
 - When Orion starts `ollama serve`, stdout/stderr are captured under `%LOCALAPPDATA%\Orion\operator\logs`. Startup failures distinguish process exit, port binding without a healthy API, and failure to bind.
-- After Ollama becomes healthy, the launcher records the actual Ollama listener PID when it can be confirmed, preserving session-scoped ownership for Stop Orion.
+- Ollama ownership remains tied to the process that this launcher started. Listener inspection is diagnostic only and does not transfer ownership to another Ollama process.
 - `Stop-Orion.ps1` verifies the supported Hermes stop path by observing the loopback health endpoint go down. It may stop only the recorded Orion-owned Ollama PID and verifies that specific process exits; unrelated Ollama processes are left alone.
 - The scripts do not directly start or stop `iai-mcp-daemon`; iai demand-wake, idle, and HIBERNATION behavior remain iai/Hermes-owned.
 
