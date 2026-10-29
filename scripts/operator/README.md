@@ -4,26 +4,32 @@ These scripts implement the accepted manual-off operator lifecycle under Orion M
 
 ## Files
 
-- `Start-Orion.ps1` — one-shot launcher. Ensures Ollama is available, starts Hermes profile `companion` through the supported Hermes gateway command, waits for direct loopback API health, records whether this launcher started Ollama, and exits.
-- `Stop-Orion.ps1` — one-shot shutdown. Stops Hermes profile `companion` through the supported Hermes gateway command, confirms the API is down using the same direct loopback probe, stops Ollama only when the current Orion launcher session owns the recorded Ollama process, and exits. iai is not killed; it remains under its vendor idle/HIBERNATION lifecycle.
-- `Install-Orion-Desktop-Shortcuts.ps1` — installs the one-shot scripts and creates `Start Orion` / `Stop Orion` desktop shortcuts using `-ExecutionPolicy Bypass` for the launcher process only.
+- `Start-Orion.ps1` — one-shot launcher. Ensures Ollama is available, starts Hermes profile `companion` through the supported Hermes gateway command, waits for direct loopback API health, then verifies/reuses or starts the accepted loopback HUD and opens it in the default browser before exiting.
+- `Stop-Orion.ps1` — one-shot shutdown. Stops Hermes profile `companion` through the supported Hermes gateway command, confirms the API is down, stops only an identity-matched HUD bridge that this Orion launcher session started, stops Ollama only when the current Orion launcher session owns the recorded Ollama process, and exits. iai is not killed; it remains under its vendor idle/HIBERNATION lifecycle.
+- `Hud-Operator.ps1` — shared operator-only HUD process helper. It verifies the Orion HUD identity on `127.0.0.1:8765`, starts the installed bridge when needed, records exact process identity for owned HUD instances, opens the verified HUD URL, and permits Stop Orion to terminate only the recorded still-matching owned bridge process.
+- `Install-Orion-Desktop-Shortcuts.ps1` — installs the one-shot scripts, HUD helper, and accepted HUD runtime under `%LOCALAPPDATA%\Orion`, then creates `Start Orion` / `Stop Orion` desktop shortcuts using `-ExecutionPolicy Bypass` for the launcher process only.
 
 ## Current lifecycle behavior
 
 - Orion remains manual-off by default. These controls do not install login persistence or create an Orion lifecycle supervisor.
-- Local loopback health checks bypass configured HTTP proxies explicitly. This prevents host proxy settings from turning a healthy `127.0.0.1` Ollama or Hermes endpoint into a false failure.
-- `Start-Orion.ps1` polls observable health instead of relying on a fixed sleep. The default Ollama health window is 60 seconds and remains configurable through `-OllamaHealthTimeoutSeconds`.
+- Local loopback health checks bypass configured HTTP proxies explicitly. This prevents host proxy settings from turning a healthy `127.0.0.1` Ollama, Hermes, or HUD endpoint into a false failure.
+- `Start-Orion.ps1` polls observable health instead of relying on a fixed sleep. The default Ollama health window is 60 seconds, Hermes health window is 30 seconds, and HUD health window is 15 seconds.
 - On the current Orion Windows workstation, Orion-started Ollama is launched with the process-local `OLLAMA_LLM_LIBRARY=rocm_v7_1` selection. This bypasses unsuitable backend autodetection for the AMD Radeon RX 9070 XT while leaving the parent PowerShell environment unchanged immediately after `Start-Process` returns.
 - The ROCm selection applies only when Orion itself launches `ollama serve`. If Ollama is already healthy before Start Orion, the launcher does not replace, restart, or reconfigure that pre-existing provider.
 - The launcher records the known Ollama library in `launcher-session.json` when it launched or inherited a prior Orion-owned session that already recorded the library. This is diagnostic provenance only; it does not transfer ownership.
 - When Orion starts `ollama serve`, stdout/stderr are captured under `%LOCALAPPDATA%\Orion\operator\logs`. Startup failures distinguish process exit, port binding without a healthy API, and failure to bind, and include the selected backend when known.
 - Ollama ownership remains tied to the process that this launcher started. Listener inspection is diagnostic only and does not transfer ownership to another Ollama process.
-- `Stop-Orion.ps1` verifies the supported Hermes stop path by observing the loopback health endpoint go down. It may stop only the recorded Orion-owned Ollama PID and verifies that specific process exits; unrelated Ollama processes are left alone.
+- After Hermes/API health is confirmed, Start Orion checks the accepted HUD at `http://127.0.0.1:8765/`. The probe requires both the `OrionHUD/2A` server identity and the accepted Orion page title before the launcher will reuse or open that local endpoint.
+- If a verified HUD is already available, Start Orion reuses it. Ownership is carried forward only when `launcher-session.json` still identifies the same PID, executable path, creation time, and bridge command. A pre-existing HUD is never claimed merely because it owns port 8765.
+- If no verified HUD is available and port 8765 is clear, Start Orion launches the installed standard-library HUD bridge from `%LOCALAPPDATA%\Orion\hud`, waits for verified readiness, persists exact HUD process identity when Orion owns it, and then opens the verified URL in the default browser.
+- If port 8765 is occupied by an unverified process, Start Orion fails closed rather than replacing, claiming, or opening it as Orion.
+- A recoverable launcher state is written after Ollama/Hermes health but before HUD startup/open failure points. If HUD startup or browser opening fails, Start reports the partial outcome truthfully and preserves state so Stop Orion can return the system to clean-off.
+- `Stop-Orion.ps1` verifies the supported Hermes stop path by observing the loopback health endpoint go down. It may stop only an exact recorded Orion-owned HUD bridge and the recorded Orion-owned Ollama process tree; unrelated HUD/Python/Ollama processes are left alone.
 - Before stopping an Orion-owned Ollama process, `Stop-Orion.ps1` snapshots its descendant process tree from `Win32_Process`. Candidate parent/child relationships must also pass creation order validation: a child created before its purported parent is treated as a stale `ParentProcessId` relationship and is not claimed or traversed.
 - The validated descendant identities are persisted atomically to `launcher-session.json` before the Ollama parent is terminated. A failed descendant cleanup therefore retains enough ownership evidence for a later Stop Orion invocation to retry cleanup even when the parent is already gone.
 - After the parent exits, valid descendants are given time to terminate naturally. A surviving descendant is revalidated immediately before termination and is stopped through its verified process handle only when PID, name, executable path, and creation identity still match the persisted pre-stop snapshot. Process-query failures fail Stop instead of being treated as proof of exit.
-- `Start-Orion.ps1` refuses to start a new Orion session while persisted descendant cleanup is pending. The operator must run Stop Orion again so the retained identities can be reconciled safely instead of overwriting them.
-- `launcher-session.json` is removed only after Hermes is down, the Orion-owned Ollama parent is handled, and all persisted/fresh identity-matched descendants are confirmed gone.
+- `Start-Orion.ps1` refuses to start a new Orion session while persisted Ollama descendant cleanup is pending. The operator must run Stop Orion again so the retained identities can be reconciled safely instead of overwriting them.
+- `launcher-session.json` is removed only after Hermes is down, any Orion-owned HUD bridge is handled, the Orion-owned Ollama parent is handled, and all persisted/fresh identity-matched Ollama descendants are confirmed gone.
 - The scripts do not directly start or stop `iai-mcp-daemon`; iai demand-wake, idle, and HIBERNATION behavior remain iai/Hermes-owned.
 
 ## ROCm 7.1 correction evidence
@@ -43,9 +49,9 @@ The first full ROCm operator acceptance run proved Start, direct health, session
 
 Stop Orion now treats the pre-stop descendant snapshot as part of the same Orion-owned lifecycle boundary. Creation order validation rejects stale parent links caused by Windows PID reuse. Valid descendants are persisted before parent termination, receive a grace period after the parent exits, and any survivor is revalidated and force-stopped through a verified process handle only when its identity still matches the captured snapshot. If cleanup fails, the state is retained for retry and Start Orion will not overwrite that pending cleanup state. Unrelated `llama-server.exe` or other processes are not selected by name and remain untouched.
 
-## Final Windows acceptance — PASS (2026-10-28)
+## Final Windows lifecycle acceptance — PASS (2026-10-28)
 
-The complete operator correction is accepted on the real Orion workstation.
+The ROCm/owned-Ollama-tree operator correction is accepted on the real Orion workstation.
 
 Accepted source chain:
 
@@ -66,9 +72,20 @@ Final live acceptance proved all of the following in one bounded run:
 
 The durable acceptance record is `docs/evidence/operator-lifecycle-acceptance-2026-10-28.md`.
 
-## Known separate gap
+## HUD launch-after-health integration — source candidate
 
-Orion Master PRD v2.9 states that Start Orion should open the accepted HUD after Hermes/API health is confirmed. The current operator launcher does not yet perform that HUD-open step. This lifecycle-hardening change does not silently add a HUD launch mechanism; that remains a separate bounded integration item requiring the accepted HUD entry point and verification path.
+This branch closes the remaining OR-LIFE-010 source gap: Start Orion now starts/opens the accepted HUD only after Hermes/API health is confirmed. The accepted HUD entry point remains the existing loopback bridge at `http://127.0.0.1:8765/`; no second UI runtime or lifecycle service is introduced.
+
+The installer publishes the accepted HUD bridge, projection module, and static assets into `%LOCALAPPDATA%\Orion\hud` so the desktop operator controls do not depend on a Git checkout after installation. A pre-existing HUD may be reused but is not reconfigured or claimed. An Orion-started HUD bridge is session-owned and may be stopped only after exact process identity is revalidated.
+
+Source qualification does **not** by itself complete Windows acceptance. Required live acceptance after merge/install is:
+
+1. Start Orion from the installed desktop shortcut with Orion initially clean-off;
+2. prove Ollama and Hermes are healthy before the HUD bridge is started/opened;
+3. prove the installed HUD at `127.0.0.1:8765` is the accepted Orion surface and the default browser opens it;
+4. rerun Start Orion while the verified HUD is already running and confirm it reuses/reopens rather than spawning a second bridge;
+5. Stop Orion and confirm an Orion-owned HUD bridge is gone, Hermes is down, Orion-owned Ollama/descendants are gone, and no unrelated Python/HUD/Ollama process was claimed;
+6. repeat the pre-existing-HUD case and confirm Stop leaves that unowned HUD bridge alone.
 
 ## Invariants
 
@@ -76,8 +93,12 @@ Orion Master PRD v2.9 states that Start Orion should open the accepted HUD after
 - No Scheduled Task definitions or login persistence are changed.
 - No Hermes or iai configuration is rewritten by these controls.
 - The process-local ROCm library selection does not rewrite persistent Ollama configuration or user/machine environment state.
+- HUD launch happens only after Hermes/API health; the HUD bridge itself remains a loopback presentation/control client with no Hermes/Ollama/iai lifecycle authority.
+- HUD identity is verified before reuse/open. Port ownership alone never grants Orion ownership.
+- If Start Orion created the HUD bridge, Stop Orion may terminate only the persisted, still identity-matching HUD process. Pre-existing HUD/Python processes are left alone.
+- Browser processes/tabs are never killed or claimed by Orion operator controls.
 - Ollama ownership is session-scoped: if Ollama was already healthy before Start Orion, Stop Orion leaves it alone. If Start Orion launched `ollama serve`, Stop Orion may terminate only the recorded, still-matching Ollama process and identity-checked descendants captured from that owned process tree before shutdown.
-- Stop Orion never performs a broad process-name kill for `ollama.exe` or `llama-server.exe`.
-- Pending cleanup identities are durable across failed Stop attempts and block Start until safely reconciled.
-- Success output follows observable component health/shutdown evidence; a command exit alone is not treated as component health.
+- Stop Orion never performs a broad process-name kill for `python.exe`, `ollama.exe`, or `llama-server.exe`.
+- Pending cleanup identities are durable across failed Stop attempts and block unsafe ownership transfer.
+- Success output follows observable component health/HUD/shutdown evidence; a command exit alone is not treated as component health.
 - Changes to lifecycle-affecting dependencies or integration invalidate the relevant operator-lifecycle regression evidence and require focused re-verification.
