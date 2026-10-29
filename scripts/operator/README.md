@@ -73,7 +73,7 @@ Final live acceptance proved all of the following in one bounded run:
 
 The durable acceptance record is `docs/evidence/operator-lifecycle-acceptance-2026-10-28.md`.
 
-## HUD launch-after-health integration — PASS / CLOSED (2026-10-29)
+## HUD launch-after-health Windows acceptance — PASS / CLOSED (2026-10-29)
 
 OR-LIFE-010 HUD launch-after-health is accepted on the real Orion Windows workstation at implementation checkpoint:
 
@@ -83,7 +83,7 @@ Merged implementation:
 
 - PR #78 — `Open accepted HUD after Orion runtime health`.
 
-Live acceptance proved:
+Live Windows acceptance proved:
 
 - installed operator/HUD files matched source and both desktop shortcuts were wired correctly;
 - Ollama became healthy first, Hermes became healthy second, and the verified Orion HUD became healthy only afterward;
