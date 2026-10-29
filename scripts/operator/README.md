@@ -73,20 +73,35 @@ Final live acceptance proved all of the following in one bounded run:
 
 The durable acceptance record is `docs/evidence/operator-lifecycle-acceptance-2026-10-28.md`.
 
-## HUD launch-after-health integration — source candidate
+## HUD launch-after-health Windows acceptance — PASS / CLOSED (2026-10-29)
 
-This branch closes the remaining OR-LIFE-010 source gap: Start Orion now starts/opens the accepted HUD only after Hermes/API health is confirmed. The accepted HUD entry point remains the existing loopback bridge at `http://127.0.0.1:8765/`; no second UI runtime or lifecycle service is introduced.
+OR-LIFE-010 HUD launch-after-health is accepted on the real Orion Windows workstation at implementation checkpoint:
 
-The installer publishes the accepted HUD bridge, projection module, and static assets into `%LOCALAPPDATA%\Orion\hud` so the desktop operator controls do not depend on a Git checkout after installation. A pre-existing HUD may be reused but is not reconfigured or claimed. An Orion-started HUD bridge is session-owned and may be stopped only after exact process identity is revalidated. Python launch resolves through the real base interpreter so Windows virtualenv redirectors do not become false ownership anchors, and a failure to persist new HUD ownership triggers exact rollback before Start returns.
+`7465492a7daebb1bf2630f2687668e575177291b`
 
-Source qualification does **not** by itself complete Windows acceptance. Required live acceptance after merge/install is:
+Merged implementation:
 
-1. Start Orion from the installed desktop shortcut with Orion initially clean-off;
-2. prove Ollama and Hermes are healthy before the HUD bridge is started/opened;
-3. prove the installed HUD at `127.0.0.1:8765` is the accepted Orion surface and the default browser opens it;
-4. rerun Start Orion while the verified HUD is already running and confirm it reuses/reopens rather than spawning a second bridge;
-5. Stop Orion and confirm an Orion-owned HUD bridge is gone, Hermes is down, Orion-owned Ollama/descendants are gone, and no unrelated Python/HUD/Ollama process was claimed;
-6. repeat the pre-existing-HUD case and confirm Stop leaves that unowned HUD bridge alone.
+- PR #78 — `Open accepted HUD after Orion runtime health`.
+
+Live Windows acceptance proved:
+
+- installed operator/HUD files matched source and both desktop shortcuts were wired correctly;
+- Ollama became healthy first, Hermes became healthy second, and the verified Orion HUD became healthy only afterward;
+- the accepted HUD visibly opened in the operator's normal browser;
+- Orion-started HUD ownership was durably recorded with exact PID/process/executable/creation/bridge identity;
+- repeated Start reused the same owned HUD instead of spawning a duplicate;
+- owned Stop removed the Orion-owned HUD and returned Hermes/Ollama/HUD to clean-off with launcher state removed;
+- a verified pre-existing HUD launched through the installed product HUD helper was reused without ownership transfer;
+- Stop Orion preserved that unowned pre-existing HUD;
+- the controlled pre-existing fixture was identity-checked and cleaned up;
+- final normal Start returned Orion to a healthy running state with an Orion-owned HUD;
+- no background supervisor, login persistence, browser-process ownership, Hermes/iai configuration change, or second lifecycle authority was introduced.
+
+The durable acceptance record is:
+
+`docs/evidence/hud-launch-after-health-acceptance-2026-10-29.md`
+
+Acceptance-harness artifacts encountered during qualification—including unreliable `Get-NetTCPConnection` listener enumeration, caller-shell execution-policy blocking, an initially too-short combined Stop observation window, and an unsuitable direct fixture launch—were isolated from product behavior and did not require a source change after the accepted implementation checkpoint.
 
 ## Invariants
 
