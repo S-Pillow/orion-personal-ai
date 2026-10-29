@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [int]$HermesHealthTimeoutSeconds = 30,
-    [int]$OllamaHealthTimeoutSeconds = 60
+    [int]$OllamaHealthTimeoutSeconds = 60,
+    [int]$HudHealthTimeoutSeconds = 15
 )
 
 Set-StrictMode -Version Latest
@@ -10,6 +11,9 @@ $ErrorActionPreference = "Stop"
 $stateRoot = Join-Path $env:LOCALAPPDATA "Orion\operator"
 $statePath = Join-Path $stateRoot "launcher-session.json"
 $logRoot = Join-Path $stateRoot "logs"
+$orionRoot = Split-Path -Parent $PSScriptRoot
+$hudRoot = Join-Path $orionRoot "hud"
+$hudHelperPath = Join-Path $PSScriptRoot "Hud-Operator.ps1"
 $utf8NoBom = [Text.UTF8Encoding]::new($false)
 $ollamaLaunchLibrary = "rocm_v7_1"
 
@@ -114,12 +118,38 @@ $ollamaStderrPath = $null
 try {
     Write-Host "=== START ORION ==="
 
+    if (-not (Test-Path -LiteralPath $hudHelperPath)) {
+        throw "Installed Orion HUD operator helper is missing: $hudHelperPath"
+    }
+    . $hudHelperPath
+
     $priorState = Read-OrionSessionState
     if ($null -ne $priorState -and
         $priorState.PSObject.Properties.Name -contains "ollamaDescendants" -and
         $null -ne $priorState.ollamaDescendants -and
         @($priorState.ollamaDescendants).Count -gt 0) {
         throw "Pending Orion-owned Ollama descendant cleanup exists. Run Stop Orion again before Start Orion."
+    }
+
+    $priorHudOwned = $false
+    if ($null -ne $priorState -and
+        $priorState.PSObject.Properties.Name -contains "hudStartedByOrion" -and
+        $priorState.hudStartedByOrion -eq $true) {
+
+        foreach ($requiredHudField in @(
+            "hudPid",
+            "hudProcessName",
+            "hudExecutablePath",
+            "hudCreationDate",
+            "hudBridgePath"
+        )) {
+            if (-not ($priorState.PSObject.Properties.Name -contains $requiredHudField) -or
+                $null -eq $priorState.$requiredHudField -or
+                [string]::IsNullOrWhiteSpace([string]$priorState.$requiredHudField)) {
+                throw "Persisted Orion-owned HUD state is incomplete. Run Stop Orion before retrying Start Orion."
+            }
+        }
+        $priorHudOwned = $true
     }
 
     if ($null -ne $priorState -and
@@ -217,16 +247,108 @@ try {
         Write-Host "Hermes COMPANION: ready"
     }
 
+    # Persist a recoverable runtime state before introducing HUD launch failure points.
     $state = [ordered]@{
-        schemaVersion = 1
+        schemaVersion = 2
         startedAt = (Get-Date).ToString("o")
         ollamaStartedByOrion = $ollamaStartedByOrion
         ollamaPid = $ollamaPid
         ollamaLibrary = $ollamaLibraryUsed
         ollamaDescendants = @()
         hermesHealthUri = $hermesHealthUri
+        hudStartedByOrion = $false
+        hudPid = $null
+        hudProcessName = $null
+        hudExecutablePath = $null
+        hudCreationDate = $null
+        hudBridgePath = $null
+        hudUrl = $script:OrionHudUrl
+    }
+
+    if ($priorHudOwned) {
+        $state["hudStartedByOrion"] = $true
+        $state["hudPid"] = [int]$priorState.hudPid
+        $state["hudProcessName"] = [string]$priorState.hudProcessName
+        $state["hudExecutablePath"] = [string]$priorState.hudExecutablePath
+        $state["hudCreationDate"] = [string]$priorState.hudCreationDate
+        $state["hudBridgePath"] = [string]$priorState.hudBridgePath
     }
     Write-OrionSessionState -State $state
+
+    $hud = $null
+    $hudOwnershipPersisted = $false
+    try {
+        $hud = Start-OrionHudBridge `
+            -HudRoot $hudRoot `
+            -LogRoot $logRoot `
+            -PriorState $priorState `
+            -TimeoutSeconds $HudHealthTimeoutSeconds
+
+        $state["hudStartedByOrion"] = [bool]$hud.StartedByOrion
+        $state["hudPid"] = $hud.ProcessId
+        $state["hudProcessName"] = $hud.ProcessName
+        $state["hudExecutablePath"] = $hud.ExecutablePath
+        $state["hudCreationDate"] = if ($null -eq $hud.CreationDate) {
+            $null
+        }
+        else {
+            ([datetime]$hud.CreationDate).ToString("o")
+        }
+        $state["hudBridgePath"] = [string]$hud.BridgePath
+        $state["hudUrl"] = [string]$hud.Url
+        Write-OrionSessionState -State $state
+        $hudOwnershipPersisted = $true
+
+        Open-OrionHud -Uri ([string]$hud.Url)
+    }
+    catch {
+        $hudFailureMessage = $_.Exception.Message
+        $hudRollbackFailure = $null
+
+        if ($null -ne $hud -and $hud.StartedByOrion -eq $true) {
+            $hudCleanupState = [PSCustomObject]@{
+                hudStartedByOrion = $true
+                hudPid = $hud.ProcessId
+                hudProcessName = $hud.ProcessName
+                hudExecutablePath = $hud.ExecutablePath
+                hudCreationDate = if ($null -eq $hud.CreationDate) {
+                    $null
+                }
+                else {
+                    ([datetime]$hud.CreationDate).ToString("o")
+                }
+                hudBridgePath = $hud.BridgePath
+            }
+
+            try {
+                Stop-OrionOwnedHudBridge -SessionState $hudCleanupState
+            }
+            catch {
+                $hudRollbackFailure = $_.Exception.Message
+            }
+        }
+
+        Write-Host ""
+        Write-Host "START ORION FAILED"
+        Write-Host "Ollama and Hermes are healthy, but the accepted HUD could not be started/opened."
+        Write-Host $hudFailureMessage
+
+        if ($null -ne $hudRollbackFailure) {
+            Write-Host "HUD rollback also failed: $hudRollbackFailure"
+            if (-not $hudOwnershipPersisted) {
+                Write-Host "HUD ownership could not be persisted before rollback failed. Do not rerun Start Orion until the HUD process on port 8765 is reconciled."
+            }
+            else {
+                Write-Host "Persisted HUD ownership remains available for a Stop Orion retry."
+            }
+        }
+        elseif ($null -ne $hud -and $hud.StartedByOrion -eq $true) {
+            Write-Host "Newly started Orion HUD bridge was identity-verified and rolled back."
+        }
+
+        Write-Host "Launcher session state was preserved. Run Stop Orion to return to clean-off before retrying."
+        exit 1
+    }
 
     Write-Host ""
     Write-Host "ORION READY"
@@ -235,6 +357,13 @@ try {
         Write-Host "Ollama backend: $ollamaLibraryUsed"
     }
     Write-Host "Hermes API: healthy"
+    Write-Host "HUD: $($state['hudUrl'])"
+    if ($state["hudStartedByOrion"] -eq $true) {
+        Write-Host "HUD bridge ownership: Orion-owned PID $($state['hudPid'])"
+    }
+    else {
+        Write-Host "HUD bridge ownership: pre-existing / unclaimed"
+    }
     Write-Host "iai: demand-wake managed by Hermes/iai"
     exit 0
 }

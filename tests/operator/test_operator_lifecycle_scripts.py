@@ -7,6 +7,8 @@ ROOT = Path(__file__).resolve().parents[2]
 OPERATOR = ROOT / "scripts" / "operator"
 START = OPERATOR / "Start-Orion.ps1"
 STOP = OPERATOR / "Stop-Orion.ps1"
+INSTALLER = OPERATOR / "Install-Orion-Desktop-Shortcuts.ps1"
+HUD_HELPER = OPERATOR / "Hud-Operator.ps1"
 README = OPERATOR / "README.md"
 
 
@@ -15,12 +17,17 @@ class TestOperatorLifecycleScripts(unittest.TestCase):
     def setUpClass(cls):
         cls.start = START.read_text(encoding="utf-8")
         cls.stop = STOP.read_text(encoding="utf-8")
+        cls.installer = INSTALLER.read_text(encoding="utf-8")
+        cls.hud_helper = HUD_HELPER.read_text(encoding="utf-8")
         cls.readme = README.read_text(encoding="utf-8")
 
     def test_loopback_health_checks_explicitly_bypass_proxy(self):
-        for name, text in (("Start-Orion.ps1", self.start), ("Stop-Orion.ps1", self.stop)):
+        for name, text in (
+            ("Start-Orion.ps1", self.start),
+            ("Stop-Orion.ps1", self.stop),
+            ("Hud-Operator.ps1", self.hud_helper),
+        ):
             with self.subTest(script=name):
-                self.assertIn("function Test-DirectHttpEndpoint", text)
                 self.assertIn("$request.Proxy = $null", text)
                 self.assertNotIn("Invoke-WebRequest", text)
 
@@ -78,6 +85,121 @@ class TestOperatorLifecycleScripts(unittest.TestCase):
         self.assertIn("Get-ListenerOwnerPid -Port 11434", self.start)
         self.assertNotIn("iai-mcp daemon start", self.start)
         self.assertNotIn("schtasks /Run", self.start)
+
+    def test_hud_launch_occurs_only_after_hermes_health(self):
+        self.assertIn('$hudRoot = Join-Path $orionRoot "hud"', self.start)
+        self.assertIn("Start-OrionHudBridge", self.start)
+        self.assertIn("Open-OrionHud", self.start)
+        self.assertIn("HudHealthTimeoutSeconds", self.start)
+        hermes_wait = self.start.index(
+            "Wait-DirectHttpEndpoint -Uri $hermesHealthUri -ExpectedUp $true"
+        )
+        hud_start = self.start.index("$hud = Start-OrionHudBridge")
+        hud_open = self.start.index("Open-OrionHud -Uri")
+        ready = self.start.index('Write-Host "ORION READY"')
+        self.assertLess(hermes_wait, hud_start)
+        self.assertLess(hud_start, hud_open)
+        self.assertLess(hud_open, ready)
+
+    def test_start_persists_recoverable_state_before_hud_failure_points(self):
+        self.assertIn("schemaVersion = 2", self.start)
+        self.assertIn("hudStartedByOrion", self.start)
+        self.assertIn("hudPid", self.start)
+        self.assertIn("hudProcessName", self.start)
+        self.assertIn("hudExecutablePath", self.start)
+        self.assertIn("hudCreationDate", self.start)
+        self.assertIn("hudBridgePath", self.start)
+        first_state_write = self.start.index("Write-OrionSessionState -State $state")
+        hud_start = self.start.index("$hud = Start-OrionHudBridge")
+        self.assertLess(first_state_write, hud_start)
+        self.assertIn("$hudOwnershipPersisted = $false", self.start)
+        self.assertIn("$hudOwnershipPersisted = $true", self.start)
+        self.assertIn("$hudCleanupState = [PSCustomObject]@{", self.start)
+        self.assertIn(
+            "Stop-OrionOwnedHudBridge -SessionState $hudCleanupState",
+            self.start,
+        )
+        self.assertIn(
+            "Newly started Orion HUD bridge was identity-verified and rolled back.",
+            self.start,
+        )
+        self.assertIn(
+            "HUD ownership could not be persisted before rollback failed.",
+            self.start,
+        )
+        self.assertIn(
+            "Launcher session state was preserved. Run Stop Orion to return to clean-off before retrying.",
+            self.start,
+        )
+
+    def test_hud_helper_verifies_orion_identity_before_reuse_or_open(self):
+        self.assertIn('$script:OrionHudUrl = "http://127.0.0.1:8765/"', self.hud_helper)
+        self.assertIn('$script:OrionHudServerPrefix = "OrionHUD/2A"', self.hud_helper)
+        self.assertIn(
+            '$script:OrionHudTitleMarker = "<title>Orion // Personal AI Companion</title>"',
+            self.hud_helper,
+        )
+        self.assertIn("function Test-OrionHudEndpoint", self.hud_helper)
+        self.assertIn("$request.Proxy = $null", self.hud_helper)
+        self.assertIn("function Get-OrionHudListenerPid", self.hud_helper)
+        self.assertIn("occupied by unverified PID", self.hud_helper)
+        self.assertIn("refusing to replace or claim it as the Orion HUD", self.hud_helper)
+        self.assertIn("Open-OrionHud", self.hud_helper)
+        self.assertIn(
+            "refusing to open an unverified local page",
+            self.hud_helper,
+        )
+
+    def test_hud_helper_resolves_real_python_not_virtualenv_redirector(self):
+        self.assertIn("function Resolve-OrionHudPython", self.hud_helper)
+        self.assertIn("Python 3.11+", self.hud_helper)
+        self.assertIn("_base_executable", self.hud_helper)
+        self.assertIn("base_executable", self.hud_helper)
+        self.assertIn("Resolve-Path -LiteralPath", self.hud_helper)
+        self.assertIn("Launch the real base interpreter", self.hud_helper)
+        self.assertIn("return $basePython", self.hud_helper)
+        self.assertNotIn("return $python.Source", self.hud_helper)
+        self.assertIn('Join-Path $HudRoot "orion_hud_bridge.py"', self.hud_helper)
+        self.assertIn('Join-Path $HudRoot "action_projection.py"', self.hud_helper)
+        self.assertIn('Join-Path $HudRoot "static\\index.html"', self.hud_helper)
+        self.assertIn("-RedirectStandardOutput $stdoutPath", self.hud_helper)
+        self.assertIn("-RedirectStandardError $stderrPath", self.hud_helper)
+
+    def test_hud_ownership_is_identity_checked_and_never_claimed_by_port_only(self):
+        self.assertIn("function Get-OrionHudMatchingProcess", self.hud_helper)
+        self.assertIn("hudProcessName", self.hud_helper)
+        self.assertIn("hudExecutablePath", self.hud_helper)
+        self.assertIn("hudCreationDate", self.hud_helper)
+        self.assertIn("hudBridgePath", self.hud_helper)
+        self.assertIn("CommandLine", self.hud_helper)
+        self.assertIn("function Get-OrionHudVerifiedProcessHandle", self.hud_helper)
+        self.assertIn("$handle.StartTime", self.hud_helper)
+        self.assertIn("$handle.MainModule.FileName", self.hud_helper)
+        self.assertIn("pre-existing; ownership not claimed", self.hud_helper)
+
+    def test_stop_cleans_only_identity_verified_orion_owned_hud(self):
+        self.assertIn("Stop-OrionOwnedHudBridge -SessionState $sessionState", self.stop)
+        self.assertIn("function Stop-OrionOwnedHudBridge", self.hud_helper)
+        self.assertIn("$handle.Kill()", self.hud_helper)
+        self.assertIn("$handle.WaitForExit(5000)", self.hud_helper)
+        self.assertIn("leaving it alone", self.hud_helper)
+        self.assertNotIn("Get-Process python | Stop-Process", self.hud_helper)
+        self.assertNotIn("Get-Process -Name python | Stop-Process", self.hud_helper)
+        self.assertLess(
+            self.stop.index("Stop-OrionOwnedHudBridge -SessionState $sessionState"),
+            self.stop.rindex("Remove-Item -LiteralPath $statePath -Force"),
+        )
+
+    def test_installer_publishes_self_contained_hud_runtime(self):
+        self.assertIn('$sourceHudHelper = Join-Path $PSScriptRoot "Hud-Operator.ps1"', self.installer)
+        self.assertIn('$sourceHudBridge = Join-Path $sourceHudRoot "orion_hud_bridge.py"', self.installer)
+        self.assertIn('$sourceHudProjection = Join-Path $sourceHudRoot "action_projection.py"', self.installer)
+        self.assertIn('$hudInstallRoot = Join-Path $orionRoot "hud"', self.installer)
+        self.assertIn("Copy-Item -LiteralPath $sourceHudHelper", self.installer)
+        self.assertIn("Copy-Item -LiteralPath $sourceHudBridge", self.installer)
+        self.assertIn("Copy-Item -LiteralPath $sourceHudProjection", self.installer)
+        self.assertIn('Copy-Item -Path (Join-Path $sourceHudStatic "*")', self.installer)
+        self.assertIn("then accepted HUD", self.installer)
 
     def test_stop_verifies_specific_owned_ollama_pid_exits(self):
         self.assertIn("ollamaStartedByOrion", self.stop)
@@ -167,16 +289,21 @@ class TestOperatorLifecycleScripts(unittest.TestCase):
         self.assertNotIn("iai-mcp daemon stop", self.stop)
         self.assertNotIn("schtasks", self.stop)
 
-    def test_success_markers_follow_health_or_shutdown_proof(self):
+    def test_success_markers_follow_health_hud_and_shutdown_proof(self):
         self.assertLess(self.start.index("Ollama: ready"), self.start.index("ORION READY"))
         self.assertLess(self.start.index("Hermes COMPANION: ready"), self.start.index("ORION READY"))
+        self.assertLess(self.start.index("Open-OrionHud -Uri"), self.start.index("ORION READY"))
         self.assertLess(self.stop.index("Wait-HermesDown"), self.stop.index("ORION STOPPED"))
+        self.assertLess(
+            self.stop.index("Stop-OrionOwnedHudBridge -SessionState $sessionState"),
+            self.stop.index("ORION STOPPED"),
+        )
         self.assertLess(
             self.stop.rindex("Stop-OrionOwnedDescendants -Snapshots $ownedDescendants"),
             self.stop.index("ORION STOPPED"),
         )
 
-    def test_operator_readme_tracks_current_prd_and_rocm_correction(self):
+    def test_operator_readme_tracks_current_prd_rocm_and_hud_integration(self):
         self.assertIn("Master PRD v2.9", self.readme)
         self.assertNotIn("Master PRD v2.8", self.readme)
         self.assertNotIn("Current Phase 2 relationship", self.readme)
@@ -187,6 +314,12 @@ class TestOperatorLifecycleScripts(unittest.TestCase):
         self.assertIn("identity-checked", self.readme)
         self.assertIn("creation order", self.readme)
         self.assertIn("pending cleanup", self.readme)
+        self.assertIn("127.0.0.1:8765", self.readme)
+        self.assertIn("after Hermes/API health", self.readme)
+        self.assertIn("pre-existing HUD", self.readme)
+        self.assertIn("Windows acceptance", self.readme)
+        self.assertIn("base interpreter", self.readme)
+        self.assertIn("ownership persistence", self.readme)
 
 
 if __name__ == "__main__":
