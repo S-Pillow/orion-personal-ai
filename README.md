@@ -26,11 +26,15 @@ Historical Docker/s6/JARVIS implementation records remain useful provenance but 
 
 ## Current status
 
-### Operator lifecycle hardening — PASS / CLOSED (2026-10-28)
+### Operator lifecycle + HUD launch-after-health — PASS / CLOSED (2026-10-29)
 
-The native Windows manual-off Start Orion / Stop Orion lifecycle is live-accepted on the real Orion workstation.
+The native Windows manual-off Start Orion / Stop Orion lifecycle, including the accepted HUD launch-after-health behavior, is live-accepted on the real Orion workstation.
 
-Accepted code checkpoint before this documentation-only closure:
+Current accepted implementation checkpoint:
+
+`7465492a7daebb1bf2630f2687668e575177291b`
+
+The accepted lifecycle foundation underneath the HUD integration remains the ROCm / owned-Ollama-tree implementation checkpoint:
 
 `3cbc1fa4831966fefce5f2711d82032965080fb2`
 
@@ -43,19 +47,27 @@ Final acceptance proved:
 - cleanup never performs a broad name-based Ollama/llama-server kill;
 - failed cleanup evidence is durable and blocks Start from overwriting pending recovery state;
 - the clean empty-descendant Stop path works under Windows PowerShell;
-- a final Start leaves Orion healthy and running on `rocm_v7_1` with zero pending descendant cleanup identities.
+- after Ollama and Hermes are healthy, Start Orion verifies/reuses or starts the accepted loopback HUD and opens it in the default browser;
+- the live Windows smoke proved Ollama health before Hermes health and Hermes health before verified HUD readiness;
+- an Orion-started HUD records durable exact-process ownership and repeated Start reuses the same owned bridge without duplication;
+- owned Stop removes the Orion-owned HUD while preserving the accepted Hermes/Ollama ownership boundaries;
+- a verified pre-existing HUD is reused without ownership transfer and survives Stop Orion;
+- browser tabs/processes are never lifecycle-owned or killed;
+- a final normal Start leaves Orion healthy and running on `rocm_v7_1` with exactly one Orion-owned HUD bridge.
 
 Source chain:
 
 - PR #74 / `6e862102df1e68fd6f707aff3ddb3ced1ea8fa25` — ROCm 7.1 process-local startup correction;
 - PR #75 / `40f96933e9e429b885c9c7a11cfac781c8b99104` — owned Ollama descendant cleanup + durable retry state;
-- PR #76 / `3cbc1fa4831966fefce5f2711d82032965080fb2` — empty descendant collection binding correction.
+- PR #76 / `3cbc1fa4831966fefce5f2711d82032965080fb2` — empty descendant collection binding correction;
+- PR #78 / `7465492a7daebb1bf2630f2687668e575177291b` — accepted HUD launch/reuse/ownership integration after runtime health.
 
-Durable acceptance record:
+Durable acceptance records:
 
-`docs/evidence/operator-lifecycle-acceptance-2026-10-28.md`
+- `docs/evidence/operator-lifecycle-acceptance-2026-10-28.md`
+- `docs/evidence/hud-launch-after-health-acceptance-2026-10-29.md`
 
-The remaining PRD lifecycle/presentation gap is separate: **after healthy Ollama + Hermes startup, Start Orion still needs to open the accepted Orion HUD**. That should be handled as the next coherent lifecycle outcome without reopening the accepted ROCm/ownership correction.
+OR-LIFE-010 HUD launch-after-health is now **ACCEPT / CLOSED**. Do not reopen the ROCm, owned-Ollama-tree, or HUD lifecycle integration based on acceptance-harness artifacts alone; focused re-verification is appropriate only after a material lifecycle dependency, HUD entry point, ownership contract, or runtime behavior changes.
 
 ### Phase 0 — PASS / CLOSED
 
@@ -255,13 +267,16 @@ iai remains vendor-managed and is intentionally not force-killed by Orion Stop.
 
 ## Operator controls and recovery note
 
-The currently accepted installed operator controls are the source-controlled one-shot scripts accepted on 2026-10-28 through code checkpoint:
+The currently accepted installed operator controls are the source-controlled one-shot scripts accepted through the 2026-10-29 HUD launch-after-health checkpoint:
 
-`3cbc1fa4831966fefce5f2711d82032965080fb2`
+`7465492a7daebb1bf2630f2687668e575177291b`
 
-They include direct proxy-bypassing loopback health checks, process-local ROCm 7.1 selection for Orion-started Ollama on the accepted workstation, durable identity-checked cleanup of Orion-owned Ollama descendants, and Windows PowerShell support for an empty first-use descendant list. The final live acceptance is recorded in:
+They include direct proxy-bypassing loopback health checks, process-local ROCm 7.1 selection for Orion-started Ollama on the accepted workstation, durable identity-checked cleanup of Orion-owned Ollama descendants, Windows PowerShell support for an empty first-use descendant list, verified HUD launch only after runtime health, durable Orion-owned HUD process identity, repeated-Start reuse, and preservation of verified pre-existing unowned HUDs.
 
-`docs/evidence/operator-lifecycle-acceptance-2026-10-28.md`
+Final live acceptance records:
+
+- `docs/evidence/operator-lifecycle-acceptance-2026-10-28.md`
+- `docs/evidence/hud-launch-after-health-acceptance-2026-10-29.md`
 
 The older `2.7.4-candidate1` package and its BootTime recovery work remain historical accepted provenance for the earlier lifecycle recovery path, not the current top-level operator checkpoint.
 
@@ -271,7 +286,7 @@ Source-controlled historical correction:
 
 `scripts/operator/patches/or-life-recovery-boottime.patch`
 
-**Do not reinstall an original unpatched v2.7.4 candidate package and assume it represents the current accepted operator controls.** The current accepted path is the source-controlled Start/Stop implementation documented above.
+**Do not reinstall an original unpatched v2.7.4 candidate package and assume it represents the current accepted operator controls.** The current accepted path is the source-controlled Start/Stop/HUD implementation documented above.
 
 ## Governing architecture
 
@@ -346,12 +361,11 @@ Reference/code-donor fork. Reuse only proven patterns that still close a current
 
 ## Resume point
 
-- **Operator lifecycle hardening is PASS / CLOSED.** Do not reopen the accepted ROCm 7.1 or owned-descendant correction unless a dependency/runtime change invalidates its evidence. Durable record: `docs/evidence/operator-lifecycle-acceptance-2026-10-28.md`.
-- **Next lifecycle outcome:** identify the accepted HUD entry point and complete the bounded `Start Orion -> healthy Ollama/Hermes -> open/reconnect HUD` integration. Preserve one-shot/manual-off semantics; do not add a supervisor, login startup, watcher, or second lifecycle owner.
-- For that HUD integration, begin with read-only discovery of the accepted launch command, single-instance/reconnect behavior, and observable launch success/failure signal; then implement health-before-HUD ordering and finish with a real desktop-shortcut Windows smoke.
-- Before resuming broader Phase 4 or Phase 6 work, refresh the live GitHub state for their active PRs/issues rather than assuming the older roadmap checkpoint below is still current.
-- The Phase 6 foundation through P6-04A is already on `main`; the README's P6-05/PR #59 status was last verified 2026-10-10 and must be rechecked before action.
+- **Operator lifecycle hardening and OR-LIFE-010 HUD launch-after-health are PASS / CLOSED.** Do not reopen the accepted ROCm 7.1, owned-descendant cleanup, or HUD ownership/reuse integration unless a material dependency/runtime change invalidates its evidence. Durable records: `docs/evidence/operator-lifecycle-acceptance-2026-10-28.md` and `docs/evidence/hud-launch-after-health-acceptance-2026-10-29.md`.
+- Orion is intentionally left **RUNNING** at HUD acceptance closure. Normal future operator use should continue through the installed Start Orion / Stop Orion desktop controls.
+- Before selecting the next broader roadmap outcome, refresh the live GitHub state for Phase 4 and Phase 6 rather than trusting the older checkpoint text below.
+- The Phase 6 foundation through P6-04A is already on `main`; this README's P6-05/PR #59 status was last verified 2026-10-10 and must be rechecked before action.
 - Phase 4 remains parked at the live voice acceptance gate unless its external/runtime conditions and current branch state are revalidated.
 - Persistent Goal Mode remains deferred and must not become a second autonomous runtime, scheduler, memory system, or approval path.
 
-Current shorthand: **operator lifecycle closed and live-accepted; next lifecycle item is HUD launch-after-health integration.** Phase 3 presentation foundation accepted; Phase 4 voice acceptance parked; Phase 5 vault-action/reconnect track closed through P5-03C; Phase 6 roadmap state requires a fresh GitHub check before continuation.
+Current shorthand: **operator lifecycle + HUD launch-after-health closed and live-accepted.** Phase 3 presentation foundation accepted; Phase 4 voice acceptance parked pending fresh state verification; Phase 5 vault-action/reconnect track closed through P5-03C; Phase 6 roadmap state requires a fresh GitHub check before continuation.
