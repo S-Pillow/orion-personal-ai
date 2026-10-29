@@ -275,6 +275,8 @@ try {
     }
     Write-OrionSessionState -State $state
 
+    $hud = $null
+    $hudOwnershipPersisted = $false
     try {
         $hud = Start-OrionHudBridge `
             -HudRoot $hudRoot `
@@ -295,14 +297,55 @@ try {
         $state["hudBridgePath"] = [string]$hud.BridgePath
         $state["hudUrl"] = [string]$hud.Url
         Write-OrionSessionState -State $state
+        $hudOwnershipPersisted = $true
 
         Open-OrionHud -Uri ([string]$hud.Url)
     }
     catch {
+        $hudFailureMessage = $_.Exception.Message
+        $hudRollbackFailure = $null
+
+        if ($null -ne $hud -and $hud.StartedByOrion -eq $true) {
+            $hudCleanupState = [PSCustomObject]@{
+                hudStartedByOrion = $true
+                hudPid = $hud.ProcessId
+                hudProcessName = $hud.ProcessName
+                hudExecutablePath = $hud.ExecutablePath
+                hudCreationDate = if ($null -eq $hud.CreationDate) {
+                    $null
+                }
+                else {
+                    ([datetime]$hud.CreationDate).ToString("o")
+                }
+                hudBridgePath = $hud.BridgePath
+            }
+
+            try {
+                Stop-OrionOwnedHudBridge -SessionState $hudCleanupState
+            }
+            catch {
+                $hudRollbackFailure = $_.Exception.Message
+            }
+        }
+
         Write-Host ""
         Write-Host "START ORION FAILED"
         Write-Host "Ollama and Hermes are healthy, but the accepted HUD could not be started/opened."
-        Write-Host $_.Exception.Message
+        Write-Host $hudFailureMessage
+
+        if ($null -ne $hudRollbackFailure) {
+            Write-Host "HUD rollback also failed: $hudRollbackFailure"
+            if (-not $hudOwnershipPersisted) {
+                Write-Host "HUD ownership could not be persisted before rollback failed. Do not rerun Start Orion until the HUD process on port 8765 is reconciled."
+            }
+            else {
+                Write-Host "Persisted HUD ownership remains available for a Stop Orion retry."
+            }
+        }
+        elseif ($null -ne $hud -and $hud.StartedByOrion -eq $true) {
+            Write-Host "Newly started Orion HUD bridge was identity-verified and rolled back."
+        }
+
         Write-Host "Launcher session state was preserved. Run Stop Orion to return to clean-off before retrying."
         exit 1
     }

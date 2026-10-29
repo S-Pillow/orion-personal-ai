@@ -97,17 +97,56 @@ function Resolve-OrionHudPython {
         throw "Python 3.11+ was not found on PATH for the Orion HUD bridge."
     }
 
-    $versionText = & $python.Source -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>$null
-    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$versionText)) {
-        throw "Unable to validate the Python runtime for the Orion HUD bridge."
+    $probeCode = "import json, os, sys; base=getattr(sys, '_base_executable', None) or sys.executable; print(json.dumps({'major':sys.version_info.major,'minor':sys.version_info.minor,'base_executable':os.path.realpath(base)}))"
+    try {
+        $probeJson = & $python.Source -c $probeCode 2>$null
+    }
+    catch {
+        throw "Unable to inspect the Python runtime for the Orion HUD bridge."
     }
 
-    $parts = ([string]$versionText).Trim().Split('.')
-    if ($parts.Count -lt 2 -or [int]$parts[0] -ne 3 -or [int]$parts[1] -lt 11) {
-        throw "Orion HUD requires Python 3.11+; detected $(([string]$versionText).Trim())."
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$probeJson)) {
+        throw "Unable to inspect the Python runtime for the Orion HUD bridge."
     }
 
-    return $python.Source
+    try {
+        $probe = ([string]$probeJson).Trim() | ConvertFrom-Json -ErrorAction Stop
+    }
+    catch {
+        throw "Python runtime inspection returned invalid metadata."
+    }
+
+    if ([int]$probe.major -ne 3 -or [int]$probe.minor -lt 11) {
+        throw "Orion HUD requires Python 3.11+; detected $($probe.major).$($probe.minor)."
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$probe.base_executable)) {
+        throw "Python runtime inspection did not identify a base interpreter."
+    }
+
+    try {
+        $basePython = (Resolve-Path -LiteralPath ([string]$probe.base_executable) -ErrorAction Stop).Path
+    }
+    catch {
+        throw "Python base interpreter does not exist: $($probe.base_executable)"
+    }
+
+    # Launch the real base interpreter, not a possible Windows virtualenv redirector.
+    try {
+        $baseVersionText = & $basePython -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>$null
+    }
+    catch {
+        throw "Unable to validate the resolved Python base interpreter."
+    }
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$baseVersionText)) {
+        throw "Unable to validate the resolved Python base interpreter."
+    }
+
+    $baseParts = ([string]$baseVersionText).Trim().Split('.')
+    if ($baseParts.Count -lt 2 -or [int]$baseParts[0] -ne 3 -or [int]$baseParts[1] -lt 11) {
+        throw "Resolved Orion HUD Python must be 3.11+; detected $(([string]$baseVersionText).Trim())."
+    }
+
+    return $basePython
 }
 
 function Test-OrionHudIdentityFieldsPresent {

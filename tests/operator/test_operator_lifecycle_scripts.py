@@ -112,6 +112,21 @@ class TestOperatorLifecycleScripts(unittest.TestCase):
         first_state_write = self.start.index("Write-OrionSessionState -State $state")
         hud_start = self.start.index("$hud = Start-OrionHudBridge")
         self.assertLess(first_state_write, hud_start)
+        self.assertIn("$hudOwnershipPersisted = $false", self.start)
+        self.assertIn("$hudOwnershipPersisted = $true", self.start)
+        self.assertIn("$hudCleanupState = [PSCustomObject]@{", self.start)
+        self.assertIn(
+            "Stop-OrionOwnedHudBridge -SessionState $hudCleanupState",
+            self.start,
+        )
+        self.assertIn(
+            "Newly started Orion HUD bridge was identity-verified and rolled back.",
+            self.start,
+        )
+        self.assertIn(
+            "HUD ownership could not be persisted before rollback failed.",
+            self.start,
+        )
         self.assertIn(
             "Launcher session state was preserved. Run Stop Orion to return to clean-off before retrying.",
             self.start,
@@ -135,9 +150,15 @@ class TestOperatorLifecycleScripts(unittest.TestCase):
             self.hud_helper,
         )
 
-    def test_hud_helper_requires_supported_python_and_installed_runtime(self):
+    def test_hud_helper_resolves_real_python_not_virtualenv_redirector(self):
         self.assertIn("function Resolve-OrionHudPython", self.hud_helper)
         self.assertIn("Python 3.11+", self.hud_helper)
+        self.assertIn("_base_executable", self.hud_helper)
+        self.assertIn("base_executable", self.hud_helper)
+        self.assertIn("Resolve-Path -LiteralPath", self.hud_helper)
+        self.assertIn("Launch the real base interpreter", self.hud_helper)
+        self.assertIn("return $basePython", self.hud_helper)
+        self.assertNotIn("return $python.Source", self.hud_helper)
         self.assertIn('Join-Path $HudRoot "orion_hud_bridge.py"', self.hud_helper)
         self.assertIn('Join-Path $HudRoot "action_projection.py"', self.hud_helper)
         self.assertIn('Join-Path $HudRoot "static\\index.html"', self.hud_helper)
@@ -297,6 +318,8 @@ class TestOperatorLifecycleScripts(unittest.TestCase):
         self.assertIn("after Hermes/API health", self.readme)
         self.assertIn("pre-existing HUD", self.readme)
         self.assertIn("Windows acceptance", self.readme)
+        self.assertIn("base interpreter", self.readme)
+        self.assertIn("ownership persistence", self.readme)
 
 
 if __name__ == "__main__":
