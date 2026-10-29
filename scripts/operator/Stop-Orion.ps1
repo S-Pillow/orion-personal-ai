@@ -9,6 +9,7 @@ $ErrorActionPreference = "Stop"
 $stateRoot = Join-Path $env:LOCALAPPDATA "Orion\operator"
 $statePath = Join-Path $stateRoot "launcher-session.json"
 $hermesHealthUri = "http://127.0.0.1:8642/health"
+$hudHelperPath = Join-Path $PSScriptRoot "Hud-Operator.ps1"
 $utf8NoBom = [Text.UTF8Encoding]::new($false)
 
 function Test-DirectHttpEndpoint {
@@ -375,6 +376,11 @@ function Stop-OrionOwnedDescendants {
 try {
     Write-Host "=== STOP ORION ==="
 
+    if (-not (Test-Path -LiteralPath $hudHelperPath)) {
+        throw "Installed Orion HUD operator helper is missing: $hudHelperPath"
+    }
+    . $hudHelperPath
+
     $hermesCommand = Get-Command "hermes" -CommandType Application -ErrorAction SilentlyContinue
     if ($null -eq $hermesCommand) {
         throw "Hermes executable was not found on PATH."
@@ -396,6 +402,8 @@ try {
     }
 
     $sessionState = Read-OrionSessionState
+    Stop-OrionOwnedHudBridge -SessionState $sessionState
+
     if ($null -eq $sessionState) {
         Write-Host "Ollama: not owned by this Orion launcher session; leaving it alone"
     }
