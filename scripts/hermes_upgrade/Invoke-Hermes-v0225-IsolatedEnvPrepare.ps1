@@ -61,7 +61,7 @@ function Get-GitStatusLines {
     if ($ExitCode -ne 0) {
         throw "STOP: git status failed for $Root with exit code $ExitCode."
     }
-    return ,$Lines
+    return $Lines
 }
 
 function Assert-LinesEqual {
