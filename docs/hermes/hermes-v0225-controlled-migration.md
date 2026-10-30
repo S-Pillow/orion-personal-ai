@@ -18,9 +18,9 @@ Completed and reconciled as of 2026-10-30:
 - bounded startup timing diagnostic — **PASS**, HTTP-ready in **8.285 s**;
 - isolated session/profile resource contract v3 — **PASS**, HTTP-ready in **7.745 s**, session CRUD/auth/persistence/profile isolation proven with zero model/memory/STT/TTS provider calls.
 
-Current next gate:
+Current gate:
 
-- P6-03 exact pre-repair `jobs.json` preservation + P6-04A durable `error_class` isolated runtime contract — **PENDING OPERATOR RESULT** via `scripts/hermes_upgrade/v0225_isolated_cron_compat_contract_smoke.py`.
+- P6-03 exact pre-repair `jobs.json` preservation + P6-04A durable `error_class` isolated runtime contract — **UNRESOLVED AFTER HARNESS PHASE-LOCALIZATION FAILURE**. The first monolithic 90-second child timed out without exposing enough phase evidence to assign PASS/FAIL to either compatibility function. The next bounded oracle is `scripts/hermes_upgrade/v0225_isolated_cron_compat_contract_smoke_v2.py`, which separates the two contracts, emits flushed phase markers, and always executes production/candidate postconditions.
 
 Production remains on accepted Hermes `0.20.6` / `v2026.8.27` / `5fc308a70719a83cccdbba4c0e39c23f5a8239d5`. No production cutover or runtime mutation is authorized by the progress above.
 
@@ -204,7 +204,7 @@ Successful executions retain `error_class = NULL`.
 
 1. **Disposable source candidate — PASS.** Exact v0.22.5 was cloned and verified; the stock 8642 API-server audio gap and separate dashboard audio implementation were confirmed; the three surviving Orion ports (P4-04A, P6-03, P6-04A) were applied and source-qualified; compile/diff checks, approval transport, `edge-tts==7.3.1`, and installed-Hermes invariance passed.
 2. **Reported-issue relevance qualification — IN PROGRESS.** The startup/profile-scope risk has received targeted runtime observation: one 90-second readiness miss remains an intermittent observation, while the dedicated diagnostic reached readiness in 8.285 s and the subsequent session gate in 7.745 s. Remaining reported-issue checks are limited to paths that can cross into Orion, Chat, Memory, Voice, or Security.
-3. **Disposable runtime qualification — IN PROGRESS.** Isolated gateway auth/capability/P4-04A local-validation passed; startup timing passed; isolated session CRUD/auth/persistence/profile isolation passed. The current pending operator gate is P6-03/P6-04A runtime persistence. Memory, actual model-backed Chat, and actual STT/TTS remain separately gated and are not implied by the completed sub-gates.
+3. **Disposable runtime qualification — IN PROGRESS.** Isolated gateway auth/capability/P4-04A local-validation passed; startup timing passed; isolated session CRUD/auth/persistence/profile isolation passed. The P6-03/P6-04A runtime contract is currently unresolved because the first monolithic child timed out without phase localization; only the observer-hardened v2 harness is the next qualification oracle. Memory, actual model-backed Chat, and actual STT/TTS remain separately gated and are not implied by the completed sub-gates.
 4. **Pre-cutover backup — NOT STARTED.** Preserve the entire accepted dirty Hermes source state, four sidecars, dependency ownership metadata, COMPANION profile/runtime state, memory/vault evidence, and database files required for rollback.
 5. **Controlled cutover — NOT AUTHORIZED / NOT STARTED.** Only after the candidate is qualified, stop Orion through the accepted lifecycle, switch Hermes to the qualified exact source plus only the qualified Orion ports/mitigations, sync the managed environment, and restart Orion. Do not use a blind updater against the dirty accepted checkout.
 6. **Production hard-gate requalification — NOT STARTED.** Orion lifecycle/runtime, Memory, Voice, Chat/session behavior, and Security all must pass on Windows. Cron/LSP/Desktop failures do not block unless evidence shows they cross one of those five boundaries.
@@ -217,4 +217,4 @@ phase is pre-install and may create disposable source/environment artifacts. It 
 by itself authorize a blind `hermes update`, destructive database rewrite, profile reset,
 iai change, model/provider change, production cutover, or removal of rollback evidence.
 
-The current resume point is `docs/hermes/hermes-v0225-qualification-status.md`. The next result to reconcile is the operator output from `scripts/hermes_upgrade/v0225_isolated_cron_compat_contract_smoke.py`.
+The current resume point is `docs/hermes/hermes-v0225-qualification-status.md`. The next bounded result to reconcile is one operator run of `scripts/hermes_upgrade/v0225_isolated_cron_compat_contract_smoke_v2.py`; do not rerun the monolithic v1 harness as the qualification oracle.
