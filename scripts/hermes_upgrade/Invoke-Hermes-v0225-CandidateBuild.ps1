@@ -101,7 +101,7 @@ $CandidateHead = (& git -C $CandidateRoot rev-parse HEAD).Trim()
 if ($CandidateHead -ne $ExpectedReleaseHead) {
     throw "STOP: candidate checkout identity mismatch."
 }
-if ((Get-StatusLines $CandidateRoot).Count -ne 0) {
+if (@(Get-StatusLines $CandidateRoot).Count -ne 0) {
     throw "STOP: exact upstream candidate is not clean before transform."
 }
 
