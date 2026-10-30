@@ -65,6 +65,7 @@ if (
   let transcriptionPending = false;
   let pendingVoiceSubmission = null;
   let submittingPendingVoice = false;
+  let pendingRunInterruption = false;
   let chunks = [];
   let stopTimer = null;
   let speakReplies = true;
@@ -254,10 +255,19 @@ if (
     speechQueue = Promise.resolve();
   }
 
+  function tryIssuePendingRunInterruption() {
+    if (!pendingRunInterruption || stopButton.disabled) return false;
+    pendingRunInterruption = false;
+    stopButton.click();
+    return true;
+  }
+
   function interruptSpeechAndRun() {
     voiceTurn = null;
     stopSpeechPlayback();
-    if (!stopButton.disabled) stopButton.click();
+    const priorRunBusy = sendButton.disabled || !stopButton.disabled;
+    pendingRunInterruption = priorRunBusy;
+    tryIssuePendingRunInterruption();
   }
 
   function blobToDataUrl(blob) {
@@ -548,7 +558,15 @@ if (
     setStatus("PUSH TO TALK", "WAKE OFF");
   }
 
+  const stopObserver = new MutationObserver(() => {
+    tryIssuePendingRunInterruption();
+  });
+  stopObserver.observe(stopButton, { attributes: true, attributeFilter: ["disabled"] });
+
   const sendObserver = new MutationObserver(() => {
+    if (pendingRunInterruption && !sendButton.disabled && stopButton.disabled) {
+      pendingRunInterruption = false;
+    }
     if (pendingVoiceSubmission && !sendButton.disabled) {
       trySubmitPendingVoice();
     }
@@ -581,6 +599,7 @@ if (
     if (recorderIsActive()) recorder.stop();
     releaseMicrophone();
     pendingVoiceSubmission = null;
+    pendingRunInterruption = false;
     voiceTurn = null;
     stopSpeechPlayback();
     window.fetch = nativeFetch;
