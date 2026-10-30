@@ -58,6 +58,7 @@ if (
 
   let mediaStream = null;
   let recorder = null;
+  let recordingSessionId = null;
   let chunks = [];
   let stopTimer = null;
   let speakReplies = true;
@@ -93,6 +94,10 @@ if (
     return MIME_CANDIDATES.find((candidate) => MediaRecorder.isTypeSupported(candidate)) || "";
   }
 
+  function sessionStillSelected(sessionId) {
+    return Boolean(sessionId && sessionSelect.value === sessionId);
+  }
+
   function releaseMicrophone() {
     if (stopTimer) {
       clearTimeout(stopTimer);
@@ -103,6 +108,7 @@ if (
       mediaStream = null;
     }
     recorder = null;
+    recordingSessionId = null;
     chunks = [];
     voiceButton.textContent = "PUSH TO TALK";
     voiceButton.setAttribute("aria-pressed", "false");
@@ -127,6 +133,7 @@ if (
   }
 
   function interruptSpeechAndRun() {
+    voiceTurn = null;
     stopSpeechPlayback();
     if (!stopButton.disabled) stopButton.click();
   }
@@ -140,7 +147,11 @@ if (
     });
   }
 
-  function submitTranscript(text) {
+  function submitTranscript(text, sessionId) {
+    if (!sessionStillSelected(sessionId)) {
+      setStatus("PUSH TO TALK", "SESSION CHANGED · TRANSCRIPT NOT SENT · WAKE OFF");
+      return;
+    }
     const clean = String(text || "").trim();
     if (!clean) {
       setStatus("PUSH TO TALK", "NO SPEECH DETECTED · WAKE OFF");
@@ -148,28 +159,35 @@ if (
     }
     messageInput.value = clean;
     messageInput.dispatchEvent(new Event("input", { bubbles: true }));
-    voiceTurn = {
-      body: null,
-      previousBody: latestAssistantBody(),
-      queuedChars: 0,
-      finalFlushed: false,
-    };
+    voiceTurn = speakReplies
+      ? {
+          body: null,
+          previousBody: latestAssistantBody(),
+          queuedChars: 0,
+          finalFlushed: false,
+        }
+      : null;
     composer.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     setStatus("CONVERSATION", "TRANSCRIPT SENT · WAKE OFF");
   }
 
-  async function transcribe(blob) {
+  async function transcribe(blob, sessionId) {
+    if (!sessionStillSelected(sessionId)) {
+      setStatus("PUSH TO TALK", "SESSION CHANGED · RECORDING DISCARDED · WAKE OFF");
+      return;
+    }
     setStatus("CONVERSATION", "TRANSCRIBING · WAKE OFF");
     const dataUrl = await blobToDataUrl(blob);
     const payload = await jsonApi("/api/orion/voice/transcribe", {
       method: "POST",
       body: JSON.stringify({ data_url: dataUrl, mime_type: blob.type || "audio/webm" }),
     });
-    submitTranscript(payload.transcript || "");
+    submitTranscript(payload.transcript || "", sessionId);
   }
 
   async function startRecording() {
-    if (!sessionSelect.value) {
+    const sessionId = sessionSelect.value;
+    if (!sessionId) {
       setStatus("PUSH TO TALK", "SELECT OR CREATE A SESSION");
       return;
     }
@@ -179,9 +197,15 @@ if (
     }
 
     interruptSpeechAndRun();
+    recordingSessionId = sessionId;
     const mimeType = supportedMimeType();
     try {
       mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!sessionStillSelected(sessionId)) {
+        releaseMicrophone();
+        setStatus("PUSH TO TALK", "SESSION CHANGED · RECORDING CANCELLED · WAKE OFF");
+        return;
+      }
       recorder = mimeType
         ? new MediaRecorder(mediaStream, { mimeType })
         : new MediaRecorder(mediaStream);
@@ -190,15 +214,20 @@ if (
         if (event.data?.size) chunks.push(event.data);
       });
       recorder.addEventListener("stop", async () => {
+        const boundSessionId = recordingSessionId;
         const type = recorder?.mimeType || mimeType || "audio/webm";
         const blob = new Blob(chunks, { type });
         releaseMicrophone();
+        if (!sessionStillSelected(boundSessionId)) {
+          setStatus("PUSH TO TALK", "SESSION CHANGED · RECORDING DISCARDED · WAKE OFF");
+          return;
+        }
         if (!blob.size) {
           setStatus("PUSH TO TALK", "EMPTY RECORDING · WAKE OFF");
           return;
         }
         try {
-          await transcribe(blob);
+          await transcribe(blob, boundSessionId);
         } catch (error) {
           setStatus("PUSH TO TALK", `TRANSCRIPTION FAILED · ${error.message}`);
         }
@@ -278,6 +307,25 @@ if (
     return nodes.length ? nodes[nodes.length - 1] : null;
   }
 
+  function extractCompletedSpeechPrefix(text) {
+    let remaining = String(text || "");
+    let consumed = 0;
+    const speechChunks = [];
+
+    while (remaining) {
+      const match = remaining.match(/^([\s\S]*?(?:[.!?](?=\s)|\n+))(\s*)/);
+      if (!match) break;
+      const advance = match[0].length;
+      if (!advance) break;
+      const chunk = match[1].trim();
+      if (chunk) speechChunks.push(chunk);
+      consumed += advance;
+      remaining = remaining.slice(advance);
+    }
+
+    return { chunks: speechChunks, consumed };
+  }
+
   function queueCompletedSpeech() {
     if (!voiceTurn || !speakReplies) return;
     const body = latestAssistantBody();
@@ -296,14 +344,9 @@ if (
     const remainder = text.slice(voiceTurn.queuedChars);
     if (!remainder) return;
 
-    let consumed = 0;
-    const sentencePattern = /[^.!?\n]+[.!?](?:\s+|$)|[^\n]+\n+/g;
-    for (const match of remainder.matchAll(sentencePattern)) {
-      const chunk = match[0].trim();
-      consumed = (match.index || 0) + match[0].length;
-      if (chunk) enqueueSpeech(chunk);
-    }
-    if (consumed) voiceTurn.queuedChars += consumed;
+    const completed = extractCompletedSpeechPrefix(remainder);
+    for (const chunk of completed.chunks) enqueueSpeech(chunk);
+    if (completed.consumed) voiceTurn.queuedChars += completed.consumed;
   }
 
   function flushFinalSpeech() {
@@ -346,12 +389,16 @@ if (
     speakReplies = !speakReplies;
     speakButton.setAttribute("aria-pressed", String(speakReplies));
     speakButton.textContent = `SPEAK REPLIES: ${speakReplies ? "ON" : "OFF"}`;
-    if (!speakReplies) stopSpeechPlayback();
+    if (!speakReplies) {
+      voiceTurn = null;
+      stopSpeechPlayback();
+    }
   });
 
   window.addEventListener("beforeunload", () => {
     if (recorder && recorder.state !== "inactive") recorder.stop();
     releaseMicrophone();
+    voiceTurn = null;
     stopSpeechPlayback();
   });
 
