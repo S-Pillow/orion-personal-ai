@@ -7,6 +7,7 @@ $HermesRoot = Join-Path $env:LOCALAPPDATA "hermes\hermes-agent"
 $GatewayPython = Join-Path $HermesRoot "venv\Scripts\python.exe"
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $Transformer = Join-Path $PSScriptRoot "v0225_build_orion_compat.py"
+$AudioTransformer = Join-Path $PSScriptRoot "v0225_port_p4_audio.py"
 
 $ExpectedStatus = @(
     " M agent/monitoring/cron_health.py",
@@ -25,11 +26,31 @@ $ExpectedCandidatePaths = @(
     "agent/monitoring/cron_health.py",
     "cron/error_classification.py",
     "cron/executions.py",
-    "cron/jobs.py"
+    "cron/jobs.py",
+    "gateway/platforms/api_server.py"
 )
 
 function Get-StatusLines([string]$Root) {
     return @(& git -C $Root status --porcelain=v1)
+}
+
+function Get-NativeSingleLine(
+    [scriptblock]$Command,
+    [string]$Label
+) {
+    $Lines = @(& $Command)
+    $Exit = $LASTEXITCODE
+    if ($Exit -ne 0) {
+        throw "STOP: $Label failed with exit code $Exit."
+    }
+    if ($Lines.Count -ne 1) {
+        throw "STOP: $Label expected exactly one output line; observed $($Lines.Count)."
+    }
+    $Value = [string]$Lines[0]
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        throw "STOP: $Label returned an empty line."
+    }
+    return $Value.Trim()
 }
 
 function Assert-LinesEqual([string[]]$Actual, [string[]]$Expected, [string]$Label) {
@@ -49,17 +70,19 @@ Write-Host "HERMES v0.22.5 DISPOSABLE MIGRATION CANDIDATE BUILD"
 Write-Host "INSTALLED HERMES MUTATION AUTHORIZED=false"
 Write-Host "=================================================="
 
-foreach ($Required in @($HermesRoot, $GatewayPython, $Transformer)) {
+foreach ($Required in @($HermesRoot, $GatewayPython, $Transformer, $AudioTransformer)) {
     if (-not (Test-Path -LiteralPath $Required)) {
         throw "STOP: required input missing: $Required"
     }
 }
 
-$InstalledHeadBefore = (& git -C $HermesRoot rev-parse HEAD).Trim()
+$InstalledHeadBefore = Get-NativeSingleLine {
+    & git -C $HermesRoot rev-parse HEAD
+} "installed Hermes HEAD"
 if ($InstalledHeadBefore -ne $ExpectedInstalledHead) {
     throw "STOP: installed Hermes HEAD drift. Expected $ExpectedInstalledHead; observed $InstalledHeadBefore"
 }
-$InstalledStatusBefore = Get-StatusLines $HermesRoot
+$InstalledStatusBefore = @(Get-StatusLines $HermesRoot)
 Assert-LinesEqual $InstalledStatusBefore $ExpectedStatus "installed Hermes pre-build status"
 
 $InstalledHashesBefore = [ordered]@{}
@@ -91,13 +114,21 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 & git -C $CandidateRoot config core.autocrlf false
+if ($LASTEXITCODE -ne 0) {
+    throw "STOP: candidate core.autocrlf configuration failed."
+}
 & git -C $CandidateRoot config core.eol lf
+if ($LASTEXITCODE -ne 0) {
+    throw "STOP: candidate core.eol configuration failed."
+}
 & git -C $CandidateRoot checkout --quiet --detach $ExpectedReleaseHead
 if ($LASTEXITCODE -ne 0) {
     throw "STOP: exact v0.22.5 release checkout failed."
 }
 
-$CandidateHead = (& git -C $CandidateRoot rev-parse HEAD).Trim()
+$CandidateHead = Get-NativeSingleLine {
+    & git -C $CandidateRoot rev-parse HEAD
+} "candidate Hermes HEAD"
 if ($CandidateHead -ne $ExpectedReleaseHead) {
     throw "STOP: candidate checkout identity mismatch."
 }
@@ -106,6 +137,9 @@ if (@(Get-StatusLines $CandidateRoot).Count -ne 0) {
 }
 
 $Tags = @(& git -C $CandidateRoot tag --points-at HEAD)
+if ($LASTEXITCODE -ne 0) {
+    throw "STOP: candidate tag query failed."
+}
 if ($Tags -notcontains "v0.22.5") {
     throw "STOP: exact release commit is not tagged v0.22.5 in the clone."
 }
@@ -115,18 +149,34 @@ Write-Host "UPSTREAM_RELEASE_TAG=v0.22.5"
 Write-Host "UPSTREAM_RELEASE_IDENTITY=PASS"
 
 Write-Host ""
-Write-Host "=== UPSTREAM NATIVE CAPABILITY CHECK ==="
-$ApiServer = Get-Content -LiteralPath (Join-Path $CandidateRoot "gateway\platforms\api_server.py") -Raw
-$RunServer = Get-Content -LiteralPath (Join-Path $CandidateRoot "gateway\platforms\api_server_runs.py") -Raw
-$Pyproject = Get-Content -LiteralPath (Join-Path $CandidateRoot "pyproject.toml") -Raw
-$UvLock = Get-Content -LiteralPath (Join-Path $CandidateRoot "uv.lock") -Raw
+Write-Host "=== UPSTREAM CAPABILITY OWNERSHIP CHECK ==="
+$ApiServerPath = Join-Path $CandidateRoot "gateway\platforms\api_server.py"
+$DashboardAudioPath = Join-Path $CandidateRoot "hermes_cli\web_routers\audio.py"
+$RunServerPath = Join-Path $CandidateRoot "gateway\platforms\api_server_runs.py"
+$PyprojectPath = Join-Path $CandidateRoot "pyproject.toml"
+$UvLockPath = Join-Path $CandidateRoot "uv.lock"
 
-foreach ($Marker in @(
-    "/api/audio/transcribe",
-    "/api/audio/speak"
-)) {
-    if (-not $ApiServer.Contains($Marker)) {
-        throw "STOP: upstream native audio marker missing: $Marker"
+foreach ($Path in @($ApiServerPath, $DashboardAudioPath, $RunServerPath, $PyprojectPath, $UvLockPath)) {
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "STOP: required upstream capability source missing: $Path"
+    }
+}
+
+$ApiServer = Get-Content -LiteralPath $ApiServerPath -Raw
+$DashboardAudio = Get-Content -LiteralPath $DashboardAudioPath -Raw
+$RunServer = Get-Content -LiteralPath $RunServerPath -Raw
+$Pyproject = Get-Content -LiteralPath $PyprojectPath -Raw
+$UvLock = Get-Content -LiteralPath $UvLockPath -Raw
+
+if (-not $ApiServer.Contains('"skills_api": True, "audio_api": False, "realtime_voice": False,')) {
+    throw "STOP: stock v0.22.5 API-server audio capability ownership changed."
+}
+foreach ($Marker in @('/api/audio/transcribe', '/api/audio/speak')) {
+    if ($ApiServer.Contains($Marker)) {
+        throw "STOP: stock v0.22.5 API server unexpectedly exposes audio route marker: $Marker"
+    }
+    if (-not $DashboardAudio.Contains($Marker)) {
+        throw "STOP: stock v0.22.5 dashboard audio implementation missing marker: $Marker"
     }
 }
 if (-not $ApiServer.Contains('"waiting_for_approval"') -or -not $ApiServer.Contains('"approval.request"')) {
@@ -141,20 +191,58 @@ if ($Pyproject -notmatch 'edge-tts\s*=\s*\["edge-tts==7\.3\.1"\]') {
 if ($UvLock -notmatch 'name = "edge-tts"\s+version = "7\.3\.1"') {
     throw "STOP: v0.22.5 lock does not resolve edge-tts 7.3.1."
 }
-Write-Host "UPSTREAM_NATIVE_AUDIO=PASS"
+Write-Host "UPSTREAM_API_SERVER_AUDIO_GAP=CONFIRMED"
+Write-Host "UPSTREAM_DASHBOARD_AUDIO_IMPLEMENTATION=PASS"
 Write-Host "UPSTREAM_NATIVE_APPROVAL_TRANSPORT=PASS"
 Write-Host "UPSTREAM_EDGE_TTS_7_3_1=PASS"
 
 Write-Host ""
 Write-Host "=== APPLY ORION SURVIVING COMPATIBILITY PORTS ==="
-& $GatewayPython -B $Transformer --source-root $CandidateRoot
-if ($LASTEXITCODE -ne 0) {
-    throw "STOP: Orion v0.22.5 compatibility transform failed."
+$P6Output = @(& $GatewayPython -B $Transformer --source-root $CandidateRoot)
+$P6Exit = $LASTEXITCODE
+if ($P6Exit -ne 0) {
+    throw "STOP: Orion P6 v0.22.5 compatibility transform failed with exit code $P6Exit."
+}
+foreach ($Line in $P6Output) {
+    if ([string]$Line -ne "RETIRED_P4_AUDIO_PATCH=true") {
+        Write-Host $Line
+    }
 }
 
-$CandidateStatus = Get-StatusLines $CandidateRoot
-$CandidatePaths = @($CandidateStatus | ForEach-Object { $_.Substring(3) } | Sort-Object)
+$AudioOutput = @(& $GatewayPython -B $AudioTransformer --source-root $CandidateRoot)
+$AudioExit = $LASTEXITCODE
+if ($AudioExit -ne 0) {
+    throw "STOP: Orion P4-04A v0.22.5 audio transform failed with exit code $AudioExit."
+}
+foreach ($Line in $AudioOutput) {
+    Write-Host $Line
+}
+
+$CandidateStatus = @(Get-StatusLines $CandidateRoot)
+$CandidatePaths = @(
+    $CandidateStatus |
+    ForEach-Object {
+        if ([string]::IsNullOrWhiteSpace([string]$_) -or ([string]$_).Length -lt 4) {
+            throw "STOP: malformed candidate git status line: $_"
+        }
+        ([string]$_).Substring(3)
+    } |
+    Sort-Object
+)
 Assert-LinesEqual $CandidatePaths $ExpectedCandidatePaths "candidate changed path scope"
+
+$PatchedApiServer = Get-Content -LiteralPath $ApiServerPath -Raw
+foreach ($Marker in @(
+    'ORION-HERMES-V0225-P4-04A-AUDIO-GATEWAY-v1',
+    '"audio_api": True',
+    '("POST", "/api/audio/transcribe", self._handle_audio_transcribe)',
+    '("POST", "/api/audio/speak", self._handle_audio_speak)'
+)) {
+    if (-not $PatchedApiServer.Contains($Marker)) {
+        throw "STOP: post-transform API-server audio verification missing: $Marker"
+    }
+}
+Write-Host "ORION_P404A_GATEWAY_AUDIO_PORT=PASS"
 
 Write-Host ""
 Write-Host "=== SOURCE COMPILE / DIFF QUALIFICATION ==="
@@ -183,7 +271,8 @@ if ($LASTEXITCODE -ne 0) {
     agent/monitoring/cron_health.py `
     cron/error_classification.py `
     cron/executions.py `
-    cron/jobs.py
+    cron/jobs.py `
+    gateway/platforms/api_server.py
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $PatchPath)) {
     throw "STOP: failed to generate candidate compatibility patch."
 }
@@ -207,8 +296,10 @@ foreach ($Rel in $ExpectedCandidatePaths) {
 
 Write-Host ""
 Write-Host "=== PROVE INSTALLED HERMES UNCHANGED ==="
-$InstalledHeadAfter = (& git -C $HermesRoot rev-parse HEAD).Trim()
-$InstalledStatusAfter = Get-StatusLines $HermesRoot
+$InstalledHeadAfter = Get-NativeSingleLine {
+    & git -C $HermesRoot rev-parse HEAD
+} "installed Hermes post-build HEAD"
+$InstalledStatusAfter = @(Get-StatusLines $HermesRoot)
 if ($InstalledHeadAfter -ne $InstalledHeadBefore) {
     throw "STOP: installed Hermes HEAD changed during disposable build."
 }
@@ -224,6 +315,7 @@ Write-Host "INSTALLED_HERMES_UNCHANGED=PASS"
 Write-Host ""
 Write-Host "=================================================="
 Write-Host "HERMES_V0225_CANDIDATE_BUILD=PASS"
+Write-Host "PORT_P404A_AUDIO_GATEWAY=PASS"
 Write-Host "INSTALLED_HERMES_MUTATED=false"
 Write-Host "COMPANION_STATE_MUTATED=false"
 Write-Host "RUNTIME_RESTARTED=false"
