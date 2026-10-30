@@ -138,13 +138,12 @@ class Phase4VoiceUnitTests(unittest.TestCase):
         self.assertNotIn("minmax(9.5rem, auto)", css)
         self.assertNotIn("minmax(11.25rem, auto)", css)
 
-    def test_voice_turn_ignores_previous_assistant_and_aborts_inflight_tts(self):
+    def test_interruption_clears_voice_turn_and_aborts_inflight_tts(self):
         source = (HUD_ROOT / "static" / "phase4-voice.js").read_text(encoding="utf-8")
-        self.assertIn("previousBody,", source)
-        self.assertIn("body === voiceTurn.previousBody", source)
         self.assertIn("activeSpeechController.abort()", source)
         self.assertIn('error?.name === "AbortError"', source)
         self.assertIn("function interruptSpeechAndRun() {\n    voiceTurn = null;", source)
+        self.assertIn("if (!stopButton.disabled) stopButton.click()", source)
 
     def test_recording_is_session_bound_and_microphone_acquisition_is_single_flight(self):
         source = (HUD_ROOT / "static" / "phase4-voice.js").read_text(encoding="utf-8")
@@ -155,7 +154,7 @@ class Phase4VoiceUnitTests(unittest.TestCase):
         self.assertIn("voiceButton.disabled = !recorderIsActive()", source)
         self.assertIn("recordingSessionId = sessionId", source)
         self.assertIn("sessionStillSelected(boundSessionId)", source)
-        self.assertIn("queueTranscriptSubmission(payload.transcript || \"\", sessionId)", source)
+        self.assertIn('queueTranscriptSubmission(payload.transcript || "", sessionId)', source)
         self.assertIn("SESSION CHANGED · TRANSCRIPT NOT SENT", source)
         self.assertIn("SESSION CHANGED · RECORDING DISCARDED", source)
 
@@ -165,7 +164,7 @@ class Phase4VoiceUnitTests(unittest.TestCase):
         self.assertIn("function trySubmitPendingVoice()", source)
         self.assertIn("if (sendButton.disabled || sessionSelect.disabled)", source)
         self.assertIn("WAITING FOR PRIOR RUN TO STOP", source)
-        self.assertIn("composer.dispatchEvent(new Event(\"submit\"", source)
+        self.assertIn('composer.dispatchEvent(new Event("submit"', source)
         self.assertIn("if (!sendButton.disabled)", source)
         self.assertIn("TRANSCRIPT READY · WAITING TO SUBMIT", source)
         self.assertIn("pendingVoiceSubmission = null", source)
@@ -180,15 +179,34 @@ class Phase4VoiceUnitTests(unittest.TestCase):
         self.assertIn("consumed += advance", source)
         self.assertNotIn("remainder.matchAll(sentencePattern)", source)
 
-    def test_speech_offsets_use_append_only_source_not_mutable_rendered_markdown(self):
+    def test_voice_source_observes_exact_chat_stream_before_app_rendering(self):
         source = (HUD_ROOT / "static" / "phase4-voice.js").read_text(encoding="utf-8")
-        self.assertIn('sourceText: ""', source)
-        self.assertIn("function updateVoiceSourceText(body)", source)
-        self.assertIn("current.startsWith(voiceTurn.sourceText)", source)
-        self.assertIn("voiceTurn.sourceText.slice(voiceTurn.queuedChars)", source)
-        self.assertIn("assistant.completed may later replace", source)
-        self.assertIn("function speechText(text)", source)
-        self.assertIn("replace(/\\*\\*([^*\\n]+)\\*\\*/g, \"$1\")", source)
+        self.assertIn("const CHAT_STREAM_PATH_RE", source)
+        self.assertIn("function requestTargetsChatStream(input, options = {})", source)
+        self.assertIn('method !== "POST"', source)
+        self.assertIn("url.origin === window.location.origin", source)
+        self.assertIn("CHAT_STREAM_PATH_RE.test(url.pathname)", source)
+        self.assertIn("function wrapChatStreamResponse(response)", source)
+        self.assertIn("new TransformStream", source)
+        self.assertIn("controller.enqueue(chunk)", source)
+        self.assertIn("observeAssistantStreamFrame(frame)", source)
+        self.assertIn('parsed.event === "assistant.delta"', source)
+        self.assertIn("voiceTurn.sourceText += delta", source)
+        self.assertIn('parsed.event === "assistant.completed"', source)
+        self.assertIn("response.body.pipeThrough(observer)", source)
+        self.assertIn("window.fetch = nativeFetch", source)
+        self.assertNotIn("updateVoiceSourceText", source)
+        self.assertNotIn("transcriptObserver", source)
+
+    def test_client_tts_chunks_match_server_text_limit(self):
+        source = (HUD_ROOT / "static" / "phase4-voice.js").read_text(encoding="utf-8")
+        self.assertEqual(voice.MAX_TTS_TEXT_CHARS, 4000)
+        self.assertIn("const MAX_TTS_TEXT_CHARS = 4000", source)
+        self.assertIn("function splitSpeechForTts(text)", source)
+        self.assertIn('lastIndexOf(" ", MAX_TTS_TEXT_CHARS)', source)
+        self.assertIn("cut = MAX_TTS_TEXT_CHARS", source)
+        self.assertIn("while (remaining.length > MAX_TTS_TEXT_CHARS)", source)
+        self.assertIn("for (const clean of parts)", source)
 
     def test_source_has_no_new_runtime_or_shell_authority(self):
         source = (HUD_ROOT / "orion_phase4_voice_bridge.py").read_text(encoding="utf-8")
@@ -288,6 +306,16 @@ class Phase4VoiceIntegrationTests(unittest.TestCase):
         self.assertIn(b"data:audio/wav;base64", data)
         call = next(c for c in FakeVoiceHermesHandler.calls if c["path"] == "/api/audio/speak")
         self.assertEqual(call["authorization"], "Bearer test-secret")
+
+    def test_tts_rejects_text_above_bounded_server_limit(self):
+        status, _, data = self.request(
+            "POST",
+            "/api/orion/voice/speak",
+            {"text": "x" * (voice.MAX_TTS_TEXT_CHARS + 1)},
+        )
+        self.assertEqual(status, 413)
+        self.assertIn(b"tts_text_too_large", data)
+        self.assertFalse(any(c["path"] == "/api/audio/speak" for c in FakeVoiceHermesHandler.calls))
 
     def test_voice_routes_use_bounded_extended_timeouts(self):
         seen: dict[str, float | None] = {}
