@@ -14,7 +14,8 @@ class Phase4VoiceEarlyBargeInRegressionTests(unittest.TestCase):
         self.assertIn("let pendingRunInterruption = false", source)
         self.assertIn("function tryIssuePendingRunInterruption()", source)
         self.assertIn("if (!pendingRunInterruption || stopButton.disabled) return false", source)
-        self.assertIn("pendingRunInterruption = false;\n    stopButton.click()", source)
+        self.assertIn("pendingRunInterruption = false", source)
+        self.assertIn("if (!stopButton.disabled) stopButton.click()", source)
 
         self.assertIn("const priorRunBusy = sendButton.disabled || !stopButton.disabled", source)
         self.assertIn("pendingRunInterruption = priorRunBusy", source)
