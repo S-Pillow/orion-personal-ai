@@ -32,6 +32,35 @@ def token(value: object) -> str:
     return "true" if bool(value) else "false"
 
 
+def validate_served_rows(rows: object) -> list[tuple[str, Path]]:
+    """Validate the exact v0.22.5 ``profiles_to_serve`` contract.
+
+    Hermes callers consume this API as ``(name, home)`` pairs.  Keep that
+    contract explicit here so a future upstream shape change fails closed
+    instead of being misclassified by the migration gate.
+    """
+    validated: list[tuple[str, Path]] = []
+    for index, row in enumerate(rows):
+        if not isinstance(row, tuple) or len(row) != 2:
+            raise RuntimeError(
+                "Unexpected profiles_to_serve row shape at index "
+                f"{index}: expected (name, home) tuple, observed {type(row).__name__}"
+            )
+        name, home = row
+        if not isinstance(name, str) or not name.strip():
+            raise RuntimeError(
+                f"Unexpected profiles_to_serve name at index {index}: {name!r}"
+            )
+        try:
+            home_path = Path(home)
+        except TypeError as exc:
+            raise RuntimeError(
+                f"Unexpected profiles_to_serve home at index {index}: {home!r}"
+            ) from exc
+        validated.append((name, home_path))
+    return validated
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--hermes-root", required=True)
@@ -69,21 +98,23 @@ def main() -> int:
         standalone = profile_is_standalone(profile_home)
         default_explicit = explicit_multiplex_flag(root)
         offline_host_verdict = host_serves_named_profile(root, profile_home)
-        served = profiles_to_serve(multiplex=True, include_parked=True)
+        served_rows = validate_served_rows(
+            profiles_to_serve(multiplex=True, include_parked=True)
+        )
     finally:
         if previous_home is None:
             os.environ.pop("HERMES_HOME", None)
         else:
             os.environ["HERMES_HOME"] = previous_home
 
-    served_names = sorted({p.name for p in served})
+    served_names = sorted({name for name, _home in served_rows})
     after = {str(p): sha256(p) for p in watched}
     if before != after:
         raise RuntimeError("Read-only topology inventory detected a watched configuration mutation")
 
     if standalone:
         risk = "STANDALONE_SHIM_ALREADY_SET"
-    elif len(served) < 2:
+    elif len(served_rows) < 2:
         risk = "SINGLE_PROFILE_GUARD"
     else:
         # None means boot decides; with >=2 profiles this is the path that may
