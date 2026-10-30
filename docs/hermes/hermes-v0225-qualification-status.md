@@ -91,25 +91,34 @@ Evidence:
 
 ## Current gate
 
-### P6-03 / P6-04A isolated runtime compatibility contract — PENDING OPERATOR RESULT
+### P6-03 / P6-04A isolated runtime compatibility contract — UNRESOLVED AFTER HARNESS TIMEOUT
 
-Current harness:
+The first runtime harness attempt used one monolithic child process with a 90-second timeout. The child timed out before the parent could recover phase-level evidence. Because stdout/stderr were captured inside `subprocess.run()` and the timeout path did not surface partial child output, the run does not establish whether the stall occurred during:
 
-- `scripts/hermes_upgrade/v0225_isolated_cron_compat_contract_smoke.py`
+- `cron.jobs` import;
+- `load_jobs()` repair/preservation;
+- `cron.executions` import;
+- execution ledger initialization/writes;
+- SQLite verification.
 
-The gate is designed to run without a gateway process or provider traffic and to use only a disposable `HERMES_HOME`.
+The timeout therefore is classified as **HARNESS PHASE-LOCALIZATION FAILURE — P6 RUNTIME CONTRACT UNRESOLVED**, not as a P6-03 or P6-04A functional failure.
 
-It must prove:
+The v1 failure also exited before its normal production/candidate postcondition block. The child was constrained to a disposable `HERMES_HOME`, no gateway or external job was launched, and no provider calls were requested, but the failed run itself did not independently re-run the after-snapshots. Do not overstate its `PRODUCTION_CRON_STORE_TOUCHED=false` pre-run marker as a postcondition proof.
 
-- P6-03 preserves the exact pre-repair `jobs.json` bytes before a harmless automatic repair rewrite;
-- the recovery artifact is byte-for-byte identical to the original input;
-- P6-04A adds the nullable `error_class` schema field;
-- a failed disposable execution durably persists the expected deterministic class (`rate_limited` for the fixture);
-- a successful disposable execution retains `error_class = NULL`;
-- production static config and gateway PID identity remain unchanged;
-- no production cron job executes and the production cron store is untouched.
+Observer-hardened replacement:
 
-Do not mark this gate PASS until the operator output is captured and reconciled.
+- `scripts/hermes_upgrade/v0225_isolated_cron_compat_contract_smoke_v2.py`
+
+v2 changes only the observation method:
+
+- P6-03 and P6-04A run in separate disposable child processes and separate scratch homes;
+- each child prints flushed phase markers before and after imports and contract operations;
+- each child has a bounded 45-second timeout rather than widening the prior 90-second monolith;
+- timeout/failure output records the last completed phase;
+- production static config, production gateway PID identity, health, and candidate-source invariance are checked after both children even when either child fails;
+- no gateway, production cron job, model, memory, STT, or TTS provider call is authorized.
+
+Do not mark either P6 runtime sub-gate PASS until v2 operator output is captured and reconciled.
 
 ## Remaining qualification before cutover
 
@@ -118,39 +127,26 @@ The following work remains after the current P6 runtime gate:
 - approval/runtime behavior beyond session CRUD, without assuming source assertions equal runtime acceptance;
 - Memory/profile-home boundary and persistence checks using isolated state only unless broader access is explicitly authorized;
 - actual model-backed Chat behavior when live provider use is explicitly authorized, including session continuity, interruption/stop, and relevant long-session risk;
-- actual Voice/STT/TTS/PTT qualification when live STT/TTS calls are explicitly authorized; v6 proved only API authentication and local validation;
-- any remaining reported-issue relevance checks that intersect Orion, Memory, Voice, Chat, or Security;
-- pre-cutover backup/rollback evidence;
-- controlled production cutover only after explicit authorization;
-- all five production hard gates after cutover: Orion lifecycle/runtime, Memory, Voice, Chat/session, and Security/authorization.
-
-## Known qualification observations
-
-Two failed qualification attempts were harness/observation findings rather than accepted candidate failures:
-
-1. session/profile v1 timed out in a composite preflight identity-import subprocess before candidate launch;
-2. session/profile v2 launched the candidate but missed the 90-second HTTP readiness boundary; its production mutation watcher also incorrectly treated volatile runtime metadata as a mutation oracle.
-
-The corrected v3 harness removes those observer defects while retaining the 90-second startup acceptance boundary. The later startup diagnostic (8.285 s) and v3 session run (7.745 s) both started normally.
-
-These observations remain documented because recurrence matters for lifecycle qualification.
+- actual P4-04A STT/TTS round-trip and Orion voice behavior when live STT/TTS use is explicitly authorized;
+- production pre-cutover backup;
+- controlled cutover;
+- full five-hard-gate production requalification.
 
 ## Authorization boundary
 
-PR #81 remains **draft, pre-install, and fail-closed**.
+PR #81 remains draft and pre-install. Completed isolated sub-gates do not authorize:
 
-This status does not authorize:
+- `hermes update`;
+- production Hermes install/upgrade/cutover;
+- profile reset;
+- iai change;
+- provider/model change;
+- production config/credential copy into scratch;
+- live model/STT/TTS provider calls without separate approval;
+- `--force` gateway launch;
+- second Hermes dashboard/web process;
+- production memory/runtime mutation;
+- destructive database rewrite;
+- PR merge.
 
-- `hermes update` against production;
-- installing or cutting production over to v0.22.5;
-- changing the accepted `companion` profile;
-- changing iai, model/provider configuration, or credentials;
-- copying production config/credentials into scratch state;
-- persisting disposable API keys;
-- using `--force` for candidate launch;
-- launching a second Hermes dashboard/web process;
-- merging PR #81;
-- live model/STT/TTS calls without separate authorization;
-- removing rollback evidence.
-
-The next resume point is the operator result from `v0225_isolated_cron_compat_contract_smoke.py`.
+Production acceptance remains on Hermes v0.20.6 until all required hard gates pass and cutover is separately authorized.
