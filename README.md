@@ -26,6 +26,30 @@ Historical Docker/s6/JARVIS implementation records remain useful provenance but 
 
 ## Current status
 
+### Active Hermes v0.22.5 controlled migration — PRE-INSTALL QUALIFICATION
+
+PR #81 is the active controlled-migration path from the accepted production Hermes `0.20.6` / `v2026.8.27` / `5fc308a70719a83cccdbba4c0e39c23f5a8239d5` baseline toward exact upstream Hermes `v0.22.5` at `bf0203a794a07aac3ff764972ab9087baa4e4f4e`.
+
+Production has **not** been upgraded or cut over. The accepted `companion` runtime, iai ownership, model/provider configuration, and manual-off lifecycle remain authoritative.
+
+Qualification completed so far:
+
+- exact v0.22.5 source candidate + retained P4-04A/P6-03/P6-04A compatibility delta — **PASS**;
+- isolated standalone gateway contract v6 — **PASS WITH WINDOWS BIND-ENUMERATION LIMITATION**;
+- bounded startup timing diagnostic — **PASS**, HTTP-ready in **8.285 s**;
+- isolated session/profile resource contract v3 — **PASS**, HTTP-ready in **7.745 s**, Bearer auth + session create/get/patch/list/delete + scratch SQLite persistence/profile isolation proven with zero model/memory/STT/TTS provider calls.
+
+Current next gate:
+
+- isolated P6-03 exact pre-repair `jobs.json` preservation + P6-04A durable `error_class` runtime contract — **PENDING OPERATOR RESULT**.
+
+Canonical live status and resume point:
+
+- `docs/hermes/hermes-v0225-qualification-status.md`
+- `docs/hermes/hermes-v0225-controlled-migration.md`
+
+PR #81 remains draft, pre-install, and fail-closed. No blind `hermes update`, production cutover, profile reset, iai change, provider/model change, live model/STT/TTS qualification, second Hermes dashboard/web process, or PR merge is authorized by the completed sub-gates.
+
 ### Operator lifecycle + HUD launch-after-health — PASS / CLOSED (2026-10-29)
 
 The native Windows manual-off Start Orion / Stop Orion lifecycle, including the accepted HUD launch-after-health behavior, is live-accepted on the real Orion workstation.
@@ -361,11 +385,13 @@ Reference/code-donor fork. Reuse only proven patterns that still close a current
 
 ## Resume point
 
+- **Active engineering resume point: PR #81 Hermes v0.22.5 pre-install qualification.** Canonical status: `docs/hermes/hermes-v0225-qualification-status.md`.
+- Completed on the exact v0.22.5 candidate: source qualification; isolated gateway v6; startup diagnostic (8.285 s); session/profile v3 (7.745 s, authenticated session CRUD + durable scratch persistence/profile isolation).
+- Current pending result: `scripts/hermes_upgrade/v0225_isolated_cron_compat_contract_smoke.py` for P6-03 exact pre-repair preservation and P6-04A durable `error_class` runtime persistence. Do not mark it PASS until operator output is reconciled.
+- Production Hermes remains the accepted `0.20.6` / `v2026.8.27` / `5fc308a70719a83cccdbba4c0e39c23f5a8239d5` baseline; PR #81 does not authorize cutover.
 - **Operator lifecycle hardening and OR-LIFE-010 HUD launch-after-health are PASS / CLOSED.** Do not reopen the accepted ROCm 7.1, owned-descendant cleanup, or HUD ownership/reuse integration unless a material dependency/runtime change invalidates its evidence. Durable records: `docs/evidence/operator-lifecycle-acceptance-2026-10-28.md` and `docs/evidence/hud-launch-after-health-acceptance-2026-10-29.md`.
 - Orion is intentionally left **RUNNING** at HUD acceptance closure. Normal future operator use should continue through the installed Start Orion / Stop Orion desktop controls.
-- Before selecting the next broader roadmap outcome, refresh the live GitHub state for Phase 4 and Phase 6 rather than trusting the older checkpoint text below.
-- The Phase 6 foundation through P6-04A is already on `main`; this README's P6-05/PR #59 status was last verified 2026-10-10 and must be rechecked before action.
-- Phase 4 remains parked at the live voice acceptance gate unless its external/runtime conditions and current branch state are revalidated.
+- Phase 4 live voice and Phase 6 roadmap work remain separate from PR #81's migration qualification and must be revalidated from current GitHub/runtime state before action.
 - Persistent Goal Mode remains deferred and must not become a second autonomous runtime, scheduler, memory system, or approval path.
 
-Current shorthand: **operator lifecycle + HUD launch-after-health closed and live-accepted.** Phase 3 presentation foundation accepted; Phase 4 voice acceptance parked pending fresh state verification; Phase 5 vault-action/reconnect track closed through P5-03C; Phase 6 roadmap state requires a fresh GitHub check before continuation.
+Current shorthand: **production remains on accepted Hermes v0.20.6; PR #81 is actively qualifying exact v0.22.5 pre-install. Gateway/startup/session-resource isolation sub-gates have passed; P6-03/P6-04A isolated runtime evidence is the current pending operator result.**
