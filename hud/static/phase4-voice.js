@@ -258,7 +258,7 @@ if (
   function tryIssuePendingRunInterruption() {
     if (!pendingRunInterruption || stopButton.disabled) return false;
     pendingRunInterruption = false;
-    stopButton.click();
+    if (!stopButton.disabled) stopButton.click();
     return true;
   }
 
