@@ -25,6 +25,10 @@ import orion_hud_bridge as base
 
 VOICE_WRAPPER_VERSION = "p4-04-0.5"
 MAX_VOICE_REQUEST_BYTES = 6 * 1024 * 1024
+# The accepted Hermes audio gateway permits up to 16 MiB of synthesized audio.
+# Base64 expands that to about 21.4 MiB, so 24 MiB leaves bounded room for the
+# data-URL and JSON envelope without relaxing the ordinary HUD proxy limit.
+MAX_VOICE_RESPONSE_BYTES = 24 * 1024 * 1024
 MAX_TTS_TEXT_CHARS = 4000
 VOICE_STT_TIMEOUT_SECONDS = 30.0
 VOICE_TTS_TIMEOUT_SECONDS = 45.0
@@ -146,6 +150,42 @@ class Phase4VoiceHandler(base.OrionHandler):
             },
         )
 
+    def _request_voice_json(
+        self,
+        path: str,
+        *,
+        body: dict[str, Any],
+        timeout: float,
+    ) -> tuple[int, str, bytes]:
+        """Authenticated audio relay with a voice-only bounded response limit."""
+        if not self.state.api_key:
+            raise base.BridgeConfigError("Hermes API key is unavailable")
+
+        payload = json.dumps(body, separators=(",", ":")).encode("utf-8")
+        headers = {
+            "Accept": "application/json",
+            "Authorization": f"Bearer {self.state.api_key}",
+            "Content-Type": "application/json",
+            "Content-Length": str(len(payload)),
+        }
+        conn = http.client.HTTPConnection(
+            self.state.target.host,
+            self.state.target.port,
+            timeout=timeout,
+        )
+        try:
+            conn.request("POST", path, body=payload, headers=headers)
+            response = conn.getresponse()
+            content_type = response.getheader(
+                "Content-Type", "application/octet-stream"
+            )
+            data = response.read(MAX_VOICE_RESPONSE_BYTES + 1)
+            if len(data) > MAX_VOICE_RESPONSE_BYTES:
+                raise RuntimeError("Hermes audio response exceeded voice proxy limit")
+            return response.status, content_type, data
+        finally:
+            conn.close()
+
     def _proxy_voice_json(
         self,
         path: str,
@@ -154,8 +194,7 @@ class Phase4VoiceHandler(base.OrionHandler):
         timeout: float,
     ) -> None:
         try:
-            status, content_type, data = self.hermes.request(
-                "POST",
+            status, content_type, data = self._request_voice_json(
                 path,
                 body=body,
                 timeout=timeout,
