@@ -6,7 +6,7 @@ $ExpectedReleaseHead = "bf0203a794a07aac3ff764972ab9087baa4e4f4e"
 $HermesRoot = Join-Path $env:LOCALAPPDATA "hermes\hermes-agent"
 $GatewayPython = Join-Path $HermesRoot "venv\Scripts\python.exe"
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-$Transformer = Join-Path $PSScriptRoot "v0225_build_orion_compat.py"
+$Transformer = Join-Path $PSScriptRoot "v0225_build_orion_compat_runner.py"
 $AudioTransformer = Join-Path $PSScriptRoot "v0225_port_p4_audio.py"
 
 $ExpectedStatus = @(
