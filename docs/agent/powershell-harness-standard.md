@@ -50,6 +50,29 @@ $Branch = if ($LASTEXITCODE -eq 0 -and $Raw.Count -gt 0) {
 
 If a single-line result is required, validate the count instead of assuming it.
 
+### 2a. Treat machine-readable native output as a protocol
+
+Do not normalize away whitespace merely because the data came from a command-line program. Some native formats use leading spaces or fixed columns as part of their grammar.
+
+`git status --porcelain=v1` is a concrete Orion example:
+
+```text
+ M agent/monitoring/cron_health.py
+?? cron/error_classification.py
+```
+
+The leading space in the first record is meaningful. Generic `.Trim()`, Python `.strip()`, or equivalent normalization can turn that record into `M agent/...` and corrupt fixed-offset parsing.
+
+Rules:
+
+- only remove the exact record terminator (`CR`, `LF`, or `CRLF`) when the protocol permits it;
+- preserve leading and trailing spaces until the format-specific parser has consumed them;
+- prefer the producer's documented machine-readable mode (`--porcelain`, `--format`, JSON, etc.);
+- validate record length/shape before fixed-position slicing;
+- include at least one test/fixture whose first record begins with protocol-significant whitespace.
+
+This rule applies even when a Python helper or another language is used underneath a PowerShell harness. The safety boundary is the whole operator toolchain, not only the `.ps1` file.
+
 ### 3. Check native-command exit status immediately
 
 For `git`, `python`, `uv`, service-control utilities, and other native programs, capture or validate `$LASTEXITCODE` immediately after the command whose result matters. Do not allow another native command to overwrite it first.
@@ -119,6 +142,7 @@ Before giving an operator a PowerShell harness, the author/agent must review at 
 - native command emits one line;
 - native command emits multiple lines;
 - native command exits nonzero with or without output;
+- machine-readable output begins with meaningful whitespace;
 - expected file/property is absent;
 - expected branch is detached or empty;
 - expected port/process is already occupied;
@@ -176,6 +200,8 @@ if ($ExitCode -ne 0 -or $Lines.Count -ne 1) {
 $Head = ([string]$Lines[0]).Trim()
 ```
 
+Use this only for a protocol where surrounding whitespace is not meaningful, such as `git rev-parse HEAD`. Do not reuse it for fixed-column records such as `git status --porcelain`.
+
 ### Optional single line
 
 ```powershell
@@ -217,7 +243,9 @@ For example, after a null/array cardinality failure, review every occurrence of:
 
 - `.Count` on command expressions;
 - `.Trim()` on native-command output;
+- generic `.strip()`/whitespace normalization in helper languages that parse native output;
 - direct `[0]` indexing;
+- fixed-position parsing of machine-readable command output;
 - `Select-String` result assumptions;
 - JSON property access under StrictMode;
 - `$LASTEXITCODE` read after another native invocation;
