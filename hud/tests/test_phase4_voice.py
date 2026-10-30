@@ -140,21 +140,37 @@ class Phase4VoiceUnitTests(unittest.TestCase):
 
     def test_voice_turn_ignores_previous_assistant_and_aborts_inflight_tts(self):
         source = (HUD_ROOT / "static" / "phase4-voice.js").read_text(encoding="utf-8")
-        self.assertIn("previousBody: latestAssistantBody()", source)
+        self.assertIn("previousBody,", source)
         self.assertIn("body === voiceTurn.previousBody", source)
         self.assertIn("activeSpeechController.abort()", source)
         self.assertIn('error?.name === "AbortError"', source)
+        self.assertIn("function interruptSpeechAndRun() {\n    voiceTurn = null;", source)
 
-    def test_recording_is_session_bound_and_interruption_invalidates_old_voice_turn(self):
+    def test_recording_is_session_bound_and_microphone_acquisition_is_single_flight(self):
         source = (HUD_ROOT / "static" / "phase4-voice.js").read_text(encoding="utf-8")
         self.assertIn("let recordingSessionId = null", source)
+        self.assertIn("let microphonePending = false", source)
+        self.assertIn("if (microphonePending || transcriptionPending || pendingVoiceSubmission) return", source)
+        self.assertIn("microphonePending = true", source)
+        self.assertIn("voiceButton.disabled = !recorderIsActive()", source)
         self.assertIn("recordingSessionId = sessionId", source)
         self.assertIn("sessionStillSelected(boundSessionId)", source)
-        self.assertIn('submitTranscript(payload.transcript || "", sessionId)', source)
-        self.assertIn("function interruptSpeechAndRun() {\n    voiceTurn = null;", source)
-        self.assertIn("voiceTurn = speakReplies", source)
+        self.assertIn("queueTranscriptSubmission(payload.transcript || \"\", sessionId)", source)
         self.assertIn("SESSION CHANGED · TRANSCRIPT NOT SENT", source)
         self.assertIn("SESSION CHANGED · RECORDING DISCARDED", source)
+
+    def test_barge_in_retains_transcript_until_current_run_releases_controls(self):
+        source = (HUD_ROOT / "static" / "phase4-voice.js").read_text(encoding="utf-8")
+        self.assertIn("let pendingVoiceSubmission = null", source)
+        self.assertIn("function trySubmitPendingVoice()", source)
+        self.assertIn("if (sendButton.disabled || sessionSelect.disabled)", source)
+        self.assertIn("WAITING FOR PRIOR RUN TO STOP", source)
+        self.assertIn("composer.dispatchEvent(new Event(\"submit\"", source)
+        self.assertIn("if (!sendButton.disabled)", source)
+        self.assertIn("TRANSCRIPT READY · WAITING TO SUBMIT", source)
+        self.assertIn("pendingVoiceSubmission = null", source)
+        self.assertIn("voiceTurn = speakReplies", source)
+        self.assertIn("if (pendingVoiceSubmission && !sendButton.disabled)", source)
 
     def test_sentence_chunking_consumes_only_a_contiguous_prefix(self):
         source = (HUD_ROOT / "static" / "phase4-voice.js").read_text(encoding="utf-8")
@@ -163,6 +179,16 @@ class Phase4VoiceUnitTests(unittest.TestCase):
         self.assertIn("remaining = remaining.slice(advance)", source)
         self.assertIn("consumed += advance", source)
         self.assertNotIn("remainder.matchAll(sentencePattern)", source)
+
+    def test_speech_offsets_use_append_only_source_not_mutable_rendered_markdown(self):
+        source = (HUD_ROOT / "static" / "phase4-voice.js").read_text(encoding="utf-8")
+        self.assertIn('sourceText: ""', source)
+        self.assertIn("function updateVoiceSourceText(body)", source)
+        self.assertIn("current.startsWith(voiceTurn.sourceText)", source)
+        self.assertIn("voiceTurn.sourceText.slice(voiceTurn.queuedChars)", source)
+        self.assertIn("assistant.completed may later replace", source)
+        self.assertIn("function speechText(text)", source)
+        self.assertIn("replace(/\\*\\*([^*\\n]+)\\*\\*/g, \"$1\")", source)
 
     def test_source_has_no_new_runtime_or_shell_authority(self):
         source = (HUD_ROOT / "orion_phase4_voice_bridge.py").read_text(encoding="utf-8")
