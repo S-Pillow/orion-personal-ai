@@ -39,9 +39,9 @@ Qualification completed so far:
 - bounded startup timing diagnostic — **PASS**, HTTP-ready in **8.285 s**;
 - isolated session/profile resource contract v3 — **PASS**, HTTP-ready in **7.745 s**, Bearer auth + session create/get/patch/list/delete + scratch SQLite persistence/profile isolation proven with zero model/memory/STT/TTS provider calls.
 
-Current next gate:
+Current gate:
 
-- isolated P6-03 exact pre-repair `jobs.json` preservation + P6-04A durable `error_class` runtime contract — **PENDING OPERATOR RESULT**.
+- isolated P6-03 exact pre-repair `jobs.json` preservation + P6-04A durable `error_class` runtime contract — **UNRESOLVED AFTER HARNESS PHASE-LOCALIZATION FAILURE**. The first monolithic child timed out after 90 seconds without exposing enough phase evidence to classify either compatibility function as failed. Use only `scripts/hermes_upgrade/v0225_isolated_cron_compat_contract_smoke_v2.py` for the next bounded rerun; it separates the two contracts, emits flushed phase markers, and always runs production/candidate postconditions.
 
 Canonical live status and resume point:
 
@@ -387,11 +387,11 @@ Reference/code-donor fork. Reuse only proven patterns that still close a current
 
 - **Active engineering resume point: PR #81 Hermes v0.22.5 pre-install qualification.** Canonical status: `docs/hermes/hermes-v0225-qualification-status.md`.
 - Completed on the exact v0.22.5 candidate: source qualification; isolated gateway v6; startup diagnostic (8.285 s); session/profile v3 (7.745 s, authenticated session CRUD + durable scratch persistence/profile isolation).
-- Current pending result: `scripts/hermes_upgrade/v0225_isolated_cron_compat_contract_smoke.py` for P6-03 exact pre-repair preservation and P6-04A durable `error_class` runtime persistence. Do not mark it PASS until operator output is reconciled.
+- Current unresolved gate: P6-03/P6-04A isolated runtime contract. The v1 monolithic child timed out without phase localization; rerun only with `scripts/hermes_upgrade/v0225_isolated_cron_compat_contract_smoke_v2.py` and reconcile its phase evidence before assigning PASS/FAIL to either sub-gate.
 - Production Hermes remains the accepted `0.20.6` / `v2026.8.27` / `5fc308a70719a83cccdbba4c0e39c23f5a8239d5` baseline; PR #81 does not authorize cutover.
 - **Operator lifecycle hardening and OR-LIFE-010 HUD launch-after-health are PASS / CLOSED.** Do not reopen the accepted ROCm 7.1, owned-descendant cleanup, or HUD ownership/reuse integration unless a material dependency/runtime change invalidates its evidence. Durable records: `docs/evidence/operator-lifecycle-acceptance-2026-10-28.md` and `docs/evidence/hud-launch-after-health-acceptance-2026-10-29.md`.
 - Orion is intentionally left **RUNNING** at HUD acceptance closure. Normal future operator use should continue through the installed Start Orion / Stop Orion desktop controls.
 - Phase 4 live voice and Phase 6 roadmap work remain separate from PR #81's migration qualification and must be revalidated from current GitHub/runtime state before action.
 - Persistent Goal Mode remains deferred and must not become a second autonomous runtime, scheduler, memory system, or approval path.
 
-Current shorthand: **production remains on accepted Hermes v0.20.6; PR #81 is actively qualifying exact v0.22.5 pre-install. Gateway/startup/session-resource isolation sub-gates have passed; P6-03/P6-04A isolated runtime evidence is the current pending operator result.**
+Current shorthand: **production remains on accepted Hermes v0.20.6; PR #81 is actively qualifying exact v0.22.5 pre-install. Gateway/startup/session-resource isolation sub-gates have passed; the P6-03/P6-04A isolated runtime contract is unresolved pending observer-hardened v2 evidence.**
