@@ -132,6 +132,8 @@ class Phase4VoiceUnitTests(unittest.TestCase):
         self.assertIn("composerActions.insertBefore(speakButton, sendButton)", source)
         self.assertNotIn("composer.insertBefore(voiceButton, sendButton)", source)
         self.assertIn(".composer-actions.phase4-voice-actions", css)
+        self.assertIn(".foreground-workspace:has(> .phase4-voice-status)", css)
+        self.assertIn("grid-template-rows: minmax(0, 1fr) 78px auto", css)
         self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr))", css)
         self.assertNotIn("minmax(9.5rem, auto)", css)
         self.assertNotIn("minmax(11.25rem, auto)", css)
@@ -142,6 +144,25 @@ class Phase4VoiceUnitTests(unittest.TestCase):
         self.assertIn("body === voiceTurn.previousBody", source)
         self.assertIn("activeSpeechController.abort()", source)
         self.assertIn('error?.name === "AbortError"', source)
+
+    def test_recording_is_session_bound_and_interruption_invalidates_old_voice_turn(self):
+        source = (HUD_ROOT / "static" / "phase4-voice.js").read_text(encoding="utf-8")
+        self.assertIn("let recordingSessionId = null", source)
+        self.assertIn("recordingSessionId = sessionId", source)
+        self.assertIn("sessionStillSelected(boundSessionId)", source)
+        self.assertIn('submitTranscript(payload.transcript || "", sessionId)', source)
+        self.assertIn("function interruptSpeechAndRun() {\n    voiceTurn = null;", source)
+        self.assertIn("voiceTurn = speakReplies", source)
+        self.assertIn("SESSION CHANGED · TRANSCRIPT NOT SENT", source)
+        self.assertIn("SESSION CHANGED · RECORDING DISCARDED", source)
+
+    def test_sentence_chunking_consumes_only_a_contiguous_prefix(self):
+        source = (HUD_ROOT / "static" / "phase4-voice.js").read_text(encoding="utf-8")
+        self.assertIn("function extractCompletedSpeechPrefix(text)", source)
+        self.assertIn("remaining.match(/^([\\s\\S]*?", source)
+        self.assertIn("remaining = remaining.slice(advance)", source)
+        self.assertIn("consumed += advance", source)
+        self.assertNotIn("remainder.matchAll(sentencePattern)", source)
 
     def test_source_has_no_new_runtime_or_shell_authority(self):
         source = (HUD_ROOT / "orion_phase4_voice_bridge.py").read_text(encoding="utf-8")
