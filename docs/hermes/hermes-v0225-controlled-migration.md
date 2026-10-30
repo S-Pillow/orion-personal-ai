@@ -99,11 +99,33 @@ Read-only inventory on 2026-10-30 proved:
 
 ## Compatibility disposition
 
-### Retire: P4-04A Hermes audio gateway patch
+### Port: P4-04A Hermes audio gateway bridge
 
-Hermes v0.22.5 natively exposes authenticated `/api/audio/transcribe` and
-`/api/audio/speak` gateway routes and pins `edge-tts==7.3.1`. The old Orion audio gateway
-backport must not be reapplied to the new baseline.
+Disposable exact-release qualification corrected an earlier assumption: Hermes v0.22.5
+contains native `/api/audio/transcribe` and `/api/audio/speak` handlers in the Hermes
+**dashboard/web-server** surface (`hermes_cli/web_routers/audio.py`), but the authenticated
+API-server gateway Orion uses on port 8642 still declares `audio_api: false` and exposes no
+corresponding audio routes in `gateway/platforms/api_server.py`.
+
+Orion will not add a second Hermes dashboard/web process merely to obtain voice relay. The
+accepted one-gateway architecture remains authoritative. Therefore P4-04A is still a
+required migration port.
+
+The v0.22.5 port is exact-commit and narrow:
+
+- preserve the existing Bearer-authenticated 8642 API-server boundary;
+- add bounded `POST /api/audio/transcribe` and `POST /api/audio/speak` routes;
+- reuse v0.22.5 `transcribe_recording()` and `text_to_speech_tool()` implementations;
+- preserve multiplex profile scoping through the API server's existing `_profile_scope`;
+- preserve bounded MIME/input/output limits, temporary-file cleanup, media-path validation,
+  and redacted API errors;
+- set `audio_api: true` while keeping `realtime_voice: false`;
+- do not add another listener, voice provider, hotword service, or browser-side provider
+  credential path.
+
+Hermes v0.22.5's dependency ownership still improves this path because its source and lock
+pin `edge-tts==7.3.1`, replacing the obsolete `7.2.7` dependency that currently causes the
+Edge 403 failure.
 
 ### Retire: P5-03A2 session-chat approval compatibility patch
 
@@ -160,17 +182,18 @@ Successful executions retain `error_class = NULL`.
 
 ## Migration gates
 
-1. **Disposable source candidate** — clone exact v0.22.5, apply only the two surviving
-   Orion compatibility ports, compile, diff-check, verify native audio/approval and
+1. **Disposable source candidate** — clone exact v0.22.5, confirm the stock 8642 API-server
+   audio gap and separate dashboard audio implementation, apply the three surviving Orion
+   ports (P4-04A, P6-03, P6-04A), compile, diff-check, verify approval transport and
    `edge-tts==7.3.1`, and prove installed Hermes remains byte-for-byte unchanged.
 2. **Reported-issue relevance qualification** — exercise the exact COMPANION profile and
    Windows topology against the v0.22.5 issues that could cross into Orion, Chat, Memory,
    Voice, or Security. Non-core defects may be recorded as accepted limitations.
 3. **Disposable runtime qualification** — create an isolated v0.22.5 environment and
    prove the five hard gates as far as isolation permits: Hermes/API health, session/chat
-   contracts, memory/profile-home boundaries, native audio, approval/security contracts,
-   P6-03 repair preservation, P6-04A classification, and safe handling of the current empty
-   execution schema.
+   contracts, memory/profile-home boundaries, ported 8642 audio round-trip,
+   approval/security contracts, P6-03 repair preservation, P6-04A classification, and safe
+   handling of the current empty execution schema.
 4. **Pre-cutover backup** — preserve the entire accepted dirty Hermes source state, four
    sidecars, dependency ownership metadata, COMPANION profile/runtime state, memory/vault
    evidence, and database files required for rollback.
@@ -181,9 +204,10 @@ Successful executions retain `error_class = NULL`.
 6. **Production hard-gate requalification** — Orion lifecycle/runtime, Memory, Voice,
    Chat/session behavior, and Security all must pass on Windows. Cron/LSP/Desktop failures
    do not block unless evidence shows they cross one of those five boundaries.
-7. **Closure** — only after all five production hard gates pass may the old P4/P5/P6-04
-   compatibility patches be treated as retired in production and Phase 4 resume toward
-   merge.
+7. **Closure** — only after all five production hard gates pass may P5-03A2 and the old
+   P6-04 implementation be treated as retired in production. P4-04A remains a qualified
+   compatibility port until upstream exposes the required audio surface on the 8642 API
+   server itself or Orion's architecture is separately changed and accepted.
 
 ## Current authorization boundary
 
