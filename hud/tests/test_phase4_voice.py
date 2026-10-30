@@ -208,6 +208,47 @@ class Phase4VoiceUnitTests(unittest.TestCase):
         self.assertIn("while (remaining.length > MAX_TTS_TEXT_CHARS)", source)
         self.assertIn("for (const clean of parts)", source)
 
+    def test_voice_audio_response_limit_is_separate_from_base_proxy_limit(self):
+        source = (HUD_ROOT / "orion_phase4_voice_bridge.py").read_text(encoding="utf-8")
+        self.assertEqual(bridge.MAX_PROXY_BYTES, 2 * 1024 * 1024)
+        self.assertEqual(voice.MAX_VOICE_RESPONSE_BYTES, 24 * 1024 * 1024)
+        self.assertGreater(voice.MAX_VOICE_RESPONSE_BYTES, bridge.MAX_PROXY_BYTES)
+        self.assertIn("response.read(MAX_VOICE_RESPONSE_BYTES + 1)", source)
+        self.assertIn("Hermes audio response exceeded voice proxy limit", source)
+        self.assertIn('"GET", "/v1/capabilities", timeout=5.0', source)
+
+    def test_voice_audio_request_accepts_response_larger_than_base_proxy_limit(self):
+        data = b"x" * (bridge.MAX_PROXY_BYTES + 1024)
+        response = mock.Mock()
+        response.status = 200
+        response.getheader.return_value = "application/json"
+        response.read.return_value = data
+
+        conn = mock.Mock()
+        conn.getresponse.return_value = response
+
+        handler = mock.Mock()
+        handler.state = bridge.BridgeState(
+            target=bridge.HermesTarget("127.0.0.1", 8642),
+            api_key="test-secret",
+            ui_cookie="test-cookie",
+            static_root=HUD_ROOT / "static",
+        )
+
+        with mock.patch.object(voice.http.client, "HTTPConnection", return_value=conn):
+            status, content_type, returned = voice.Phase4VoiceHandler._request_voice_json(
+                handler,
+                "/api/audio/speak",
+                body={"text": "hello"},
+                timeout=voice.VOICE_TTS_TIMEOUT_SECONDS,
+            )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(content_type, "application/json")
+        self.assertEqual(returned, data)
+        response.read.assert_called_once_with(voice.MAX_VOICE_RESPONSE_BYTES + 1)
+        conn.close.assert_called_once()
+
     def test_source_has_no_new_runtime_or_shell_authority(self):
         source = (HUD_ROOT / "orion_phase4_voice_bridge.py").read_text(encoding="utf-8")
         forbidden = (
@@ -319,14 +360,17 @@ class Phase4VoiceIntegrationTests(unittest.TestCase):
 
     def test_voice_routes_use_bounded_extended_timeouts(self):
         seen: dict[str, float | None] = {}
-        original = bridge.HermesClient.request
+        original = voice.Phase4VoiceHandler._request_voice_json
 
-        def wrapped(client, method, path, **kwargs):
-            if path in {"/api/audio/transcribe", "/api/audio/speak"}:
-                seen[path] = kwargs.get("timeout")
-            return original(client, method, path, **kwargs)
+        def wrapped(handler, path, *, body, timeout):
+            seen[path] = timeout
+            return original(handler, path, body=body, timeout=timeout)
 
-        with mock.patch.object(bridge.HermesClient, "request", new=wrapped):
+        with mock.patch.object(
+            voice.Phase4VoiceHandler,
+            "_request_voice_json",
+            new=wrapped,
+        ):
             status, _, _ = self.request(
                 "POST",
                 "/api/orion/voice/transcribe",
