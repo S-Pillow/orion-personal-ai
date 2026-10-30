@@ -1,3 +1,0 @@
-Current hardened isolated gateway smoke head after security correction and circular-import review: 892c871fa04d6b3c88d8bff9ae96dd58dfc5f6dd
-
-The stable operator entry point is scripts/hermes_upgrade/v0225_isolated_gateway_contract_smoke.py. It contains only safe shared helpers and lazily delegates to v0225_isolated_gateway_contract_smoke_v2.py.
