@@ -1,11 +1,13 @@
 "use strict";
 
 const MAX_RECORDING_MS = 20000;
+const MAX_TTS_TEXT_CHARS = 4000;
 const MIME_CANDIDATES = [
   "audio/webm;codecs=opus",
   "audio/webm",
   "audio/ogg;codecs=opus",
 ];
+const CHAT_STREAM_PATH_RE = /^\/api\/orion\/sessions\/[^/]+\/chat\/stream$/;
 
 const composer = document.getElementById("composer");
 const messageInput = document.getElementById("messageInput");
@@ -77,6 +79,108 @@ if (
     status.textContent = detail ? `VOICE · ${text} · ${detail}` : `VOICE · ${text}`;
     status.dataset.voiceState = text.toLowerCase().replaceAll(" ", "_");
   }
+
+  function parseVoiceSseFrame(frame) {
+    let eventName = "";
+    const dataLines = [];
+    for (const line of String(frame || "").split(/\r?\n/)) {
+      if (line.startsWith("event:")) eventName = line.slice(6).trim();
+      else if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart());
+    }
+    if (!dataLines.length) return null;
+    try {
+      const data = JSON.parse(dataLines.join("\n"));
+      return { event: eventName || data?.event || "message", data };
+    } catch {
+      return null;
+    }
+  }
+
+  function observeAssistantStreamFrame(frame) {
+    if (!voiceTurn) return;
+    const parsed = parseVoiceSseFrame(frame);
+    if (!parsed) return;
+
+    if (parsed.event === "assistant.delta") {
+      const delta = String(parsed.data?.delta || "");
+      if (!delta) return;
+      voiceTurn.sourceText += delta;
+      queueCompletedSpeech();
+      return;
+    }
+
+    if (parsed.event === "assistant.completed") {
+      const content = typeof parsed.data?.content === "string"
+        ? parsed.data.content
+        : "";
+      // Most Hermes streams provide all source text through assistant.delta.
+      // Use completed content only when no deltas were observed, or when it is
+      // a strict append-compatible completion of the captured source.
+      if (!voiceTurn.sourceText && content) voiceTurn.sourceText = content;
+      else if (content.startsWith(voiceTurn.sourceText)) voiceTurn.sourceText = content;
+      queueCompletedSpeech();
+    }
+  }
+
+  function requestTargetsChatStream(input, options = {}) {
+    const request = input instanceof Request ? input : null;
+    const method = String(options.method || request?.method || "GET").toUpperCase();
+    if (method !== "POST") return false;
+    try {
+      const rawUrl = request?.url || String(input || "");
+      const url = new URL(rawUrl, window.location.href);
+      return url.origin === window.location.origin && CHAT_STREAM_PATH_RE.test(url.pathname);
+    } catch {
+      return false;
+    }
+  }
+
+  function wrapChatStreamResponse(response) {
+    if (!response.body || typeof TransformStream !== "function") return response;
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    function consumeFrames(final = false) {
+      let splitAt;
+      while ((splitAt = buffer.search(/\r?\n\r?\n/)) >= 0) {
+        const match = buffer.match(/\r?\n\r?\n/);
+        const delimiterLength = match ? match[0].length : 2;
+        const frame = buffer.slice(0, splitAt);
+        buffer = buffer.slice(splitAt + delimiterLength);
+        observeAssistantStreamFrame(frame);
+      }
+      if (final && buffer.trim()) {
+        observeAssistantStreamFrame(buffer);
+        buffer = "";
+      }
+    }
+
+    const observer = new TransformStream({
+      transform(chunk, controller) {
+        buffer += decoder.decode(chunk, { stream: true });
+        consumeFrames(false);
+        controller.enqueue(chunk);
+      },
+      flush() {
+        buffer += decoder.decode();
+        consumeFrames(true);
+      },
+    });
+
+    return new Response(response.body.pipeThrough(observer), {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    });
+  }
+
+  const nativeFetch = window.fetch.bind(window);
+  window.fetch = async (input, options = {}) => {
+    const response = await nativeFetch(input, options);
+    if (!requestTargetsChatStream(input, options)) return response;
+    return wrapChatStreamResponse(response);
+  };
 
   async function jsonApi(path, options = {}) {
     const response = await fetch(path, {
@@ -165,11 +269,6 @@ if (
     });
   }
 
-  function latestAssistantBody() {
-    const nodes = transcript.querySelectorAll(".message.assistant .message-body");
-    return nodes.length ? nodes[nodes.length - 1] : null;
-  }
-
   function discardPendingSubmission(detail) {
     pendingVoiceSubmission = null;
     submittingPendingVoice = false;
@@ -192,7 +291,6 @@ if (
     }
 
     submittingPendingVoice = true;
-    const previousBody = latestAssistantBody();
     messageInput.value = pending.text;
     messageInput.dispatchEvent(new Event("input", { bubbles: true }));
     composer.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
@@ -210,8 +308,6 @@ if (
     submittingPendingVoice = false;
     voiceTurn = speakReplies
       ? {
-          body: null,
-          previousBody,
           sourceText: "",
           queuedChars: 0,
           finalFlushed: false,
@@ -384,19 +480,35 @@ if (
       .trim();
   }
 
+  function splitSpeechForTts(text) {
+    let remaining = speechText(text);
+    const parts = [];
+    while (remaining.length > MAX_TTS_TEXT_CHARS) {
+      let cut = remaining.lastIndexOf(" ", MAX_TTS_TEXT_CHARS);
+      if (cut <= 0) cut = MAX_TTS_TEXT_CHARS;
+      const part = remaining.slice(0, cut).trim();
+      if (part) parts.push(part);
+      remaining = remaining.slice(cut).trimStart();
+    }
+    if (remaining) parts.push(remaining);
+    return parts;
+  }
+
   function enqueueSpeech(text) {
-    const clean = speechText(text);
-    if (!clean || !speakReplies) return;
+    const parts = splitSpeechForTts(text);
+    if (!parts.length || !speakReplies) return;
     const epoch = speechEpoch;
-    speechQueue = speechQueue
-      .then(() => {
-        if (!speakReplies || epoch !== speechEpoch) return undefined;
-        return playSpeech(clean);
-      })
-      .catch((error) => {
-        if (epoch !== speechEpoch || error?.name === "AbortError") return;
-        setStatus("PUSH TO TALK", `TTS FAILED · ${error.message}`);
-      });
+    for (const clean of parts) {
+      speechQueue = speechQueue
+        .then(() => {
+          if (!speakReplies || epoch !== speechEpoch) return undefined;
+          return playSpeech(clean);
+        })
+        .catch((error) => {
+          if (epoch !== speechEpoch || error?.name === "AbortError") return;
+          setStatus("PUSH TO TALK", `TTS FAILED · ${error.message}`);
+        });
+    }
   }
 
   function extractCompletedSpeechPrefix(text) {
@@ -418,36 +530,8 @@ if (
     return { chunks: speechChunks, consumed };
   }
 
-  function updateVoiceSourceText(body) {
-    const current = String(body?.textContent || "");
-    if (!voiceTurn) return;
-    if (!voiceTurn.sourceText || current.startsWith(voiceTurn.sourceText)) {
-      voiceTurn.sourceText = current;
-    }
-  }
-
   function queueCompletedSpeech() {
     if (!voiceTurn || !speakReplies) return;
-    const body = latestAssistantBody();
-    if (!body) return;
-    if (!voiceTurn.body) {
-      if (body === voiceTurn.previousBody) return;
-      voiceTurn.body = body;
-      voiceTurn.sourceText = String(body.textContent || "");
-      voiceTurn.queuedChars = 0;
-      voiceTurn.finalFlushed = false;
-    } else if (voiceTurn.body !== body) {
-      voiceTurn.body = body;
-      voiceTurn.sourceText = String(body.textContent || "");
-      voiceTurn.queuedChars = 0;
-      voiceTurn.finalFlushed = false;
-    } else {
-      // Streaming appends raw text. assistant.completed may later replace the
-      // same body's DOM with rendered Markdown. Only append-only growth is
-      // adopted, so speech offsets remain anchored to the stable raw stream.
-      updateVoiceSourceText(body);
-    }
-
     const remainder = voiceTurn.sourceText.slice(voiceTurn.queuedChars);
     if (!remainder) return;
     const completed = extractCompletedSpeechPrefix(remainder);
@@ -457,32 +541,12 @@ if (
 
   function flushFinalSpeech() {
     if (!voiceTurn || voiceTurn.finalFlushed) return;
-    let body = voiceTurn.body;
-    if (!body) {
-      const latest = latestAssistantBody();
-      if (!latest || latest === voiceTurn.previousBody) {
-        voiceTurn.finalFlushed = true;
-        voiceTurn = null;
-        setStatus("PUSH TO TALK", "WAKE OFF");
-        return;
-      }
-      body = latest;
-      voiceTurn.body = body;
-      voiceTurn.sourceText = String(body.textContent || "");
-      voiceTurn.queuedChars = 0;
-    } else {
-      updateVoiceSourceText(body);
-    }
-
     const remainder = voiceTurn.sourceText.slice(voiceTurn.queuedChars).trim();
     if (remainder) enqueueSpeech(remainder);
     voiceTurn.finalFlushed = true;
     voiceTurn = null;
     setStatus("PUSH TO TALK", "WAKE OFF");
   }
-
-  const transcriptObserver = new MutationObserver(() => queueCompletedSpeech());
-  transcriptObserver.observe(transcript, { childList: true, subtree: true, characterData: true });
 
   const sendObserver = new MutationObserver(() => {
     if (pendingVoiceSubmission && !sendButton.disabled) {
@@ -519,6 +583,7 @@ if (
     pendingVoiceSubmission = null;
     voiceTurn = null;
     stopSpeechPlayback();
+    window.fetch = nativeFetch;
   });
 
   jsonApi("/api/orion/voice/status")
