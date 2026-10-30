@@ -59,6 +59,10 @@ if (
   let mediaStream = null;
   let recorder = null;
   let recordingSessionId = null;
+  let microphonePending = false;
+  let transcriptionPending = false;
+  let pendingVoiceSubmission = null;
+  let submittingPendingVoice = false;
   let chunks = [];
   let stopTimer = null;
   let speakReplies = true;
@@ -98,6 +102,18 @@ if (
     return Boolean(sessionId && sessionSelect.value === sessionId);
   }
 
+  function recorderIsActive() {
+    return Boolean(recorder && recorder.state !== "inactive");
+  }
+
+  function syncVoiceButtonAvailability() {
+    voiceButton.disabled = !recorderIsActive() && (
+      microphonePending ||
+      transcriptionPending ||
+      Boolean(pendingVoiceSubmission)
+    );
+  }
+
   function releaseMicrophone() {
     if (stopTimer) {
       clearTimeout(stopTimer);
@@ -109,9 +125,11 @@ if (
     }
     recorder = null;
     recordingSessionId = null;
+    microphonePending = false;
     chunks = [];
     voiceButton.textContent = "PUSH TO TALK";
     voiceButton.setAttribute("aria-pressed", "false");
+    syncVoiceButtonAvailability();
   }
 
   function stopSpeechPlayback() {
@@ -147,7 +165,64 @@ if (
     });
   }
 
-  function submitTranscript(text, sessionId) {
+  function latestAssistantBody() {
+    const nodes = transcript.querySelectorAll(".message.assistant .message-body");
+    return nodes.length ? nodes[nodes.length - 1] : null;
+  }
+
+  function discardPendingSubmission(detail) {
+    pendingVoiceSubmission = null;
+    submittingPendingVoice = false;
+    syncVoiceButtonAvailability();
+    setStatus("PUSH TO TALK", detail);
+  }
+
+  function trySubmitPendingVoice() {
+    if (!pendingVoiceSubmission || submittingPendingVoice) return false;
+    const pending = pendingVoiceSubmission;
+
+    if (!sessionStillSelected(pending.sessionId)) {
+      discardPendingSubmission("SESSION CHANGED · TRANSCRIPT NOT SENT · WAKE OFF");
+      return false;
+    }
+
+    if (sendButton.disabled || sessionSelect.disabled) {
+      setStatus("CONVERSATION", "WAITING FOR PRIOR RUN TO STOP · WAKE OFF");
+      return false;
+    }
+
+    submittingPendingVoice = true;
+    const previousBody = latestAssistantBody();
+    messageInput.value = pending.text;
+    messageInput.dispatchEvent(new Event("input", { bubbles: true }));
+    composer.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+
+    // app.js synchronously disables Send before awaiting the stream fetch when
+    // a turn is accepted. If it remains enabled, keep the transcript pending
+    // rather than claiming that the message was sent.
+    if (!sendButton.disabled) {
+      submittingPendingVoice = false;
+      setStatus("CONVERSATION", "TRANSCRIPT READY · WAITING TO SUBMIT · WAKE OFF");
+      return false;
+    }
+
+    pendingVoiceSubmission = null;
+    submittingPendingVoice = false;
+    voiceTurn = speakReplies
+      ? {
+          body: null,
+          previousBody,
+          sourceText: "",
+          queuedChars: 0,
+          finalFlushed: false,
+        }
+      : null;
+    syncVoiceButtonAvailability();
+    setStatus("CONVERSATION", "TRANSCRIPT SENT · WAKE OFF");
+    return true;
+  }
+
+  function queueTranscriptSubmission(text, sessionId) {
     if (!sessionStillSelected(sessionId)) {
       setStatus("PUSH TO TALK", "SESSION CHANGED · TRANSCRIPT NOT SENT · WAKE OFF");
       return;
@@ -157,18 +232,9 @@ if (
       setStatus("PUSH TO TALK", "NO SPEECH DETECTED · WAKE OFF");
       return;
     }
-    messageInput.value = clean;
-    messageInput.dispatchEvent(new Event("input", { bubbles: true }));
-    voiceTurn = speakReplies
-      ? {
-          body: null,
-          previousBody: latestAssistantBody(),
-          queuedChars: 0,
-          finalFlushed: false,
-        }
-      : null;
-    composer.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-    setStatus("CONVERSATION", "TRANSCRIPT SENT · WAKE OFF");
+    pendingVoiceSubmission = { text: clean, sessionId };
+    syncVoiceButtonAvailability();
+    trySubmitPendingVoice();
   }
 
   async function transcribe(blob, sessionId) {
@@ -178,14 +244,20 @@ if (
     }
     setStatus("CONVERSATION", "TRANSCRIBING · WAKE OFF");
     const dataUrl = await blobToDataUrl(blob);
+    if (!sessionStillSelected(sessionId)) {
+      setStatus("PUSH TO TALK", "SESSION CHANGED · RECORDING DISCARDED · WAKE OFF");
+      return;
+    }
     const payload = await jsonApi("/api/orion/voice/transcribe", {
       method: "POST",
       body: JSON.stringify({ data_url: dataUrl, mime_type: blob.type || "audio/webm" }),
     });
-    submitTranscript(payload.transcript || "", sessionId);
+    queueTranscriptSubmission(payload.transcript || "", sessionId);
   }
 
   async function startRecording() {
+    if (microphonePending || transcriptionPending || pendingVoiceSubmission) return;
+
     const sessionId = sessionSelect.value;
     if (!sessionId) {
       setStatus("PUSH TO TALK", "SELECT OR CREATE A SESSION");
@@ -198,14 +270,21 @@ if (
 
     interruptSpeechAndRun();
     recordingSessionId = sessionId;
+    microphonePending = true;
+    syncVoiceButtonAvailability();
+    setStatus("CONVERSATION", "REQUESTING MICROPHONE · WAKE OFF");
     const mimeType = supportedMimeType();
+
     try {
-      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const acquiredStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       if (!sessionStillSelected(sessionId)) {
+        for (const track of acquiredStream.getTracks()) track.stop();
         releaseMicrophone();
         setStatus("PUSH TO TALK", "SESSION CHANGED · RECORDING CANCELLED · WAKE OFF");
         return;
       }
+
+      mediaStream = acquiredStream;
       recorder = mimeType
         ? new MediaRecorder(mediaStream, { mimeType })
         : new MediaRecorder(mediaStream);
@@ -226,13 +305,21 @@ if (
           setStatus("PUSH TO TALK", "EMPTY RECORDING · WAKE OFF");
           return;
         }
+
+        transcriptionPending = true;
+        syncVoiceButtonAvailability();
         try {
           await transcribe(blob, boundSessionId);
         } catch (error) {
           setStatus("PUSH TO TALK", `TRANSCRIPTION FAILED · ${error.message}`);
+        } finally {
+          transcriptionPending = false;
+          syncVoiceButtonAvailability();
         }
       }, { once: true });
       recorder.start();
+      microphonePending = false;
+      syncVoiceButtonAvailability();
       voiceButton.textContent = "STOP LISTENING";
       voiceButton.setAttribute("aria-pressed", "true");
       setStatus("CONVERSATION", "LISTENING · WAKE OFF");
@@ -244,7 +331,7 @@ if (
   }
 
   function stopRecording(reason = "TRANSCRIBING") {
-    if (!recorder || recorder.state === "inactive") return;
+    if (!recorderIsActive()) return;
     if (stopTimer) {
       clearTimeout(stopTimer);
       stopTimer = null;
@@ -287,8 +374,18 @@ if (
     }
   }
 
+  function speechText(text) {
+    return String(text || "")
+      .replace(/^#{2,3}\s+/gm, "")
+      .replace(/^[-*]\s+/gm, "")
+      .replace(/^\d+\.\s+/gm, "")
+      .replace(/\*\*([^*\n]+)\*\*/g, "$1")
+      .replace(/`([^`\n]+)`/g, "$1")
+      .trim();
+  }
+
   function enqueueSpeech(text) {
-    const clean = String(text || "").trim();
+    const clean = speechText(text);
     if (!clean || !speakReplies) return;
     const epoch = speechEpoch;
     speechQueue = speechQueue
@@ -300,11 +397,6 @@ if (
         if (epoch !== speechEpoch || error?.name === "AbortError") return;
         setStatus("PUSH TO TALK", `TTS FAILED · ${error.message}`);
       });
-  }
-
-  function latestAssistantBody() {
-    const nodes = transcript.querySelectorAll(".message.assistant .message-body");
-    return nodes.length ? nodes[nodes.length - 1] : null;
   }
 
   function extractCompletedSpeechPrefix(text) {
@@ -326,6 +418,14 @@ if (
     return { chunks: speechChunks, consumed };
   }
 
+  function updateVoiceSourceText(body) {
+    const current = String(body?.textContent || "");
+    if (!voiceTurn) return;
+    if (!voiceTurn.sourceText || current.startsWith(voiceTurn.sourceText)) {
+      voiceTurn.sourceText = current;
+    }
+  }
+
   function queueCompletedSpeech() {
     if (!voiceTurn || !speakReplies) return;
     const body = latestAssistantBody();
@@ -333,17 +433,23 @@ if (
     if (!voiceTurn.body) {
       if (body === voiceTurn.previousBody) return;
       voiceTurn.body = body;
+      voiceTurn.sourceText = String(body.textContent || "");
       voiceTurn.queuedChars = 0;
       voiceTurn.finalFlushed = false;
     } else if (voiceTurn.body !== body) {
       voiceTurn.body = body;
+      voiceTurn.sourceText = String(body.textContent || "");
       voiceTurn.queuedChars = 0;
       voiceTurn.finalFlushed = false;
+    } else {
+      // Streaming appends raw text. assistant.completed may later replace the
+      // same body's DOM with rendered Markdown. Only append-only growth is
+      // adopted, so speech offsets remain anchored to the stable raw stream.
+      updateVoiceSourceText(body);
     }
-    const text = String(body.textContent || "");
-    const remainder = text.slice(voiceTurn.queuedChars);
-    if (!remainder) return;
 
+    const remainder = voiceTurn.sourceText.slice(voiceTurn.queuedChars);
+    if (!remainder) return;
     const completed = extractCompletedSpeechPrefix(remainder);
     for (const chunk of completed.chunks) enqueueSpeech(chunk);
     if (completed.consumed) voiceTurn.queuedChars += completed.consumed;
@@ -362,10 +468,13 @@ if (
       }
       body = latest;
       voiceTurn.body = body;
+      voiceTurn.sourceText = String(body.textContent || "");
       voiceTurn.queuedChars = 0;
+    } else {
+      updateVoiceSourceText(body);
     }
-    const text = String(body.textContent || "");
-    const remainder = text.slice(voiceTurn.queuedChars).trim();
+
+    const remainder = voiceTurn.sourceText.slice(voiceTurn.queuedChars).trim();
     if (remainder) enqueueSpeech(remainder);
     voiceTurn.finalFlushed = true;
     voiceTurn = null;
@@ -376,12 +485,15 @@ if (
   transcriptObserver.observe(transcript, { childList: true, subtree: true, characterData: true });
 
   const sendObserver = new MutationObserver(() => {
+    if (pendingVoiceSubmission && !sendButton.disabled) {
+      trySubmitPendingVoice();
+    }
     if (!sendButton.disabled && voiceTurn) flushFinalSpeech();
   });
   sendObserver.observe(sendButton, { attributes: true, attributeFilter: ["disabled"] });
 
   voiceButton.addEventListener("click", () => {
-    if (recorder && recorder.state !== "inactive") stopRecording();
+    if (recorderIsActive()) stopRecording();
     else startRecording();
   });
 
@@ -395,9 +507,16 @@ if (
     }
   });
 
+  sessionSelect.addEventListener("change", () => {
+    if (pendingVoiceSubmission && !sessionStillSelected(pendingVoiceSubmission.sessionId)) {
+      discardPendingSubmission("SESSION CHANGED · TRANSCRIPT NOT SENT · WAKE OFF");
+    }
+  });
+
   window.addEventListener("beforeunload", () => {
-    if (recorder && recorder.state !== "inactive") recorder.stop();
+    if (recorderIsActive()) recorder.stop();
     releaseMicrophone();
+    pendingVoiceSubmission = null;
     voiceTurn = null;
     stopSpeechPlayback();
   });
