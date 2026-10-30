@@ -39,9 +39,9 @@ Qualification completed so far:
 - bounded startup timing diagnostic — **PASS**, HTTP-ready in **8.285 s**;
 - isolated session/profile resource contract v3 — **PASS**, HTTP-ready in **7.745 s**, Bearer auth + session create/get/patch/list/delete + scratch SQLite persistence/profile isolation proven with zero model/memory/STT/TTS provider calls.
 
-Current gate:
+Current next gate:
 
-- isolated P6-03 exact pre-repair `jobs.json` preservation + P6-04A durable `error_class` runtime contract — **UNRESOLVED AFTER HARNESS TIMEOUT**. The first monolithic 90-second child did not expose enough phase evidence to classify a candidate failure. Observer-hardened v2 tooling separates P6-03/P6-04A, emits flushed phase markers, and always runs production/candidate postconditions.
+- isolated P6-03 exact pre-repair `jobs.json` preservation + P6-04A durable `error_class` runtime contract — **PENDING OPERATOR RESULT**.
 
 Canonical live status and resume point:
 
@@ -50,11 +50,348 @@ Canonical live status and resume point:
 
 PR #81 remains draft, pre-install, and fail-closed. No blind `hermes update`, production cutover, profile reset, iai change, provider/model change, live model/STT/TTS qualification, second Hermes dashboard/web process, or PR merge is authorized by the completed sub-gates.
 
+### Operator lifecycle + HUD launch-after-health — PASS / CLOSED (2026-10-29)
+
+The native Windows manual-off Start Orion / Stop Orion lifecycle, including the accepted HUD launch-after-health behavior, is live-accepted on the real Orion workstation.
+
+Current accepted implementation checkpoint:
+
+`7465492a7daebb1bf2630f2687668e575177291b`
+
+The accepted lifecycle foundation underneath the HUD integration remains the ROCm / owned-Ollama-tree implementation checkpoint:
+
+`3cbc1fa4831966fefce5f2711d82032965080fb2`
+
+Final acceptance proved:
+
+- Orion-started Ollama uses process-local `OLLAMA_LLM_LIBRARY=rocm_v7_1` on the accepted AMD Radeon RX 9070 XT workstation without writing persistent user/machine Ollama environment state;
+- Ollama and Hermes direct loopback health checks pass;
+- the actual `qwen3.5-hermes:9b` model completes a real `/api/generate` request on ROCm 7.1;
+- Stop Orion persists and identity-checks the Orion-owned Ollama descendant tree before cleanup, including a surviving `llama-server.exe` model runner when present;
+- cleanup never performs a broad name-based Ollama/llama-server kill;
+- failed cleanup evidence is durable and blocks Start from overwriting pending recovery state;
+- the clean empty-descendant Stop path works under Windows PowerShell;
+- after Ollama and Hermes are healthy, Start Orion verifies/reuses or starts the accepted loopback HUD and opens it in the default browser;
+- the live Windows smoke proved Ollama health before Hermes health and Hermes health before verified HUD readiness;
+- an Orion-started HUD records durable exact-process ownership and repeated Start reuses the same owned bridge without duplication;
+- owned Stop removes the Orion-owned HUD while preserving the accepted Hermes/Ollama ownership boundaries;
+- a verified pre-existing HUD is reused without ownership transfer and survives Stop Orion;
+- browser tabs/processes are never lifecycle-owned or killed;
+- a final normal Start leaves Orion healthy and running on `rocm_v7_1` with exactly one Orion-owned HUD bridge.
+
+Source chain:
+
+- PR #74 / `6e862102df1e68fd6f707aff3ddb3ced1ea8fa25` — ROCm 7.1 process-local startup correction;
+- PR #75 / `40f96933e9e429b885c9c7a11cfac781c8b99104` — owned Ollama descendant cleanup + durable retry state;
+- PR #76 / `3cbc1fa4831966fefce5f2711d82032965080fb2` — empty descendant collection binding correction;
+- PR #78 / `7465492a7daebb1bf2630f2687668e575177291b` — accepted HUD launch/reuse/ownership integration after runtime health.
+
+Durable acceptance records:
+
+- `docs/evidence/operator-lifecycle-acceptance-2026-10-28.md`
+- `docs/evidence/hud-launch-after-health-acceptance-2026-10-29.md`
+
+OR-LIFE-010 HUD launch-after-health is now **ACCEPT / CLOSED**. Do not reopen the ROCm, owned-Ollama-tree, or HUD lifecycle integration based on acceptance-harness artifacts alone; focused re-verification is appropriate only after a material lifecycle dependency, HUD entry point, ownership contract, or runtime behavior changes.
+
+### Phase 0 — PASS / CLOSED
+
+Accepted native baseline:
+
+- Hermes tag `v2026.8.27`
+- Hermes package `0.20.6`
+- Hermes commit `5fc308a70719a83cccdbba4c0e39c23f5a8239d5`
+- profile `companion`
+- COMPANION home `%LOCALAPPDATA%\hermes\profiles\companion`
+- API `127.0.0.1:8642`
+- model `qwen3.5-hermes:9b`
+- Ollama provider `http://localhost:11434/v1`
+- context `65536`
+- Discord native gateway accepted
+
+### Phase 1 — PASS / CLOSED
+
+Phase 1 lifecycle and memory acceptance is complete. Closure was merged in PR #6 at:
+
+`7c55493e0401f1003b3f0f2438e684a5fb144227`
+
+Accepted Phase 1 results include:
+
+- iai-pme `3.0.8`
+- canonical store `%USERPROFILE%\.iai-mcp`
+- supported Hermes recall/capture hooks on Windows
+- real ambient Discord capture into iai
+- semantic recall from the canonical iai store
+- `wake_depth=standard`
+- Hermes built-in persistent memory/user-profile targets disabled for COMPANION
+- Hermes-managed iai MCP wrapper with accepted idle recycling at `idle_timeout_seconds=600`
+- daemon-independent recall with `_source: "daemon-down-full"`
+- authenticated HIBERNATION wake at **5.887 s** wrapper-start -> daemon-ready
+- OR-LIFE-007 **ACCEPT / no further wake patch**
+- manual-off Start/Stop controls accepted through restart and pure logoff/logon
+- changed-boot recovery accepted with the BootTime identity correction
+
+Final Phase 1 evidence includes:
+
+- `docs/evidence/or-life-005-final-acceptance-2026-09-09.md`
+- `docs/evidence/or-life-007-owner-disposition-2026-09-09.md`
+- `evidence/or-life-005/recovery-gate-d-2026-09-09.md`
+- `docs/phase1/status.md`
+
+### Phase 2 — typed HUD compatibility/control slice accepted
+
+The internal Phase 2A typed-control bridge slice was accepted and merged through PR #9. It established the loopback-only Orion HUD bridge, persistent COMPANION typed-session continuity, progressive streaming, STOP, browser credential isolation, profile-specific credential separation, Hermes-routed iai recall, truthful degraded-state presentation, and persisted-session transcript reload.
+
+The accepted bridge remains a narrow presentation/control adapter. It does not own lifecycle, voice, memory semantics, model routing, or arbitrary Hermes proxy authority.
+
+Current Phase 2 record:
+
+`docs/phase2/status.md`
+
+That status file is retained as the Phase 2 closure/handoff record; the repository resume point is no longer Phase 2 discovery.
+
+### Phase 3 — visual companion foundation merged
+
+The current `main` source now includes the major Orion visual/presentation foundation built after the Phase 2 typed bridge:
+
+- PR #10 / P3-01 — deterministic Orion Core state + gaze foundation
+- PR #11 / P3-02 — adaptive Conversation/System workspace foundation
+- PR #12 / P3-03 — read-only Memory Lens + native iai Brain handoff
+- PR #13 / P3-04 — provenance/origin + descriptive authority foundation
+- PR #14 / P3-05A — composition convergence toward the approved Orion interface
+
+The merged HUD keeps Conversation as the default workspace, makes the Orion Core a truthful state-driven presentation surface, retains native iai ownership for detailed memory administration, and preserves the server-side credential and manual-off boundaries.
+
+Latest merged Phase 3 composition commit:
+
+`ef1ae1156c32c4f5afdd0a6d6568577f1498eb6a`
+
+### Phase 4 — native Hermes voice foundation partially accepted; final live voice acceptance deferred
+
+Phase 4 remains open, but its current state is narrower than the earlier wake-training experiment.
+
+Accepted / merged:
+
+- P4-04A Hermes audio gateway compatibility bridge merged in PR #18;
+- authenticated loopback `POST /api/audio/transcribe` and `POST /api/audio/speak` compatibility endpoints are available on the accepted Hermes gateway;
+- `audio_api=true` is accepted while `realtime_voice=false` remains truthful;
+- direct TTS -> STT transport round-trip passed against the accepted runtime.
+
+Deferred / not yet merge-ready:
+
+- draft PR #16 contains the Orion push-to-talk voice foundation and remains unmerged;
+- live PTT already proved microphone -> Hermes STT -> same persisted conversation session -> visible reply;
+- active-run interruption by PTT was observed;
+- final audible spoken-reply / Speak Replies OFF / audible-barge-in acceptance is deferred under issue #19 because Edge TTS was intermittently unavailable during an ISP/provider-path outage;
+- direct Edge TTS and direct P4-04A audio round-trip later recovered without an Orion/Hermes code change, so the remaining gate is runtime acceptance under stable connectivity rather than another speculative code patch.
+
+Wake status:
+
+- custom `Hey Orion` v1 and v2 remain rejected experimental artifacts at 48.7% and 35% live detection respectively;
+- the working acceptance gate remains `>=95%`;
+- no v3 is authorized under the current training approach;
+- push-to-talk/manual activation is the accepted interim activation path;
+- wake does not imply login auto-start.
+
+Tracking:
+
+- draft PR #16 — Phase 4 P4-04 push-to-talk voice foundation
+- issue #19 — P4-04B resume native TTS/live voice acceptance after Edge connectivity stabilizes
+
+### Phase 5 — PASS / CLOSED through P5-03C reconnect/hydration qualification
+
+Phase 5 has advanced through source qualification, preview-only COMPANION installation, installed-runtime disposable mutation qualification, production recovery-root acceptance, recovery-root persistence, and live runtime-ingestion verification.
+
+Accepted checkpoints:
+
+- P5-01: native plugin contract, canonical containment, side-effect-free edit/move previews, iai-backed destination recommendation, and a fail-closed public apply placeholder;
+- P5-02A through P5-02G: exact approval payloads, fresh handler-side `ALLOW ONCE` evidence, disposable edit/move/restore execution, restart-safe non-authorizing receipts, recovery classification, Windows file-identity hardening, and source-qualified production guardrails;
+- P5-02H: exact plugin installed and enabled in COMPANION with `mcp_allowlist: ["iai-mcp"]`, while public apply remained fail-closed;
+- P5-02I: installed plugin qualified against disposable roots for edit, move, stale-state refusal, replay refusal, restart classification, historical restore, and controlled failure classification;
+- P5-02J: production recovery root created and ACL-qualified with production mutation still disabled;
+- P5-02K: accepted recovery-root path persisted append-only in COMPANION `.env`, with rollback captured and no mutation-mode setting persisted;
+- P5-02L: live COMPANION runtime ingested the persisted recovery root, exposed the expected four-tool `orion_vault` toolset, retained `mutation_allowed=false`, and returned to manual-off;
+- P5-02M: repository integration and guarded production-registration design freeze accepted with no runtime change;
+- P5-02N: guarded registered apply wrapper accepted in source at qualified code head `faf8b4787d8e6fb668eb5e9d754104910b4b401a`, with 129/129 Phase 5 tests, Hermes approval 3/3, Hermes dispatcher 2/2, HUD Python 78/78, HUD rendering 3/3, and compile checks passing on Windows;
+- P5-02O: exact P5-02N-qualified plugin `0.2.0` installed into COMPANION with rollback captured, live guarded-wrapper registration verified, production mutation still disabled, recovery inventory still empty, config/`.env` unchanged, and Hermes restored to manual-off;
+- P5-02P: deterministic registered-dispatch approval proof passed, controlled canary fixture created, and read-only readiness froze the exact target, pre-edit Windows file identity, before/after hashes, and exact diff while mutation remained disabled;
+- P5-02Q: first real Orion production mutation accepted — exactly one guarded `edit_note` on the controlled canary, fresh human `once` approval, committed schema-v2 recovery/receipt, zero recovery attention state, mutation mode returned to disabled, and Hermes remained manual-off;
+- P5-02R: production restore qualification accepted — the exact P5-02Q canary edit was restored from its committed recovery record through the guarded registered apply path and a fresh human `once`; a new committed restore recovery/receipt was created, the origin record remains valid as `committed_then_changed`, total recovery count is 2 with zero attention, mutation mode is disabled, and Hermes remains manual-off;
+- P5-02T: first production move accepted — the frozen P5-02S controlled draft moved through the guarded registered apply path with a fresh human `once`; source became absent, target became present at the frozen SHA-256, move recovery `8f79ba8396c2c5877bc9c28c8a5cdbfa55dda850c70ce18c324524d8a5e461a6` was valid/committed, total recovery count was 3 with zero attention, mutation mode returned to disabled, and Hermes remained manual-off;
+- P5-02U: move-source restore accepted — the committed P5-02T move recovery recreated the inbox source through the guarded registered apply path with a fresh human `once`; source and vault target are both present at SHA-256 `132ff51d62fd7fd8827d7222e233617e92c55dc21d40ff68164f2238ba0fd132`, origin move now reads `committed_then_changed`, new restore recovery `5c9b264a465f468c2f172f880fc89878e63368480c3eecfd0fb37212b159e175` is valid/committed, total recovery count is 4 with zero attention, mutation mode is disabled, and Hermes remains manual-off;
+- P5-02V: protected-delete source candidate `0.3.0` accepted after compile, full Phase 5 tests, source plugin doctor, and unchanged P5-02U production-state verification;
+- P5-02W: exact P5-02V-qualified `0.3.0` plugin installed and runtime-qualified with rollback captured, protected-delete preview live in a five-tool `orion_vault` toolset, guarded apply/private-executor invariants intact, mutation disabled, recovery still 4/0, protected files/config unchanged, and Hermes restored to manual-off;
+- P5-02X: protected retained-target deletion accepted — the exact vault target was deleted through registered `preview_delete` + guarded apply with fresh human `once`; restored inbox source remained unchanged, target became absent, delete recovery `e48123ceecc2be50afb2902511f64397f5dcfa35338ab9fd785cbf7278658b36` was committed, recovery became 5/0, mutation returned to disabled, and Hermes remained manual-off;
+- P5-02Y: exact audited Phase 5 recovery cleanup accepted — all five approved canary recovery directories were removed individually under the owner-approved exact-count/exact-ID retention policy, each removal was durably journaled, the external audit was committed at SHA-256 `9aff3bff771ee8745642510c5f4561de3f8395c490e0d24fc22563cc85650537`, production recovery is now 0/0 with the root retained empty, source remains valid, target remains absent, mutation remains disabled, and Hermes remains manual-off;
+- P5-03C: reconnect/hydration qualification accepted and merged in PR #52. Browser persistence is limited to session/run locator hints; reconnect re-queries durable run evidence; stale, cross-session, malformed, poisoned, or incomplete locators fail closed; durable SessionDB/plugin evidence remains authoritative; no browser-side approval, retry, recovery, or mutation authority was added.
+
+Current installed/runtime boundary:
+
+- installed plugin source exactly matches P5-02V-qualified code head `211255ff9abfa04101760c7e3358b521a3e530ae`;
+- installed plugin manifest version is `0.3.0`;
+- `ORION_P5_PRODUCTION_RECOVERY_ROOT` is persisted and runtime-qualified;
+- `ORION_P5_MUTATION_MODE` is not persisted and resolves to `disabled`;
+- live `orion_vault` toolset contains five tools including read-only `orion_vault_preview_delete`;
+- registered `orion_vault_apply_plan` points to `apply_plan_production_guarded`;
+- disabled public apply refuses with `production_mutation_not_enabled` before human approval or private-executor delegation;
+- `_execute_production_plan_candidate()` remains private and unregistered;
+- production recovery inventory is now empty: 0 records / 0 attention, after accepted P5-02Y audited pruning of the five completed Phase 5 canary records;
+- controlled canary `C:\Personal\Me\_Orion-P5-Canary.md` is restored to the original `state: before` form with SHA-256 `ddb08a8ca9ab5d06185a692182a742210817cba1d5523c841d6a371dfdb57b4c`;
+- current canary Windows file identity is `5e1aeb8a1aeb5d91:428a0300000031000000000000000000`;
+- origin P5-02Q recovery ID `33d3dc72984b872778680106dabfc2260eab9a91be130b9e9d6dd1351483de3f` remains valid and reads `committed_then_changed`;
+- P5-02R restore recovery ID `1b1e26014063b3156adb2152c703371bf5c78234af9dfe9ab51e045e652d7b27` is valid and `committed`;
+- P5-02T move recovery ID `8f79ba8396c2c5877bc9c28c8a5cdbfa55dda850c70ce18c324524d8a5e461a6` is valid and now reads `committed_then_changed`;
+- P5-02U move-source-restore recovery ID `5c9b264a465f468c2f172f880fc89878e63368480c3eecfd0fb37212b159e175` is valid and `committed`;
+- P5-02X delete recovery ID `e48123ceecc2be50afb2902511f64397f5dcfa35338ab9fd785cbf7278658b36` was valid and `committed` before P5-02Y pruning;
+- P5-02Y durable cleanup audit is retained at `C:\Users\spill\AppData\Local\hermes\profiles\companion\orion\recovery-audit\p5-02y-phase5-canary-recovery-cleanup-20260925-041448.json` with SHA-256 `9aff3bff771ee8745642510c5f4561de3f8395c490e0d24fc22563cc85650537`;
+- controlled move source `C:\Personal\Orion-Inbox\_Orion-P5-Move-Canary.md` remains present with SHA-256 `132ff51d62fd7fd8827d7222e233617e92c55dc21d40ff68164f2238ba0fd132` and Windows file identity `5e1aeb8a1aeb5d91:67660100000036010000000000000000`;
+- controlled move target `C:\Personal\Me\_Orion-P5-Move-Canary.md` is absent after the accepted protected delete;
+- COMPANION `config.yaml` and `.env` remain unchanged;
+- Hermes is restored to manual-off;
+- `ORION_P5_MUTATION_MODE` remains unpersisted and resolves to disabled outside the bounded child process.
+
+P5-02O rollback capture:
+
+`C:\Users\spill\AppData\Local\hermes\profiles\companion\orion\backups\p5-02o-installed-disabled-20260923-040536`
+
+The P5-02Q edit, P5-02R restore, P5-02T first production move, P5-02U move-source restore, P5-02V protected-delete source qualification, P5-02W installed-disabled qualification, P5-02X protected target deletion, and P5-02Y exact audited recovery cleanup are accepted. The controlled Phase 5 canary transaction/recovery chain is closed; no further Phase 5 mutation is authorized by that closure.
+
+### Phase 6 — foundation merged; qualified P6-05 HUD awaiting integration
+
+Hermes remains the authoritative reminder scheduler and durable job owner. Orion must not add a second scheduler, timer daemon, watcher, or scheduler-owning service.
+
+Current source checkpoint (verified 2026-10-10):
+
+- PR #58 merged the Phase 6 reminder foundation through P6-04A into `main` at `3c595a59f8ba6baa25bc3614ba6af76610834a24`;
+- the accepted Hermes baseline remains `v2026.8.27` / package `0.20.6` / commit `5fc308a70719a83cccdbba4c0e39c23f5a8239d5`, with separately qualified compatibility overlays;
+- P6-05 is committed and source-qualified. The earlier correction checkpoint `b255aeb4a86daa2fc2a54688a2cae7a4b9ec9456` passed 41 reminder and 244 HUD Python tests;
+- [PR #59](https://github.com/S-Pillow/orion-personal-ai/pull/59) is the current main-based Stage B integration path for the qualified reminder CRUD/HUD. Its reported qualification includes 55 reminder tests, 258 HUD Python tests, 25 Node tests, and the reconnect and visual fixture gates;
+- PR #59 remains open. Its reminder workspace and adapter are not yet present on `main`; the earlier broad feature/preparation branches must not be merged as substitutes;
+- P6-UPG-04 remains parked, and no dependency upgrade is required for this integration;
+- P6-06 live acceptance is separate: Discord destination qualification, actual delivery, manual-off recovery, restart/interruption behavior, duplicate suppression, and failure handling still require live qualification.
+
+The 2026-10-05 correction resume plan and `Invoke-P6-05-FinalizeCorrection.ps1` are **historical checkpoint tooling**, not current continuation instructions. Do not rerun that obsolete twelve-file working-tree finalization flow against the qualified integration branch. Documentation PR #57 records an earlier checkpoint and is not the current Stage B implementation PR.
+
+Source qualification does not authorize deployment, live reminders/jobs, COMPANION configuration changes, or Hermes restarts. The accepted COMPANION state historically has no configured Discord home channel; an exact destination must be qualified separately before live delivery acceptance.
+
+## Accepted manual-off lifecycle
+
+Default behavior is intentionally quiet:
+
+- Windows boot/login -> Hermes off
+- Ollama off
+- iai wrapper absent unless vendor on-demand behavior needs it
+- iai daemon not login-started
+- `Hermes_Gateway_companion` remains registered with LogonTrigger disabled
+- `iai-mcp-daemon` remains registered with LogonTrigger disabled
+- `Orion Host Idle Bridge` absent
+- Ollama Startup shortcut absent
+- Start Orion / Stop Orion remain explicit owner actions
+
+iai remains vendor-managed and is intentionally not force-killed by Orion Stop.
+
+## Operator controls and recovery note
+
+The currently accepted installed operator controls are the source-controlled one-shot scripts accepted through the 2026-10-29 HUD launch-after-health checkpoint:
+
+`7465492a7daebb1bf2630f2687668e575177291b`
+
+They include direct proxy-bypassing loopback health checks, process-local ROCm 7.1 selection for Orion-started Ollama on the accepted workstation, durable identity-checked cleanup of Orion-owned Ollama descendants, Windows PowerShell support for an empty first-use descendant list, verified HUD launch only after runtime health, durable Orion-owned HUD process identity, repeated-Start reuse, and preservation of verified pre-existing unowned HUDs.
+
+Final live acceptance records:
+
+- `docs/evidence/operator-lifecycle-acceptance-2026-10-28.md`
+- `docs/evidence/hud-launch-after-health-acceptance-2026-10-29.md`
+
+The older `2.7.4-candidate1` package and its BootTime recovery work remain historical accepted provenance for the earlier lifecycle recovery path, not the current top-level operator checkpoint.
+
+During that earlier recovery acceptance, the original `win_process.boot_id()` implementation was proven unsuitable because `NtQuerySystemInformation(90)` returned an identifier that remained unchanged across a real Windows Restart. The accepted correction uses kernel `SystemTimeOfDayInformation` (class 3) `BootTime`. It was proven stable within a boot and different after Restart; supported recovery then archived the prior-boot journal without acting on old PIDs.
+
+Source-controlled historical correction:
+
+`scripts/operator/patches/or-life-recovery-boottime.patch`
+
+**Do not reinstall an original unpatched v2.7.4 candidate package and assume it represents the current accepted operator controls.** The current accepted path is the source-controlled Start/Stop/HUD implementation documented above.
+
+## Governing architecture
+
+- **Hermes owns the agent runtime and preferred native voice/wake path.**
+- **iai owns persistent memory.**
+- **Orion owns the living visual companion, presentation, and authorized control surface.**
+- **Obsidian remains the durable human-authored document vault.**
+- **S-Pillow/jarvis_ai is a selective reference/code donor, not the Orion runtime architecture.**
+
+Do not duplicate these authorities for convenience.
+
+## Dependency posture
+
+The last dedicated dependency-watch record was captured on 2026-09-09. It is historical evidence, not automatic authorization to upgrade anything.
+
+Accepted pins remain:
+
+- Hermes `v2026.8.27` / package `0.20.6`
+- iai `3.0.8`
+- installed Ollama observed during Phase 2A: `0.32.15`
+
+Any newer Hermes, iai, Ollama, model, or presentation dependency is a **candidate** until separately qualified under PRD v2.9. Do not replace an accepted dependency merely because a newer release exists.
+
+Dependency-watch record:
+
+`docs/phase2/dependency-watch-2026-09-09.md`
+
+## Architecture guardrails
+
+- No Orion lifecycle supervisor.
+- No second memory semantics, embedding, ranking, or consolidation system.
+- No parallel agent gateway/service.
+- No duplicate STT/TTS/wake orchestration when Hermes satisfies the requirement.
+- No Docker/WSL requirement for the running Orion product. WSL may be used only as isolated development/training tooling when explicitly bounded.
+- Browser assets never receive the Hermes API key.
+- HUD/adapter listeners remain loopback-only during MVP.
+- Authority/provenance/voice indicators describe observed state; they do not grant permission.
+- Browser presentation state is not durable authority. Consequential reconnect state must come from supported persisted Hermes/plugin evidence, and unknown state must remain explicit when it cannot be reconstructed.
+- Presentation projection must be allowlisted and may normalize observed facts, but it must not become a second event, approval, persistence, or runtime authority.
+- Narrow dependency patches are allowed only when necessary, evidence-backed, source-controlled, reversible, and consistent with the Intent Preservation Check.
+
+Core Intent Preservation Gate:
+
+> Are we solving the requirement in a way that preserves the reason this architecture, dependency, behavior, or design was chosen in the first place?
+
+A CONFLICT or UNCERTAIN result blocks implementation until resolved.
+
+## Repository strategy
+
+### `S-Pillow/orion-personal-ai`
+
+Canonical Orion integration/control repository for the current architecture, HUD, Orion-owned glue, acceptance evidence, reproducibility instructions, lifecycle controls, and dependency qualification records.
+
+### `S-Pillow/iai-personal-memory-engine`
+
+Compatibility/tracking fork of `CodeAbra/iai-personal-memory-engine`. Narrow Windows compatibility fixes may be carried only when stock behavior cannot satisfy Orion while preserving iai semantics.
+
+### `S-Pillow/jarvis_ai`
+
+Reference/code-donor fork. Reuse only proven patterns that still close a current Orion requirement without duplicating Hermes/iai functionality.
+
+## Security and evidence rules
+
+- Never commit Discord tokens, API keys, `.env` files, iai encryption keys, decrypted memory exports, private vault contents, runtime data, generated training corpora, or large model-training feature arrays.
+- Never print secret values into acceptance evidence; presence/length checks are sufficient.
+- Distinguish observed runtime evidence, source-confirmed behavior, documentation claims, and hypotheses.
+- Preserve/hash consequential artifacts before evaluation or mutation.
+- Do not treat historical Docker acceptance as native-Windows acceptance.
+- Do not update Hermes, Ollama, or iai merely because a newer release exists; qualify dependency changes separately.
+- Keep consequential actions behind explicit operator authority and visible approval boundaries.
+- Keep GitHub documentation aligned at meaningful accepted checkpoints so the repository resume point does not drift behind actual work.
+
 ## Resume point
 
 - **Active engineering resume point: PR #81 Hermes v0.22.5 pre-install qualification.** Canonical status: `docs/hermes/hermes-v0225-qualification-status.md`.
 - Completed on the exact v0.22.5 candidate: source qualification; isolated gateway v6; startup diagnostic (8.285 s); session/profile v3 (7.745 s, authenticated session CRUD + durable scratch persistence/profile isolation).
-- Current unresolved gate: P6-03/P6-04A isolated runtime contract. v1 timed out without phase localization; rerun only with `scripts/hermes_upgrade/v0225_isolated_cron_compat_contract_smoke_v2.py` and reconcile its phase evidence.
+- Current pending result: `scripts/hermes_upgrade/v0225_isolated_cron_compat_contract_smoke.py` for P6-03 exact pre-repair preservation and P6-04A durable `error_class` runtime persistence. Do not mark it PASS until operator output is reconciled.
 - Production Hermes remains the accepted `0.20.6` / `v2026.8.27` / `5fc308a70719a83cccdbba4c0e39c23f5a8239d5` baseline; PR #81 does not authorize cutover.
+- **Operator lifecycle hardening and OR-LIFE-010 HUD launch-after-health are PASS / CLOSED.** Do not reopen the accepted ROCm 7.1, owned-descendant cleanup, or HUD ownership/reuse integration unless a material dependency/runtime change invalidates its evidence. Durable records: `docs/evidence/operator-lifecycle-acceptance-2026-10-28.md` and `docs/evidence/hud-launch-after-health-acceptance-2026-10-29.md`.
+- Orion is intentionally left **RUNNING** at HUD acceptance closure. Normal future operator use should continue through the installed Start Orion / Stop Orion desktop controls.
+- Phase 4 live voice and Phase 6 roadmap work remain separate from PR #81's migration qualification and must be revalidated from current GitHub/runtime state before action.
+- Persistent Goal Mode remains deferred and must not become a second autonomous runtime, scheduler, memory system, or approval path.
 
-Current shorthand: **production remains on accepted Hermes v0.20.6; PR #81 is actively qualifying exact v0.22.5 pre-install. Gateway/startup/session-resource isolation sub-gates have passed; the P6-03/P6-04A runtime contract is unresolved pending observer-hardened v2 evidence.**
+Current shorthand: **production remains on accepted Hermes v0.20.6; PR #81 is actively qualifying exact v0.22.5 pre-install. Gateway/startup/session-resource isolation sub-gates have passed; P6-03/P6-04A isolated runtime evidence is the current pending operator result.**
