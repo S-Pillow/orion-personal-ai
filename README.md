@@ -41,7 +41,7 @@ Qualification completed so far:
 
 Current gate:
 
-- isolated P6-03 exact pre-repair `jobs.json` preservation + P6-04A durable `error_class` runtime contract — **UNRESOLVED AFTER HARNESS PHASE-LOCALIZATION FAILURE**. The first monolithic child timed out after 90 seconds without exposing enough phase evidence to classify either compatibility function as failed. Use only `scripts/hermes_upgrade/v0225_isolated_cron_compat_contract_smoke_v2.py` for the next bounded rerun; it separates the two contracts, emits flushed phase markers, and always runs production/candidate postconditions.
+- isolated P6-03 exact pre-repair `jobs.json` preservation + P6-04A durable `error_class` runtime contract — **UNRESOLVED AT COMMON CRON/ASYNCIO IMPORT BOUNDARY**. The phase-instrumented v2 harness proved both children fail before their P6 operations execute: importing `cron.jobs` or `cron.executions` reaches `cron.__init__ -> cron.scheduler -> cron.scheduler_delivery -> asyncio`, where `asyncio` raises `NameError: name 'base_events' is not defined`. v2's production health/static-config/PID and candidate-source postconditions passed. The next bounded oracle is `scripts/hermes_upgrade/v0225_windows_asyncio_import_diagnostic.py`; do not rerun the P6 functional harness until that diagnostic is reconciled.
 
 Canonical live status and resume point:
 
@@ -387,11 +387,11 @@ Reference/code-donor fork. Reuse only proven patterns that still close a current
 
 - **Active engineering resume point: PR #81 Hermes v0.22.5 pre-install qualification.** Canonical status: `docs/hermes/hermes-v0225-qualification-status.md`.
 - Completed on the exact v0.22.5 candidate: source qualification; isolated gateway v6; startup diagnostic (8.285 s); session/profile v3 (7.745 s, authenticated session CRUD + durable scratch persistence/profile isolation).
-- Current unresolved gate: P6-03/P6-04A isolated runtime contract. The v1 monolithic child timed out without phase localization; rerun only with `scripts/hermes_upgrade/v0225_isolated_cron_compat_contract_smoke_v2.py` and reconcile its phase evidence before assigning PASS/FAIL to either sub-gate.
+- Current unresolved gate: P6-03/P6-04A isolated runtime. v2 localized both children to the shared `cron` package -> `asyncio` import boundary before either P6 operation executes. Next oracle: `scripts/hermes_upgrade/v0225_windows_asyncio_import_diagnostic.py`; do not rerun the P6 functional harness first.
 - Production Hermes remains the accepted `0.20.6` / `v2026.8.27` / `5fc308a70719a83cccdbba4c0e39c23f5a8239d5` baseline; PR #81 does not authorize cutover.
 - **Operator lifecycle hardening and OR-LIFE-010 HUD launch-after-health are PASS / CLOSED.** Do not reopen the accepted ROCm 7.1, owned-descendant cleanup, or HUD ownership/reuse integration unless a material dependency/runtime change invalidates its evidence. Durable records: `docs/evidence/operator-lifecycle-acceptance-2026-10-28.md` and `docs/evidence/hud-launch-after-health-acceptance-2026-10-29.md`.
 - Orion is intentionally left **RUNNING** at HUD acceptance closure. Normal future operator use should continue through the installed Start Orion / Stop Orion desktop controls.
 - Phase 4 live voice and Phase 6 roadmap work remain separate from PR #81's migration qualification and must be revalidated from current GitHub/runtime state before action.
 - Persistent Goal Mode remains deferred and must not become a second autonomous runtime, scheduler, memory system, or approval path.
 
-Current shorthand: **production remains on accepted Hermes v0.20.6; PR #81 is actively qualifying exact v0.22.5 pre-install. Gateway/startup/session-resource isolation sub-gates have passed; the P6-03/P6-04A isolated runtime contract is unresolved pending observer-hardened v2 evidence.**
+Current shorthand: **production remains on accepted Hermes v0.20.6; PR #81 is actively qualifying exact v0.22.5 pre-install. Gateway/startup/session-resource isolation sub-gates have passed; P6-03/P6-04A functional runtime evidence is unresolved at a shared Windows cron/asyncio import boundary, and the import diagnostic is the next bounded oracle.**
