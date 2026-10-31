@@ -2,7 +2,7 @@
 
 Status: **PRE-INSTALL QUALIFICATION — ACTIVE**
 
-Last updated: 2026-10-30
+Last updated: 2026-10-31
 
 PR: #81 — `feature/hermes-v0225-controlled-migration`
 
@@ -91,34 +91,53 @@ Evidence:
 
 ## Current gate
 
-### P6-03 / P6-04A isolated runtime compatibility contract — UNRESOLVED AFTER HARNESS TIMEOUT
+### P6-03 / P6-04A isolated runtime compatibility contract — UNRESOLVED AT COMMON CRON IMPORT BOUNDARY
 
-The first runtime harness attempt used one monolithic child process with a 90-second timeout. The child timed out before the parent could recover phase-level evidence. Because stdout/stderr were captured inside `subprocess.run()` and the timeout path did not surface partial child output, the run does not establish whether the stall occurred during:
+The phase-instrumented v2 runtime harness resolved the earlier v1 timeout ambiguity but did not reach either P6 compatibility operation.
 
-- `cron.jobs` import;
-- `load_jobs()` repair/preservation;
-- `cron.executions` import;
-- execution ledger initialization/writes;
-- SQLite verification.
+P6-03 child:
 
-The timeout therefore is classified as **HARNESS PHASE-LOCALIZATION FAILURE — P6 RUNTIME CONTRACT UNRESOLVED**, not as a P6-03 or P6-04A functional failure.
+- scratch setup completed;
+- failure occurred at `P603_IMPORT_JOBS_BEGIN` while executing `from cron import jobs as jobs_mod`;
+- exact import chain reached `cron.__init__ -> cron.scheduler -> cron.scheduler_delivery -> asyncio`;
+- standard-library asyncio failed with `NameError: name 'base_events' is not defined`;
+- child exited in approximately 3.149 seconds;
+- `jobs_mod.load_jobs()` was never called.
 
-The v1 failure also exited before its normal production/candidate postcondition block. The child was constrained to a disposable `HERMES_HOME`, no gateway or external job was launched, and no provider calls were requested, but the failed run itself did not independently re-run the after-snapshots. Do not overstate its `PRODUCTION_CRON_STORE_TOUCHED=false` pre-run marker as a postcondition proof.
+P6-04A child:
 
-Observer-hardened replacement:
+- scratch setup completed;
+- failure occurred at `P604A_IMPORT_EXECUTIONS_BEGIN` while executing `from cron import executions as exec_mod`;
+- it reached the same `cron.__init__ -> cron.scheduler -> cron.scheduler_delivery -> asyncio` failure;
+- child exited in approximately 2.921 seconds;
+- no execution-ledger row was created or finalized.
 
-- `scripts/hermes_upgrade/v0225_isolated_cron_compat_contract_smoke_v2.py`
+Therefore neither P6-03 nor P6-04A has failed functionally. Their runtime status remains unresolved because both probes stop before the code under test executes.
 
-v2 changes only the observation method:
+v2 did complete its after-state observations:
 
-- P6-03 and P6-04A run in separate disposable child processes and separate scratch homes;
-- each child prints flushed phase markers before and after imports and contract operations;
-- each child has a bounded 45-second timeout rather than widening the prior 90-second monolith;
-- timeout/failure output records the last completed phase;
-- production static config, production gateway PID identity, health, and candidate-source invariance are checked after both children even when either child fails;
-- no gateway, production cron job, model, memory, STT, or TTS provider call is authorized.
+- production API health after: `HTTP_200|status=ok`;
+- production static configuration unchanged: **PASS**;
+- production gateway PID identity unchanged: **PASS**;
+- candidate Git status unchanged: **PASS**;
+- no gateway launched by the harness;
+- no production cron job executed;
+- model/memory/STT/TTS provider calls remained zero.
 
-Do not mark either P6 runtime sub-gate PASS until v2 operator output is captured and reconciled.
+Evidence:
+
+- `docs/hermes/hermes-v0225-cron-compat-smoke-v1-finding-2026-10-30.md`
+- `docs/hermes/hermes-v0225-cron-compat-smoke-v2-finding-2026-10-31.md`
+
+A relevant upstream Hermes report, issue `#56503`, documents the same Windows asyncio `NameError: base_events` error signature when `subprocess.Popen` is replaced before asyncio initializes. That report is useful prior evidence but is **not** yet accepted as the local root cause. Exact v0.22.5 `_subprocess_compat.py` does not itself contain the later global `patch_subprocess_no_window()` mechanism described in that issue.
+
+Next bounded diagnostic:
+
+- `scripts/hermes_upgrade/v0225_windows_asyncio_import_diagnostic.py`
+
+This diagnostic must determine whether the failure follows the scrubbed qualification environment, direct asyncio import, the cron package import path, or import ordering. It compares direct asyncio and `cron.jobs` imports under both the existing scrubbed child environment and a runtime-preserving inherited environment with sensitive credential variables removed. It also checks whether explicitly pre-importing asyncio changes the cron import result and records whether `subprocess.Popen` is still a class before asyncio import.
+
+Do **not** rerun the P6 functional harness until this import diagnostic is reconciled. Do not bypass `cron.__init__`, widen timeouts, or assume the upstream issue is identical without local evidence.
 
 ## Remaining qualification before cutover
 
