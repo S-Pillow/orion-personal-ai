@@ -267,6 +267,12 @@ if ($LASTEXITCODE -ne 0) {
     throw "STOP: candidate diff contains whitespace errors."
 }
 
+# Make the generated classifier visible to git diff without staging its contents.
+& git -C $CandidateRoot add -N -- cron/error_classification.py
+if ($LASTEXITCODE -ne 0) {
+    throw "STOP: failed to mark cron/error_classification.py intent-to-add for patch export."
+}
+
 & git -C $CandidateRoot diff --binary --full-index --output=$PatchPath -- `
     agent/monitoring/cron_health.py `
     cron/error_classification.py `
@@ -282,8 +288,20 @@ if ($PatchBytes -le 0) {
     throw "STOP: generated compatibility patch is empty."
 }
 
+$PatchText = Get-Content -LiteralPath $PatchPath -Raw
+foreach ($Rel in $ExpectedCandidatePaths) {
+    $Header = "diff --git a/$Rel b/$Rel"
+    if (-not $PatchText.Contains($Header)) {
+        throw "STOP: generated compatibility patch omitted qualified path: $Rel"
+    }
+}
+if (-not $PatchText.Contains('ORION-HERMES-V0225-P6-04A-DURABLE-ERROR-CLASS-v1')) {
+    throw "STOP: generated compatibility patch omitted the durable error-classification module contents."
+}
+
 Write-Host "CANDIDATE_PY_COMPILE=PASS"
 Write-Host "CANDIDATE_DIFF_CHECK=PASS"
+Write-Host "CANDIDATE_PATCH_SCOPE=PASS"
 Write-Host "CANDIDATE_CHANGED_SCOPE=$($ExpectedCandidatePaths -join ',')"
 Write-Host "CANDIDATE_PATCH_SHA256=$(Get-Sha256 $PatchPath)"
 Write-Host "CANDIDATE_PATCH_BYTES=$PatchBytes"
